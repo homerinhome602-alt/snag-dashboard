@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { PhotoCaptureInput } from "@/components/photo-capture";
 import { createClient } from "@/lib/supabase/client";
 import { uploadAttachment, type PhotoCapture } from "@/lib/media";
+import { enqueueSnag } from "@/lib/offline-queue";
 import {
   CATEGORY_LABELS,
   LOCATION_LABELS,
@@ -16,6 +17,8 @@ import {
 } from "@/lib/snags";
 import { raiseSnag } from "./actions";
 
+// Minimum 56px tap targets throughout — this form is used with gloved
+// hands at -25°C (PLAN.md §5.7).
 function RadioCards({
   options,
   value,
@@ -32,7 +35,7 @@ function RadioCards({
           key={val}
           type="button"
           onClick={() => onChange(val)}
-          className={`rounded-md border px-2.5 py-1.5 text-[12px] ${
+          className={`min-h-14 rounded-md border px-3.5 py-3 text-[13px] ${
             value === val
               ? "border-primary bg-accent text-accent-foreground"
               : "border-input bg-background text-foreground"
@@ -45,10 +48,19 @@ function RadioCards({
   );
 }
 
-export function AddSnagForm({ warehouseId, currentUserId }: { warehouseId: string; currentUserId: string }) {
+export function AddSnagForm({
+  warehouseId,
+  warehouseName,
+  currentUserId,
+}: {
+  warehouseId: string;
+  warehouseName: string;
+  currentUserId: string;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [queued, setQueued] = useState(false);
 
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("hvac");
@@ -62,11 +74,36 @@ export function AddSnagForm({ warehouseId, currentUserId }: { warehouseId: strin
   function submit() {
     setError(null);
     startTransition(async () => {
+      const subCategoryOtherValue = subCategory === "others" ? subCategoryOther.trim() : null;
+
+      // Offline-capable: queue locally and sync when connection returns
+      // rather than letting the request hang or fail (PLAN.md §5.7).
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        await enqueueSnag({
+          localId: crypto.randomUUID(),
+          warehouseId,
+          warehouseName,
+          description: description.trim(),
+          category,
+          subCategory,
+          subCategoryOther: subCategoryOtherValue,
+          location,
+          scope,
+          severity,
+          photoAnnotated: photo?.annotated ?? null,
+          photoOriginal: photo?.original ?? null,
+          photoThumbnail: photo?.thumbnail ?? null,
+          createdAt: Date.now(),
+        });
+        setQueued(true);
+        return;
+      }
+
       const result = await raiseSnag(warehouseId, {
         description: description.trim(),
         category,
         subCategory,
-        subCategoryOther: subCategory === "others" ? subCategoryOther.trim() : null,
+        subCategoryOther: subCategoryOtherValue,
         location,
         scope,
         severity,
@@ -99,8 +136,30 @@ export function AddSnagForm({ warehouseId, currentUserId }: { warehouseId: strin
     });
   }
 
+  if (queued) {
+    return (
+      <div className="rounded-md border border-amber bg-amber p-4 text-center">
+        <p className="text-[13px] font-medium text-amber-deep">Queued — pending sync</p>
+        <p className="mt-1 text-[12px] text-amber-deep">
+          No connection right now. This snag is saved on your device and will be raised
+          automatically once you&apos;re back online.
+        </p>
+        <Button type="button" size="sm" className="mt-3" onClick={() => router.push(`/warehouses/${warehouseId}`)}>
+          Back to warehouse
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-4">
+      <div>
+        <Label className="mb-1.5 text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
+          Photo (optional)
+        </Label>
+        <PhotoCaptureInput onChange={setPhoto} />
+      </div>
+
       <div>
         <Label className="mb-1.5 text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
           Description
@@ -113,13 +172,6 @@ export function AddSnagForm({ warehouseId, currentUserId }: { warehouseId: strin
           className="w-full rounded-md border border-input bg-background px-2.5 py-2 text-[13px] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
           placeholder="Evaporator fan not coming back on after defrost"
         />
-      </div>
-
-      <div>
-        <Label className="mb-1.5 text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
-          Photo (optional)
-        </Label>
-        <PhotoCaptureInput onChange={setPhoto} />
       </div>
 
       <div>
@@ -176,10 +228,10 @@ export function AddSnagForm({ warehouseId, currentUserId }: { warehouseId: strin
       {error && <p className="text-[12.5px] text-destructive">{error}</p>}
 
       <div className="flex justify-end gap-2 border-t border-line-soft pt-3.5">
-        <Button type="button" variant="outline" onClick={() => history.back()}>
+        <Button type="button" variant="outline" className="min-h-14" onClick={() => history.back()}>
           Cancel
         </Button>
-        <Button type="button" disabled={pending || !description.trim()} onClick={submit}>
+        <Button type="button" className="min-h-14" disabled={pending || !description.trim()} onClick={submit}>
           {pending ? "Raising…" : "Raise snag"}
         </Button>
       </div>

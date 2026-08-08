@@ -32,7 +32,7 @@ export default async function NewSnagPage({
           Raise a snag
         </h1>
         <p className="mb-4 mt-0.5 text-[12px] text-muted-foreground">{warehouse.name}</p>
-        <AddSnagForm warehouseId={id} currentUserId={uid} />
+        <AddSnagForm warehouseId={id} warehouseName={warehouse.name} currentUserId={uid} />
       </div>
     </div>
   );

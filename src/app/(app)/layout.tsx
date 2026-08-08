@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Sidebar } from "./sidebar";
 import { signOut } from "./actions";
 import { Button } from "@/components/ui/button";
+import { PendingSyncBanner } from "@/components/pending-sync-banner";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -31,8 +32,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </form>
         </div>
       </div>
+      <PendingSyncBanner />
       <div className="flex flex-1">
-        <Sidebar warehouses={warehouses ?? []} isAdmin={!!profile?.is_dashboard_admin} />
+        <div className="hidden sm:block">
+          <Sidebar warehouses={warehouses ?? []} isAdmin={!!profile?.is_dashboard_admin} />
+        </div>
         <main className="flex-1 bg-background">{children}</main>
       </div>
     </div>

@@ -85,11 +85,12 @@ export function PhotoCaptureInput({ onChange }: { onChange: (capture: PhotoCaptu
   return (
     <div>
       {!hasImage ? (
-        <label className="flex h-24 cursor-pointer items-center justify-center rounded-md border border-dashed border-input text-[12px] text-muted-foreground hover:bg-muted">
-          {busy ? "Loading…" : "Add a photo"}
+        <label className="flex h-14 cursor-pointer items-center justify-center rounded-md border border-dashed border-input text-[13px] text-muted-foreground hover:bg-muted">
+          {busy ? "Loading…" : "Take or add a photo"}
           <input
             type="file"
             accept="image/*"
+            capture="environment"
             className="hidden"
             onChange={(e) => e.target.files?.[0] && onFileSelected(e.target.files[0])}
           />
