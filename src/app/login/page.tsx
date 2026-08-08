@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { signInWithGoogle, signInWithPassword } from "./actions";
+import { signInWithPassword } from "./actions";
 
 const THERMOMETER = ["#DCEAEE", "#E4EBEA", "#EDEAE5", "#F5E7E0", "#FBE4DE", "#F2C7BB", "#E89484", "#C75B4E"];
 
@@ -13,10 +13,6 @@ const ERROR_COPY: Record<string, { title: string; body: string }> = {
   invalid_credentials: {
     title: "Couldn't sign you in",
     body: "That email and password combination doesn't match an account.",
-  },
-  oauth_failed: {
-    title: "Couldn't connect to Google",
-    body: "Something went wrong starting the Google sign-in. Try again.",
   },
 };
 
@@ -52,18 +48,6 @@ export default async function LoginPage({
               </p>
             </div>
           )}
-
-          <form action={signInWithGoogle}>
-            <Button type="submit" variant="outline" className="w-full">
-              Continue with Google
-            </Button>
-          </form>
-
-          <div className="my-4 flex items-center gap-2">
-            <span className="h-px flex-1 bg-border" />
-            <span className="text-[11px] text-faint">or</span>
-            <span className="h-px flex-1 bg-border" />
-          </div>
 
           <form action={signInWithPassword} className="flex flex-col gap-3">
             <div className="flex flex-col gap-1.5">

@@ -89,7 +89,7 @@ function UpdateForm({
         value={body}
         onChange={(e) => setBody(e.target.value)}
         rows={2}
-        placeholder="Motor replaced. Ran two defrost cycles, no fault."
+        placeholder="Type here"
         className="w-full rounded-md border border-input bg-card px-2 py-1.5 text-[12.5px] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
       />
       <div className="mt-1.5 w-56">
@@ -112,11 +112,10 @@ function UpdateForm({
         >
           <option value="">Keep status</option>
           <option value="wip">Move to WIP</option>
-          <option value="ready_to_close">Move to Verify</option>
+          <option value="ready_to_close">Ticket closed, verify</option>
         </select>
         <Button
           size="sm"
-          className="ml-auto"
           disabled={pending || !body.trim()}
           onClick={() =>
             startTransition(async () => {

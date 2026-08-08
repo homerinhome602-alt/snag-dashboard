@@ -1,7 +1,12 @@
+"use client";
+
 // PLAN.md §12: the only chart in the product. Two cumulative lines (raised,
 // closed) with the shaded gap between them as the open count, projected
-// forward to the go-live date. Degrades to "collecting data" under ~7 days
-// of snapshot history rather than a misleading two-point line.
+// forward to the go-live date. Shows real data from the first snag raised
+// (not gated behind a week of history) — today's point always reflects
+// live totals even if the daily snapshot job hasn't run yet today.
+
+import { useMemo, useState } from "react";
 
 export type Snapshot = {
   snapshot_date: string;
@@ -20,6 +25,14 @@ function toTime(dateStr: string) {
   return new Date(dateStr + "T00:00:00").getTime();
 }
 
+function todayStr() {
+  return new Date().toLocaleDateString("en-CA");
+}
+
+function fmtShort(dateStr: string) {
+  return new Date(dateStr + "T00:00:00").toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+}
+
 function buildPath(points: { x: number; y: number }[]) {
   return points.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
 }
@@ -27,22 +40,33 @@ function buildPath(points: { x: number; y: number }[]) {
 export function BurnUpChart({
   snapshots,
   goLiveDate,
+  liveTotalRaised,
+  liveTotalClosed,
 }: {
   snapshots: Snapshot[];
   goLiveDate: string | null;
+  liveTotalRaised: number;
+  liveTotalClosed: number;
 }) {
-  if (snapshots.length < 7) {
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+
+  const today = todayStr();
+  const byDate = new Map(snapshots.map((s) => [s.snapshot_date, s]));
+  // Live totals always win for today's point, even if the cron job hasn't
+  // written today's snapshot row yet.
+  byDate.set(today, { snapshot_date: today, total_raised: liveTotalRaised, total_closed: liveTotalClosed });
+  const sorted = [...byDate.values()].sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date));
+
+  if (sorted.length === 0 || sorted[sorted.length - 1].total_raised === 0) {
     return (
       <div className="flex h-[150px] items-center justify-center rounded-card border border-border bg-card text-[12px] text-muted-foreground">
-        Collecting data — the burn-up needs about a week of history before it&apos;s meaningful.
+        No snags raised yet — the burn-up appears once the first one is.
       </div>
     );
   }
 
-  const sorted = [...snapshots].sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date));
   const firstDate = sorted[0].snapshot_date;
   const lastDate = sorted[sorted.length - 1].snapshot_date;
-  const todayTime = Date.now();
 
   const hasTarget = !!goLiveDate && toTime(goLiveDate) > toTime(lastDate);
   const xEndDate = hasTarget ? goLiveDate! : lastDate;
@@ -60,6 +84,13 @@ export function BurnUpChart({
   const raisedPoints = sorted.map((s) => ({ x: x(s.snapshot_date), y: y(s.total_raised) }));
   const closedPoints = sorted.map((s) => ({ x: x(s.snapshot_date), y: y(s.total_closed) }));
 
+  // Weekly tick marks from the first date through today, plus today itself.
+  const weekTicks: string[] = [];
+  for (let t = xStart; t <= toTime(today); t += 7 * 86_400_000) {
+    weekTicks.push(new Date(t).toLocaleDateString("en-CA"));
+  }
+  if (weekTicks[weekTicks.length - 1] !== today) weekTicks.push(today);
+
   // Simple linear projection: slope from the trailing window of history,
   // extended to the go-live date.
   const windowSize = Math.min(7, sorted.length - 1);
@@ -69,7 +100,7 @@ export function BurnUpChart({
 
   let raisedProjected: { x: number; y: number } | null = null;
   let closedProjected: { x: number; y: number } | null = null;
-  if (hasTarget) {
+  if (hasTarget && sorted.length > 1) {
     const targetDays = (toTime(xEndDate) - toTime(trailEnd.snapshot_date)) / 86_400_000;
     const raisedSlope = (trailEnd.total_raised - trailStart.total_raised) / daySpan;
     const closedSlope = (trailEnd.total_closed - trailStart.total_closed) / daySpan;
@@ -83,24 +114,50 @@ export function BurnUpChart({
     };
   }
 
-  const gapPath = `${buildPath(raisedPoints)} L${raisedPoints[raisedPoints.length - 1].x.toFixed(1)},${(
-    HEIGHT - PAD_BOTTOM
-  ).toFixed(1)} ${buildPath([...closedPoints].reverse())
-    .replace("M", "L")} Z`;
+  const gapPath =
+    raisedPoints.length > 1
+      ? `${buildPath(raisedPoints)} L${raisedPoints[raisedPoints.length - 1].x.toFixed(1)},${(
+          HEIGHT - PAD_BOTTOM
+        ).toFixed(1)} ${buildPath([...closedPoints].reverse()).replace("M", "L")} Z`
+      : "";
 
-  const todayX = todayTime >= xStart && todayTime <= xEnd ? x(new Date(todayTime).toLocaleDateString("en-CA")) : null;
+  const todayX = x(today);
+  const hovered = hoverIdx !== null ? sorted[hoverIdx] : null;
+
+  function onMove(e: React.MouseEvent<SVGRectElement>) {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const svgX = ((e.clientX - rect.left) / rect.width) * WIDTH;
+    let closest = 0;
+    let closestDist = Infinity;
+    sorted.forEach((s, i) => {
+      const d = Math.abs(x(s.snapshot_date) - svgX);
+      if (d < closestDist) {
+        closestDist = d;
+        closest = i;
+      }
+    });
+    setHoverIdx(closest);
+  }
 
   return (
-    <div className="rounded-card border border-border bg-card p-3">
-      <div className="mb-1 text-[9px] uppercase tracking-[0.07em] text-faint">Burn-up</div>
-      <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="block w-full" role="img">
+    <div className="relative rounded-card border border-border bg-card p-3">
+      <div className="mb-1 flex items-baseline justify-between">
+        <span className="text-[9px] uppercase tracking-[0.07em] text-faint">Burn-up</span>
+        <span className="text-[10px] text-muted-foreground">Hover for weekly figures</span>
+      </div>
+      <svg
+        viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
+        className="block w-full"
+        role="img"
+        onMouseLeave={() => setHoverIdx(null)}
+      >
         <title>Burn-up chart</title>
         <desc>Cumulative raised and closed lines; the shaded gap is the open count.</desc>
         <g stroke="#F7EAE6">
           <line x1={PAD_LEFT} y1={y(yMax * 0.33)} x2={WIDTH - PAD_RIGHT} y2={y(yMax * 0.33)} />
           <line x1={PAD_LEFT} y1={y(yMax * 0.66)} x2={WIDTH - PAD_RIGHT} y2={y(yMax * 0.66)} />
         </g>
-        <path d={gapPath} fill="#FBE4DE" opacity={0.6} />
+        {gapPath && <path d={gapPath} fill="#FBE4DE" opacity={0.6} />}
         <path d={buildPath(raisedPoints)} fill="none" stroke="#C75B4E" strokeWidth={2.5} />
         <path d={buildPath(closedPoints)} fill="none" stroke="#6E9CA6" strokeWidth={2.5} />
         {raisedProjected && (
@@ -123,27 +180,60 @@ export function BurnUpChart({
             opacity={0.55}
           />
         )}
-        {todayX !== null && (
-          <>
-            <line x1={todayX} y1={PAD_TOP} x2={todayX} y2={HEIGHT - PAD_BOTTOM} stroke="#D3C4BE" strokeDasharray="3 4" />
-            <text x={todayX + 4} y={PAD_TOP + 8} fontSize={9} fill="#A8938D">
-              today
-            </text>
-          </>
-        )}
+        <line x1={todayX} y1={PAD_TOP} x2={todayX} y2={HEIGHT - PAD_BOTTOM} stroke="#D3C4BE" strokeDasharray="3 4" />
+        <text x={todayX + 4} y={PAD_TOP + 8} fontSize={9} fill="#A8938D">
+          today
+        </text>
         <text x={PAD_LEFT + 4} y={raisedPoints[0].y - 4} fontSize={9} fill="#C75B4E">
           raised
         </text>
         <text x={PAD_LEFT + 4} y={closedPoints[0].y + 12} fontSize={9} fill="#6E9CA6">
           closed
         </text>
+
+        {hovered && (
+          <g pointerEvents="none">
+            <line
+              x1={x(hovered.snapshot_date)}
+              y1={PAD_TOP}
+              x2={x(hovered.snapshot_date)}
+              y2={HEIGHT - PAD_BOTTOM}
+              stroke="#2E2422"
+              strokeWidth={1}
+              opacity={0.3}
+            />
+            <circle cx={x(hovered.snapshot_date)} cy={y(hovered.total_raised)} r={4} fill="#C75B4E" stroke="#fff" strokeWidth={1.5} />
+            <circle cx={x(hovered.snapshot_date)} cy={y(hovered.total_closed)} r={4} fill="#6E9CA6" stroke="#fff" strokeWidth={1.5} />
+          </g>
+        )}
+
+        <rect
+          x={PAD_LEFT}
+          y={PAD_TOP - 4}
+          width={WIDTH - PAD_LEFT - PAD_RIGHT}
+          height={HEIGHT - PAD_TOP - PAD_BOTTOM + 4}
+          fill="transparent"
+          onMouseMove={onMove}
+          style={{ cursor: "crosshair" }}
+        />
       </svg>
+
+      {hovered && (
+        <div className="pointer-events-none absolute rounded-md bg-foreground px-2 py-1 text-[10px] leading-relaxed text-background shadow-md"
+          style={{ left: `${(x(hovered.snapshot_date) / WIDTH) * 100}%`, top: 28, transform: "translateX(-50%)" }}
+        >
+          <div className="font-mono">{fmtShort(hovered.snapshot_date)}{hovered.snapshot_date === today ? " (today)" : ""}</div>
+          <div>Raised: {hovered.total_raised} · Closed: {hovered.total_closed}</div>
+        </div>
+      )}
+
       <div className="mt-1 flex justify-between text-[9px] text-faint">
-        <span>{new Date(firstDate + "T00:00:00").toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}</span>
-        <span>
-          {hasTarget ? "go-live " : ""}
-          {new Date(xEndDate + "T00:00:00").toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}
-        </span>
+        {weekTicks.map((d) => (
+          <span key={d} className={d === today ? "font-medium text-muted-foreground" : undefined}>
+            {fmtShort(d)}
+          </span>
+        ))}
+        {hasTarget && <span>go-live {fmtShort(xEndDate)}</span>}
       </div>
     </div>
   );

@@ -172,32 +172,27 @@ export function AddSnagForm({
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <Label className="mb-1.5 text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
-          Photo (optional)
-        </Label>
-        <PhotoCaptureInput onChange={setPhoto} />
-      </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div>
+          <Label className="mb-1.5 text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
+            Photo (optional)
+          </Label>
+          <PhotoCaptureInput onChange={setPhoto} />
+        </div>
 
-      <div>
-        <Label className="mb-1.5 text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
-          Description
-        </Label>
-        <textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          required
-          rows={3}
-          className="w-full rounded-md border border-input bg-background px-2.5 py-2 text-[13px] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-          placeholder="Evaporator fan not coming back on after defrost"
-        />
-      </div>
-
-      <div>
-        <Label className="mb-1.5 text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
-          Category
-        </Label>
-        <RadioCards value={category} onChange={setCategory} options={Object.entries(CATEGORY_LABELS) as [string, string][]} />
+        <div>
+          <Label className="mb-1.5 text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
+            Description
+          </Label>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            required
+            rows={5}
+            className="w-full rounded-md border border-input bg-background px-2.5 py-2 text-[13px] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            placeholder="Evaporator fan not coming back on after defrost"
+          />
+        </div>
       </div>
 
       <div>
@@ -220,28 +215,37 @@ export function AddSnagForm({
         )}
       </div>
 
-      <div>
-        <Label className="mb-1.5 text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
-          Location
-        </Label>
-        <RadioCards value={location} onChange={setLocation} options={Object.entries(LOCATION_LABELS) as [string, string][]} />
-      </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div>
+          <Label className="mb-1.5 text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
+            Category
+          </Label>
+          <RadioCards value={category} onChange={setCategory} options={Object.entries(CATEGORY_LABELS) as [string, string][]} />
+        </div>
 
-      <div>
-        <Label className="mb-1.5 text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
-          Scope
-        </Label>
-        <RadioCards value={scope} onChange={setScope} options={Object.entries(SCOPE_LABELS) as [string, string][]} />
-      </div>
+        <div>
+          <Label className="mb-1.5 text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
+            Location
+          </Label>
+          <RadioCards value={location} onChange={setLocation} options={Object.entries(LOCATION_LABELS) as [string, string][]} />
+        </div>
 
-      <div>
-        <Label className="mb-1.5 text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
-          Severity
-        </Label>
-        <RadioCards value={severity} onChange={setSeverity} options={Object.entries(SEVERITY_LABELS) as [string, string][]} />
-        <p className="mt-1.5 text-[11.5px] font-medium text-red-deep">
-          High means this stops the warehouse launching.
-        </p>
+        <div>
+          <Label className="mb-1.5 text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
+            Scope
+          </Label>
+          <RadioCards value={scope} onChange={setScope} options={Object.entries(SCOPE_LABELS) as [string, string][]} />
+        </div>
+
+        <div>
+          <Label className="mb-1.5 text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
+            Severity
+          </Label>
+          <RadioCards value={severity} onChange={setSeverity} options={Object.entries(SEVERITY_LABELS) as [string, string][]} />
+          <p className="mt-1.5 text-[11.5px] font-medium text-red-deep">
+            High means this stops the warehouse launching.
+          </p>
+        </div>
       </div>
 
       {error && <p className="text-[12.5px] text-destructive">{error}</p>}

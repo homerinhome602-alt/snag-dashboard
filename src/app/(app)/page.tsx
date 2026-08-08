@@ -31,7 +31,7 @@ export default async function Home() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-6 py-6">
+    <div className="mx-auto w-full max-w-screen-2xl px-4 py-6 sm:px-6 sm:py-8 lg:px-10">
       <div className="mb-4 flex items-center gap-6 rounded-card border border-border bg-card p-3.5">
         <div>
           <div className="font-mono text-[22px] leading-none">{totals.open}</div>
@@ -59,7 +59,7 @@ export default async function Home() {
       <div className="mb-2.5 text-[11px] uppercase tracking-[0.07em] text-faint">
         {warehouses.length} warehouse{warehouses.length === 1 ? "" : "s"} · soonest launch first
       </div>
-      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
         {sorted.map((w) => (
           <WarehouseCard key={w.id} w={w} />
         ))}

@@ -7,22 +7,30 @@ import type { UpdateRow, AttachmentRow } from "@/components/snag-row";
 import { TeamBlock } from "@/components/team-block";
 import { BurnUpChart } from "@/components/burn-up-chart";
 import { ExportButton } from "@/components/export-button";
-import { STATUS_LABELS } from "@/lib/snags";
 import { REPORTER_ROLES, RESOLVER_ROLES } from "@/lib/roles";
 import { daysUntil } from "@/lib/readiness";
 import { GoLiveEditor } from "./go-live-editor";
-
-const STATUS_FILTERS = ["all", "open", "wip", "ready_to_close", "closed"] as const;
+import { SnagFilters } from "./snag-filters";
 
 export default async function WarehouseDetailPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ status?: string; q?: string; raised?: string }>;
+  searchParams: Promise<{
+    status?: string;
+    q?: string;
+    raised?: string;
+    category?: string;
+    sub_category?: string;
+    location?: string;
+    scope?: string;
+    severity?: string;
+  }>;
 }) {
   const { id } = await params;
-  const { status = "all", q = "", raised } = await searchParams;
+  const { status = "all", q = "", raised, category, sub_category, location, scope, severity } =
+    await searchParams;
   const supabase = await createClient();
 
   const { data: auth } = await supabase.auth.getClaims();
@@ -65,12 +73,13 @@ export default async function WarehouseDetailPage({
     .eq("warehouse_id", id)
     .order("serial_no", { ascending: false });
 
-  if (status !== "all") {
-    query = query.eq("status", status);
-  }
-  if (q) {
-    query = query.ilike("description", `%${q}%`);
-  }
+  if (status !== "all") query = query.eq("status", status);
+  if (q) query = query.ilike("description", `%${q}%`);
+  if (category) query = query.eq("category", category);
+  if (sub_category) query = query.eq("sub_category", sub_category);
+  if (location) query = query.eq("location", location);
+  if (scope) query = query.eq("scope", scope);
+  if (severity) query = query.eq("severity", severity);
 
   const { data: snags } = await query;
 
@@ -114,49 +123,57 @@ export default async function WarehouseDetailPage({
     });
   }
 
+  const summaryTiles = [
+    { label: "Snags Open", value: w.open_count, highlight: false },
+    { label: "Snags Closed", value: w.total_raised - w.open_count, highlight: false },
+    { label: "Total Snags Raised", value: w.total_raised, highlight: false },
+    { label: "Snags Marked High Severity", value: w.open_high_count, highlight: true },
+  ];
+
   return (
-    <div className="mx-auto w-full max-w-5xl px-6 py-8">
+    <div className="mx-auto w-full max-w-screen-2xl px-4 py-6 sm:px-6 sm:py-8 lg:px-10">
       <div className="mb-3 flex items-baseline justify-between">
         <h1 className="text-[16px] font-medium tracking-[-0.015em] text-foreground">{w.name}</h1>
         {isResolver ? (
-          <GoLiveEditor warehouseId={id} goLiveDate={w.go_live_date} />
+          <div className="flex items-baseline gap-1.5 text-[13.5px] text-foreground">
+            <span className="text-muted-foreground">Go-live date:</span>
+            <GoLiveEditor warehouseId={id} goLiveDate={w.go_live_date} />
+          </div>
         ) : (
-          <span className="font-mono text-[11px] text-faint">
-            {w.go_live_date
-              ? `GO-LIVE ${new Date(w.go_live_date + "T00:00:00")
-                  .toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
-                  .toUpperCase()}`
-              : "GO-LIVE NOT SET"}
+          <span className="text-[13px] text-muted-foreground">
+            Go-live date:{" "}
+            <span className="font-mono text-[11px] text-faint">
+              {w.go_live_date
+                ? new Date(w.go_live_date + "T00:00:00")
+                    .toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+                    .toUpperCase()
+                : "NOT SET"}
+            </span>
           </span>
         )}
       </div>
 
       <TeamBlock members={team} />
 
-      <div className="mb-3 mt-2.5 grid grid-cols-[0.85fr_1.15fr] gap-2.5">
+      <div className="mb-3 mt-2.5 grid grid-cols-1 gap-2.5 lg:grid-cols-[0.85fr_1.15fr]">
         <div className="grid grid-cols-2 content-start gap-2">
-          <div className="rounded-md border border-border bg-card p-2.5">
-            <div className="font-mono text-[19px]">{w.total_raised}</div>
-            <div className="text-[9px] text-faint">raised</div>
-          </div>
-          <div className="rounded-md border border-border bg-card p-2.5">
-            <div className="font-mono text-[19px]">{w.open_count}</div>
-            <div className="text-[9px] text-faint">open</div>
-          </div>
-          <div className="rounded-md border border-border bg-card p-2.5">
-            <div className="font-mono text-[19px]">{w.total_raised - w.open_count}</div>
-            <div className="text-[9px] text-faint">closed</div>
-          </div>
-          <div className="rounded-md border border-blush bg-blush p-2.5">
-            <div className="font-mono text-[19px] text-red-deep">{w.open_high_count}</div>
-            <div className="text-[9px] text-red-deep">open high</div>
-          </div>
-          <div className="col-span-2 rounded-md border border-border bg-card p-2.5">
+          {summaryTiles.map((tile) => (
+            <div
+              key={tile.label}
+              className={`rounded-md border p-2.5 transition-colors hover:bg-blush ${
+                tile.highlight ? "border-blush bg-blush" : "border-border bg-card"
+              }`}
+            >
+              <div className={`font-mono text-[19px] ${tile.highlight ? "text-red-deep" : ""}`}>{tile.value}</div>
+              <div className={`text-[9px] ${tile.highlight ? "text-red-deep" : "text-faint"}`}>{tile.label}</div>
+            </div>
+          ))}
+          <div className="col-span-2 rounded-md border border-border bg-card p-2.5 transition-colors hover:bg-blush">
             <div className="font-mono text-[19px]">{daysToGoLive ?? "—"}</div>
             <div className="text-[9px] text-faint">days left</div>
           </div>
         </div>
-        <BurnUpChart snapshots={snapshots ?? []} goLiveDate={w.go_live_date} />
+        <BurnUpChart snapshots={snapshots ?? []} goLiveDate={w.go_live_date} liveTotalRaised={w.total_raised} liveTotalClosed={w.total_raised - w.open_count} />
       </div>
 
       {raised && (
@@ -165,29 +182,9 @@ export default async function WarehouseDetailPage({
         </div>
       )}
 
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        {STATUS_FILTERS.map((s) => (
-          <Link
-            key={s}
-            href={`/warehouses/${id}?${new URLSearchParams({ ...(q ? { q } : {}), status: s })}`}
-            className={`rounded-pill border px-2.5 py-1 text-[11.5px] ${
-              status === s
-                ? "border-primary bg-accent text-accent-foreground"
-                : "border-border bg-card text-muted-foreground"
-            }`}
-          >
-            {s === "all" ? "All" : STATUS_LABELS[s]}
-          </Link>
-        ))}
-        <form className="ml-auto flex items-center gap-2" action={`/warehouses/${id}`}>
-          <input type="hidden" name="status" value={status} />
-          <input
-            name="q"
-            defaultValue={q}
-            placeholder="Search description…"
-            className="rounded-md border border-input bg-background px-2.5 py-1 text-[12px] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-          />
-        </form>
+      <SnagFilters />
+
+      <div className="mb-3 flex flex-wrap items-center justify-end gap-2">
         <ExportButton snags={(snags ?? []) as unknown as SnagRow[]} warehouseName={w.name} />
         {isReporter && (
           <>
