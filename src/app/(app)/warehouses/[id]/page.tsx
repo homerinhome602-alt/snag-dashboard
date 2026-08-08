@@ -6,6 +6,7 @@ import { SnagTable, type SnagRow } from "@/components/snag-table";
 import type { UpdateRow, AttachmentRow } from "@/components/snag-row";
 import { TeamBlock } from "@/components/team-block";
 import { BurnUpChart } from "@/components/burn-up-chart";
+import { ExportButton } from "@/components/export-button";
 import { STATUS_LABELS } from "@/lib/snags";
 import { REPORTER_ROLES, RESOLVER_ROLES } from "@/lib/roles";
 import { daysUntil } from "@/lib/readiness";
@@ -187,10 +188,16 @@ export default async function WarehouseDetailPage({
             className="rounded-md border border-input bg-background px-2.5 py-1 text-[12px] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
           />
         </form>
+        <ExportButton snags={(snags ?? []) as unknown as SnagRow[]} warehouseName={w.name} />
         {isReporter && (
-          <Button size="sm" nativeButton={false} render={<Link href={`/warehouses/${id}/snags/new`} />}>
-            Add snag
-          </Button>
+          <>
+            <Button size="sm" variant="outline" nativeButton={false} render={<Link href={`/warehouses/${id}/import`} />}>
+              Import
+            </Button>
+            <Button size="sm" nativeButton={false} render={<Link href={`/warehouses/${id}/snags/new`} />}>
+              Add snag
+            </Button>
+          </>
         )}
       </div>
 
