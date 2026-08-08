@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 import { SnagTable, type SnagRow } from "@/components/snag-table";
+import type { UpdateRow } from "@/components/snag-row";
 import { TeamBlock } from "@/components/team-block";
 import { BurnUpChart } from "@/components/burn-up-chart";
 import { STATUS_LABELS } from "@/lib/snags";
@@ -71,6 +72,21 @@ export default async function WarehouseDetailPage({
   }
 
   const { data: snags } = await query;
+
+  const snagIds = (snags ?? []).map((s) => s.id);
+  const { data: updates } = snagIds.length
+    ? await supabase
+        .from("snag_updates")
+        .select("id, snag_id, body, created_at, author:profiles(full_name, email)")
+        .in("snag_id", snagIds)
+        .order("created_at")
+    : { data: [] as never[] };
+
+  const updatesBySnag: Record<string, UpdateRow[]> = {};
+  for (const u of updates ?? []) {
+    const key = (u as { snag_id: string }).snag_id;
+    (updatesBySnag[key] ??= []).push(u as unknown as UpdateRow);
+  }
 
   return (
     <div className="mx-auto w-full max-w-5xl px-6 py-8">
@@ -153,10 +169,16 @@ export default async function WarehouseDetailPage({
         )}
       </div>
 
-      <SnagTable snags={(snags ?? []) as unknown as SnagRow[]} />
+      <SnagTable
+        snags={(snags ?? []) as unknown as SnagRow[]}
+        updatesBySnag={updatesBySnag}
+        warehouseId={id}
+        isReporter={isReporter}
+        isResolver={isResolver}
+      />
 
       <p className="mt-3 text-[12.5px] text-muted-foreground">
-        Update log and resolver inline editing (ETC, status, verify closure) land in Phase 5.
+        Click a row to expand its update log. Photo/video attachments land in Phase 6.
       </p>
     </div>
   );
