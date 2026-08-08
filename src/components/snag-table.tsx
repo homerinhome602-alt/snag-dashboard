@@ -6,6 +6,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { SnagRow, type UpdateRow, type AttachmentRow } from "@/components/snag-row";
+import { cn } from "@/lib/utils";
+import { STICKY_SNO_CLASS, STICKY_DESC_CLASS } from "@/lib/table-sticky";
 
 export type SnagRow = {
   id: string;
@@ -60,7 +62,14 @@ export function SnagTable({
         <TableHeader>
           <TableRow>
             {HEADERS.map((h) => (
-              <TableHead key={h} className="whitespace-nowrap text-[9px] uppercase tracking-[0.07em] text-faint">
+              <TableHead
+                key={h}
+                className={cn(
+                  "whitespace-nowrap text-[9px] uppercase tracking-[0.07em] text-faint",
+                  h === "S.No" && STICKY_SNO_CLASS,
+                  h === "Description" && STICKY_DESC_CLASS
+                )}
+              >
                 {h}
               </TableHead>
             ))}

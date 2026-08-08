@@ -193,7 +193,7 @@ export function AddSnagForm({
             required
             rows={5}
             className="w-full rounded-md border border-input bg-background px-2.5 py-2 text-[13px] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-            placeholder="Evaporator fan not coming back on after defrost"
+            placeholder="Add description"
           />
         </div>
 

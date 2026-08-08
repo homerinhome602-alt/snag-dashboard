@@ -190,22 +190,21 @@ export default async function WarehouseDetailPage({
 
       {raised && <RaisedBanner serialNo={raised} />}
 
-      <SnagFilters />
-
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <SnagFilters />
         <SearchBox />
-        <div className="flex flex-wrap items-center gap-2">
-        <ExportButton snags={(snags ?? []) as unknown as SnagRow[]} warehouseName={w.name} />
-        {isReporter && (
-          <>
-            <Button size="sm" variant="outline" nativeButton={false} render={<Link href={`/warehouses/${id}/import`} />}>
-              Import
-            </Button>
-            <Button size="sm" nativeButton={false} render={<Link href={`/warehouses/${id}/snags/new`} />}>
-              Add snag
-            </Button>
-          </>
-        )}
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <ExportButton snags={(snags ?? []) as unknown as SnagRow[]} warehouseName={w.name} />
+          {isReporter && (
+            <>
+              <Button size="sm" variant="outline" nativeButton={false} render={<Link href={`/warehouses/${id}/import`} />}>
+                Import
+              </Button>
+              <Button size="sm" nativeButton={false} render={<Link href={`/warehouses/${id}/snags/new`} />}>
+                Add snag
+              </Button>
+            </>
+          )}
         </div>
       </div>
 

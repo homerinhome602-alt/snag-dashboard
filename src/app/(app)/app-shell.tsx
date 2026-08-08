@@ -38,6 +38,9 @@ function HomeIcon() {
 const SIDEBAR_WIDTH = "11.5rem"; // w-46 equivalent
 const SIDEBAR_COLLAPSED = "3rem";
 
+// Sidebar links pop slightly and shift to a light red on hover.
+const SIDEBAR_LINK_HOVER = "transition-all duration-150 ease-out hover:translate-x-0.5 hover:text-coral"
+
 export function AppShell({
   profile,
   warehouses,
@@ -71,9 +74,19 @@ export function AppShell({
           <Link
             href="/"
             aria-label="Home"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-foreground hover:bg-muted"
+            className={cn(SIDEBAR_LINK_HOVER, "flex h-8 items-center gap-2 rounded-md text-foreground hover:bg-muted")}
           >
-            <HomeIcon />
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center">
+              <HomeIcon />
+            </span>
+            <span
+              className={cn(
+                "text-[12px] whitespace-nowrap transition-opacity ease-in-out",
+                open ? "opacity-100 duration-150 delay-100" : "pointer-events-none opacity-0 duration-75"
+              )}
+            >
+              Home
+            </span>
           </Link>
         </div>
         <div
@@ -95,6 +108,7 @@ export function AppShell({
                 key={w.id}
                 href={href}
                 className={cn(
+                  SIDEBAR_LINK_HOVER,
                   "block px-4 py-1.5 text-[12px] whitespace-nowrap text-foreground",
                   active && "border-l-2 border-primary bg-accent pl-[14px] text-accent-foreground"
                 )}
@@ -109,7 +123,8 @@ export function AppShell({
               <Link
                 href="/warehouses/manage"
                 className={cn(
-                  "block px-4 py-1.5 text-[12px] whitespace-nowrap text-muted-foreground hover:text-foreground",
+                  SIDEBAR_LINK_HOVER,
+                  "block px-4 py-1.5 text-[12px] whitespace-nowrap text-muted-foreground",
                   pathname === "/warehouses/manage" &&
                     "border-l-2 border-primary bg-accent pl-[14px] text-accent-foreground"
                 )}
@@ -119,7 +134,8 @@ export function AppShell({
               <Link
                 href="/admin/users"
                 className={cn(
-                  "block px-4 py-1.5 text-[12px] whitespace-nowrap text-muted-foreground hover:text-foreground",
+                  SIDEBAR_LINK_HOVER,
+                  "block px-4 py-1.5 text-[12px] whitespace-nowrap text-muted-foreground",
                   pathname === "/admin/users" &&
                     "border-l-2 border-primary bg-accent pl-[14px] text-accent-foreground"
                 )}
@@ -132,7 +148,7 @@ export function AppShell({
       </nav>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex items-center justify-between border-b border-border bg-card px-4.5 py-3">
+        <div className="sticky top-0 z-20 flex items-center justify-between border-b border-border bg-card px-4.5 py-3">
           <span className="text-[14px] font-medium tracking-[-0.015em] text-foreground">
             Frozen warehouse launch readiness
           </span>

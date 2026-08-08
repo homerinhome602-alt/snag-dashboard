@@ -34,20 +34,23 @@ export default async function Home() {
   return (
     <div className="mx-auto w-full max-w-screen-2xl px-4 py-6 sm:px-6 sm:py-8 lg:px-[50px]">
       <div className="mb-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-        <div className={cn(CARD_HOVER, "flex items-center gap-6 rounded-card border border-border bg-card p-3.5")}>
-          <div>
-            <div className="font-mono text-[22px] leading-none">{totals.open}</div>
-            <div className="text-[9px] uppercase tracking-[0.06em] text-faint">Open</div>
-          </div>
-          <div>
-            <div className="font-mono text-[22px] leading-none" style={{ color: "#C75B4E" }}>
-              {totals.openHigh}
+        <div className={cn(CARD_HOVER, "flex flex-col justify-center rounded-card border border-border bg-card p-3.5")}>
+          <div className="mb-1.5 text-[9px] uppercase tracking-[0.06em] text-faint">All warehouses</div>
+          <div className="flex items-center gap-6">
+            <div>
+              <div className="font-mono text-[22px] leading-none">{totals.open}</div>
+              <div className="text-[9px] uppercase tracking-[0.06em] text-faint">Open</div>
             </div>
-            <div className="text-[9px] uppercase tracking-[0.06em] text-faint">Open high</div>
-          </div>
-          <div>
-            <div className="font-mono text-[22px] leading-none">{totals.raised}</div>
-            <div className="text-[9px] uppercase tracking-[0.06em] text-faint">Raised</div>
+            <div>
+              <div className="font-mono text-[22px] leading-none" style={{ color: "#C75B4E" }}>
+                {totals.openHigh}
+              </div>
+              <div className="text-[9px] uppercase tracking-[0.06em] text-faint">Open high</div>
+            </div>
+            <div>
+              <div className="font-mono text-[22px] leading-none">{totals.raised}</div>
+              <div className="text-[9px] uppercase tracking-[0.06em] text-faint">Raised</div>
+            </div>
           </div>
         </div>
 

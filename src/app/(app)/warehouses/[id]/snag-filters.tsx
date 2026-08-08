@@ -41,7 +41,7 @@ export function SnagFilters() {
   }
 
   return (
-    <div className="mb-3 flex flex-wrap items-center gap-2">
+    <>
       {FILTERS.map((f) => (
         <MultiSelectFilter
           key={f.key}
@@ -51,6 +51,6 @@ export function SnagFilters() {
           onChange={(next) => updateParam(f.key, next)}
         />
       ))}
-    </div>
+    </>
   );
 }
