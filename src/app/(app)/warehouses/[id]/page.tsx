@@ -3,9 +3,13 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 import { SnagTable, type SnagRow } from "@/components/snag-table";
+import { TeamBlock } from "@/components/team-block";
+import { BurnUpChart } from "@/components/burn-up-chart";
 import { STATUS_LABELS } from "@/lib/snags";
+import { REPORTER_ROLES, RESOLVER_ROLES } from "@/lib/roles";
+import { daysUntil } from "@/lib/readiness";
+import { GoLiveEditor } from "./go-live-editor";
 
-const REPORTER_ROLES = ["operations", "hvac_engineer"];
 const STATUS_FILTERS = ["all", "open", "wip", "ready_to_close", "closed"] as const;
 
 export default async function WarehouseDetailPage({
@@ -22,18 +26,34 @@ export default async function WarehouseDetailPage({
   const { data: auth } = await supabase.auth.getClaims();
   const uid = auth?.claims?.sub;
 
-  const [{ data: w }, { data: membership }] = await Promise.all([
+  const [{ data: w }, { data: membership }, { data: teamRows }, { data: snapshots }] = await Promise.all([
     supabase
       .from("warehouse_readiness")
       .select("id, name, go_live_date, total_raised, open_count, open_high_count")
       .eq("id", id)
       .single(),
     supabase.from("warehouse_members").select("role").eq("warehouse_id", id).eq("user_id", uid ?? ""),
+    supabase
+      .from("warehouse_members")
+      .select("role, profile:profiles(full_name, email)")
+      .eq("warehouse_id", id),
+    supabase
+      .from("snag_daily_snapshot")
+      .select("snapshot_date, total_raised, total_closed")
+      .eq("warehouse_id", id)
+      .order("snapshot_date"),
   ]);
 
   if (!w) notFound();
 
   const isReporter = (membership ?? []).some((m) => REPORTER_ROLES.includes(m.role));
+  const isResolver = (membership ?? []).some((m) => RESOLVER_ROLES.includes(m.role));
+  const daysToGoLive = daysUntil(w.go_live_date);
+  const team = (teamRows ?? []).map((t) => ({
+    role: t.role,
+    full_name: (t.profile as unknown as { full_name: string | null; email: string } | null)?.full_name ?? null,
+    email: (t.profile as unknown as { full_name: string | null; email: string } | null)?.email ?? "",
+  }));
 
   let query = supabase
     .from("snags")
@@ -54,34 +74,47 @@ export default async function WarehouseDetailPage({
 
   return (
     <div className="mx-auto w-full max-w-5xl px-6 py-8">
-      <div className="mb-4 flex items-baseline justify-between">
+      <div className="mb-3 flex items-baseline justify-between">
         <h1 className="text-[16px] font-medium tracking-[-0.015em] text-foreground">{w.name}</h1>
-        <span className="font-mono text-[11px] text-faint">
-          {w.go_live_date
-            ? `GO-LIVE ${new Date(w.go_live_date + "T00:00:00")
-                .toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
-                .toUpperCase()}`
-            : "GO-LIVE NOT SET"}
-        </span>
+        {isResolver ? (
+          <GoLiveEditor warehouseId={id} goLiveDate={w.go_live_date} />
+        ) : (
+          <span className="font-mono text-[11px] text-faint">
+            {w.go_live_date
+              ? `GO-LIVE ${new Date(w.go_live_date + "T00:00:00")
+                  .toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+                  .toUpperCase()}`
+              : "GO-LIVE NOT SET"}
+          </span>
+        )}
       </div>
 
-      <div className="mb-4 grid grid-cols-4 gap-2">
-        <div className="rounded-md border border-border bg-card p-2.5">
-          <div className="font-mono text-[19px]">{w.total_raised}</div>
-          <div className="text-[9px] text-faint">raised</div>
+      <TeamBlock members={team} />
+
+      <div className="mb-3 mt-2.5 grid grid-cols-[0.85fr_1.15fr] gap-2.5">
+        <div className="grid grid-cols-2 content-start gap-2">
+          <div className="rounded-md border border-border bg-card p-2.5">
+            <div className="font-mono text-[19px]">{w.total_raised}</div>
+            <div className="text-[9px] text-faint">raised</div>
+          </div>
+          <div className="rounded-md border border-border bg-card p-2.5">
+            <div className="font-mono text-[19px]">{w.open_count}</div>
+            <div className="text-[9px] text-faint">open</div>
+          </div>
+          <div className="rounded-md border border-border bg-card p-2.5">
+            <div className="font-mono text-[19px]">{w.total_raised - w.open_count}</div>
+            <div className="text-[9px] text-faint">closed</div>
+          </div>
+          <div className="rounded-md border border-blush bg-blush p-2.5">
+            <div className="font-mono text-[19px] text-red-deep">{w.open_high_count}</div>
+            <div className="text-[9px] text-red-deep">open high</div>
+          </div>
+          <div className="col-span-2 rounded-md border border-border bg-card p-2.5">
+            <div className="font-mono text-[19px]">{daysToGoLive ?? "—"}</div>
+            <div className="text-[9px] text-faint">days left</div>
+          </div>
         </div>
-        <div className="rounded-md border border-border bg-card p-2.5">
-          <div className="font-mono text-[19px]">{w.open_count}</div>
-          <div className="text-[9px] text-faint">open</div>
-        </div>
-        <div className="rounded-md border border-border bg-card p-2.5">
-          <div className="font-mono text-[19px]">{w.total_raised - w.open_count}</div>
-          <div className="text-[9px] text-faint">closed</div>
-        </div>
-        <div className="rounded-md border border-blush bg-blush p-2.5">
-          <div className="font-mono text-[19px] text-red-deep">{w.open_high_count}</div>
-          <div className="text-[9px] text-red-deep">open high</div>
-        </div>
+        <BurnUpChart snapshots={snapshots ?? []} goLiveDate={w.go_live_date} />
       </div>
 
       {raised && (
@@ -123,7 +156,7 @@ export default async function WarehouseDetailPage({
       <SnagTable snags={(snags ?? []) as unknown as SnagRow[]} />
 
       <p className="mt-3 text-[12.5px] text-muted-foreground">
-        Team block, burn-up chart, update log, and inline resolver editing land in Phase 4/5.
+        Update log and resolver inline editing (ETC, status, verify closure) land in Phase 5.
       </p>
     </div>
   );

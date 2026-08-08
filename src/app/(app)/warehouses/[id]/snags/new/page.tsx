@@ -1,8 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { REPORTER_ROLES } from "@/lib/roles";
 import { AddSnagForm } from "./add-snag-form";
-
-const REPORTER_ROLES = ["operations", "hvac_engineer"];
 
 export default async function NewSnagPage({
   params,
