@@ -166,7 +166,7 @@ export default async function WarehouseDetailPage({
       <TeamBlock members={team} />
 
       <div className="mb-3 mt-2.5 grid grid-cols-1 gap-2.5 lg:grid-cols-[0.85fr_1.15fr]">
-        <div className="grid grid-cols-2 content-start gap-2">
+        <div className="grid grid-cols-2 auto-rows-fr gap-2">
           {summaryTiles.map((tile) => (
             <div
               key={tile.label}

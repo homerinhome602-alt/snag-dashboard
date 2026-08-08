@@ -30,6 +30,24 @@ export async function createWarehouse(
   return { id: (data as { id: string }).id, error: null };
 }
 
+export async function renameWarehouse(
+  warehouseId: string,
+  name: string
+): Promise<{ error: string | null }> {
+  const trimmed = name.trim();
+  if (!trimmed) return { error: "Warehouse name can't be empty." };
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("warehouses").update({ name: trimmed }).eq("id", warehouseId);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath("/", "layout");
+  return { error: null };
+}
+
 export async function getWarehouseMembers(
   warehouseId: string
 ): Promise<{ role: string; user_id: string }[]> {

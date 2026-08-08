@@ -228,7 +228,7 @@ export function SnagRow({
 
   return (
     <>
-      <TableRow className="cursor-pointer" onClick={() => setExpanded((v) => !v)}>
+      <TableRow className="group cursor-pointer" onClick={() => setExpanded((v) => !v)}>
         <TableCell className={cn(STICKY_SNO_CLASS, "font-mono text-[11px] text-muted-foreground")}>
           {String(s.serial_no).padStart(3, "0")}
         </TableCell>
@@ -280,7 +280,7 @@ export function SnagRow({
       </TableRow>
       {expanded && (
         <TableRow>
-          <TableCell colSpan={13} className="bg-background">
+          <TableCell colSpan={13} className="bg-card">
             <div className="flex flex-col gap-2 py-1" onClick={(e) => e.stopPropagation()}>
               {snagPhotos.length > 0 || updates.length > 0 ? (
                 <div className="ml-2 flex flex-col gap-3 pl-1">
@@ -290,7 +290,10 @@ export function SnagRow({
                       {updates.length > 0 && (
                         <span className="absolute top-3.5 bottom-[-18px] left-[3.5px] w-px bg-border" />
                       )}
-                      <span className="text-foreground">Photo attached when raised</span>
+                      <span className="rounded-chip bg-sky px-1.5 py-0.5 text-[10px] font-medium text-teal-deep">
+                        Description
+                      </span>{" "}
+                      <span className="text-foreground">{s.description}</span>
                       <div className="mt-1">
                         <AttachmentThumbs attachments={snagPhotos} />
                       </div>

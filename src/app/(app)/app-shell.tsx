@@ -55,7 +55,7 @@ export function AppShell({
   const isAdmin = !!profile?.is_dashboard_admin;
 
   return (
-    <div className="flex h-full min-h-screen flex-1 overflow-x-hidden">
+    <div className="flex h-full min-h-screen flex-1">
       <nav
         onMouseEnter={() => setOpen(true)}
         onMouseLeave={() => setOpen(false)}

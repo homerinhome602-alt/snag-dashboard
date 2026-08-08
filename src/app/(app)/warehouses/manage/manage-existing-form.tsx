@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { RolePeoplePicker } from "@/components/role-people-picker";
 import { MEMBER_ROLES, type MemberRole } from "@/lib/roles";
-import { addWarehouseMembers, getWarehouseMembers, removeWarehouseMember } from "./actions";
+import { addWarehouseMembers, getWarehouseMembers, removeWarehouseMember, renameWarehouse } from "./actions";
 
 type Person = { id: string; full_name: string | null; email: string; default_role: MemberRole | null };
 type Warehouse = { id: string; name: string };
@@ -19,6 +21,7 @@ const EMPTY_SELECTIONS: Record<MemberRole, string[]> = {
 };
 
 export function ManageExistingForm({ warehouses, people }: { warehouses: Warehouse[]; people: Person[] }) {
+  const router = useRouter();
   const [warehouseId, setWarehouseId] = useState("");
   const [existing, setExisting] = useState<Record<MemberRole, string[]>>(EMPTY_SELECTIONS);
   const [selections, setSelections] = useState<Record<MemberRole, string[]>>(EMPTY_SELECTIONS);
@@ -26,6 +29,33 @@ export function ManageExistingForm({ warehouses, people }: { warehouses: Warehou
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  const [name, setName] = useState("");
+  const [nameSaved, setNameSaved] = useState(false);
+  const [nameError, setNameError] = useState<string | null>(null);
+  const [renaming, startRename] = useTransition();
+
+  useEffect(() => {
+    setName(warehouses.find((w) => w.id === warehouseId)?.name ?? "");
+    setNameSaved(false);
+    setNameError(null);
+  }, [warehouseId, warehouses]);
+
+  function saveName() {
+    setNameError(null);
+    startRename(async () => {
+      const result = await renameWarehouse(warehouseId, name);
+      if (result.error) {
+        setNameError(result.error);
+        return;
+      }
+      setNameSaved(true);
+      router.refresh();
+    });
+  }
+
+  const currentName = warehouses.find((w) => w.id === warehouseId)?.name ?? "";
+  const nameChanged = name.trim() !== currentName && name.trim().length > 0;
 
   useEffect(() => {
     if (!warehouseId) {
@@ -110,6 +140,29 @@ export function ManageExistingForm({ warehouses, people }: { warehouses: Warehou
           ))}
         </select>
       </div>
+
+      {warehouseId && (
+        <div className="mb-4">
+          <label className="mb-1.5 block text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
+            Warehouse name
+          </label>
+          <div className="flex gap-2">
+            <Input
+              value={name}
+              onChange={(e) => {
+                setName(e.target.value);
+                setNameSaved(false);
+              }}
+              className="flex-1"
+            />
+            <Button type="button" variant="outline" disabled={renaming || !nameChanged} onClick={saveName}>
+              {renaming ? "Saving…" : "Rename"}
+            </Button>
+          </div>
+          {nameError && <p className="mt-1.5 text-[12.5px] text-destructive">{nameError}</p>}
+          {nameSaved && !nameChanged && <p className="mt-1.5 text-[12.5px] text-mint-deep">Renamed.</p>}
+        </div>
+      )}
 
       {warehouseId && loading && (
         <p className="text-[12.5px] text-muted-foreground">Loading current team…</p>
