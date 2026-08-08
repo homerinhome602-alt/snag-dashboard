@@ -23,7 +23,7 @@ export default async function WarehouseManagementPage() {
   ]);
 
   return (
-    <div className="mx-auto w-full max-w-xl px-4 py-6 sm:max-w-3xl sm:px-6 sm:py-8 lg:max-w-4xl">
+    <div className="mx-auto w-full max-w-xl px-4 py-6 sm:max-w-3xl sm:px-6 sm:py-8 lg:max-w-4xl lg:px-[50px]">
       <div className="rounded-card border border-border bg-card p-5 sm:p-7">
         <h1 className="mb-4 text-[15px] font-medium tracking-[-0.015em] text-foreground">
           Warehouse management

@@ -21,6 +21,20 @@ function HamburgerIcon() {
   );
 }
 
+function HomeIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path
+        d="M2 7.5 8 2l6 5.5M3.5 6.5V13a.5.5 0 0 0 .5.5h3v-4h2v4h3a.5.5 0 0 0 .5-.5V6.5"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 const SIDEBAR_WIDTH = "11.5rem"; // w-46 equivalent
 const SIDEBAR_COLLAPSED = "3rem";
 
@@ -43,20 +57,29 @@ export function AppShell({
         onMouseEnter={() => setOpen(true)}
         onMouseLeave={() => setOpen(false)}
         style={{ width: open ? SIDEBAR_WIDTH : SIDEBAR_COLLAPSED }}
-        className="flex shrink-0 flex-col overflow-hidden border-r border-border bg-card py-3.5 transition-[width] duration-200 ease-in-out"
+        className="sticky top-0 flex h-screen shrink-0 flex-col overflow-hidden border-r border-border bg-card py-3.5 transition-[width] duration-200 ease-in-out"
       >
-        <button
-          type="button"
-          aria-label="Toggle sidebar"
-          onClick={() => setOpen((v) => !v)}
-          className="ml-2 mb-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-foreground hover:bg-muted"
-        >
-          <HamburgerIcon />
-        </button>
+        <div className="ml-2 mb-3 flex shrink-0 flex-col gap-1">
+          <button
+            type="button"
+            aria-label="Toggle sidebar"
+            onClick={() => setOpen((v) => !v)}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-foreground hover:bg-muted"
+          >
+            <HamburgerIcon />
+          </button>
+          <Link
+            href="/"
+            aria-label="Home"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-foreground hover:bg-muted"
+          >
+            <HomeIcon />
+          </Link>
+        </div>
         <div
           style={{ width: SIDEBAR_WIDTH }}
           className={cn(
-            "flex flex-1 flex-col transition-opacity ease-in-out",
+            "flex flex-1 flex-col overflow-y-auto overflow-x-hidden transition-opacity ease-in-out",
             open ? "opacity-100 duration-150 delay-100" : "pointer-events-none opacity-0 duration-75"
           )}
         >

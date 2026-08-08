@@ -14,6 +14,7 @@ import { SnagFilters } from "./snag-filters";
 import { SearchBox } from "./search-box";
 import { RaisedBanner } from "./raised-banner";
 import { parseMulti } from "./filter-utils";
+import { cn, CARD_HOVER } from "@/lib/utils";
 
 export default async function WarehouseDetailPage({
   params,
@@ -140,7 +141,7 @@ export default async function WarehouseDetailPage({
   ];
 
   return (
-    <div className="mx-auto w-full max-w-screen-2xl px-4 py-6 sm:px-6 sm:py-8 lg:px-[100px]">
+    <div className="mx-auto w-full max-w-screen-2xl px-4 py-6 sm:px-6 sm:py-8 lg:px-[50px]">
       <div className="mb-3 flex items-baseline justify-between">
         <h1 className="text-[16px] font-medium tracking-[-0.015em] text-foreground">{w.name}</h1>
         {isResolver ? (
@@ -169,15 +170,17 @@ export default async function WarehouseDetailPage({
           {summaryTiles.map((tile) => (
             <div
               key={tile.label}
-              className={`rounded-md border p-2.5 transition-colors hover:bg-blush ${
+              className={cn(
+                CARD_HOVER,
+                "rounded-md border p-2.5 hover:bg-blush",
                 tile.highlight ? "border-blush bg-blush" : "border-border bg-card"
-              }`}
+              )}
             >
               <div className={`font-mono text-[19px] ${tile.highlight ? "text-red-deep" : ""}`}>{tile.value}</div>
               <div className={`text-[9px] ${tile.highlight ? "text-red-deep" : "text-faint"}`}>{tile.label}</div>
             </div>
           ))}
-          <div className="col-span-2 rounded-md border border-border bg-card p-2.5 transition-colors hover:bg-blush">
+          <div className={cn(CARD_HOVER, "col-span-2 rounded-md border border-border bg-card p-2.5 hover:bg-blush")}>
             <div className="font-mono text-[19px]">{daysToGoLive ?? "—"}</div>
             <div className="text-[9px] text-faint">Days left for launch</div>
           </div>

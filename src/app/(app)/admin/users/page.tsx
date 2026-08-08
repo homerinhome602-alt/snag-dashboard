@@ -64,7 +64,7 @@ export default async function UserManagementPage() {
   const invitedCount = rows.filter((r) => r.status === "invited").length;
 
   return (
-    <div className="mx-auto w-full max-w-screen-2xl px-4 py-6 sm:px-6 sm:py-8 lg:px-[100px]">
+    <div className="mx-auto w-full max-w-screen-2xl px-4 py-6 sm:px-6 sm:py-8 lg:px-[50px]">
       <div className="mb-1 flex items-baseline justify-between">
         <h1 className="text-[17px] text-foreground">People</h1>
         <span className="text-[13px] text-muted-foreground">

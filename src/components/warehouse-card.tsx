@@ -5,6 +5,7 @@ import {
   readinessColor,
   type WarehouseReadiness,
 } from "@/lib/readiness";
+import { cn, CARD_HOVER } from "@/lib/utils";
 
 const BADGE_CLASS: Record<string, string> = {
   red: "bg-blush text-red-deep border-blush",
@@ -30,7 +31,7 @@ export function WarehouseCard({ w }: { w: WarehouseReadiness }) {
   return (
     <Link
       href={`/warehouses/${w.id}`}
-      className="block rounded-card border border-border bg-card p-3.5"
+      className={cn(CARD_HOVER, "block rounded-card border border-border bg-card p-3.5")}
       style={color === "red" ? { borderColor: "#EFC6BC" } : undefined}
     >
       <div className="flex items-center justify-between">

@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { WarehouseCard } from "@/components/warehouse-card";
 import { daysUntil, nextToLaunch, sortByLaunchProximity, type WarehouseReadiness } from "@/lib/readiness";
+import { cn, CARD_HOVER } from "@/lib/utils";
 
 export default async function Home() {
   const supabase = await createClient();
@@ -31,29 +32,38 @@ export default async function Home() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-screen-2xl px-4 py-6 sm:px-6 sm:py-8 lg:px-[100px]">
-      <div className="mb-4 flex items-center gap-6 rounded-card border border-border bg-card p-3.5">
-        <div>
-          <div className="font-mono text-[22px] leading-none">{totals.open}</div>
-          <div className="text-[9px] uppercase tracking-[0.06em] text-faint">Open</div>
-        </div>
-        <div>
-          <div className="font-mono text-[22px] leading-none" style={{ color: "#C75B4E" }}>
-            {totals.openHigh}
+    <div className="mx-auto w-full max-w-screen-2xl px-4 py-6 sm:px-6 sm:py-8 lg:px-[50px]">
+      <div className="mb-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+        <div className={cn(CARD_HOVER, "flex items-center gap-6 rounded-card border border-border bg-card p-3.5")}>
+          <div>
+            <div className="font-mono text-[22px] leading-none">{totals.open}</div>
+            <div className="text-[9px] uppercase tracking-[0.06em] text-faint">Open</div>
           </div>
-          <div className="text-[9px] uppercase tracking-[0.06em] text-faint">Open high</div>
-        </div>
-        <div>
-          <div className="font-mono text-[22px] leading-none">{totals.raised}</div>
-          <div className="text-[9px] uppercase tracking-[0.06em] text-faint">Raised</div>
-        </div>
-        <div className="flex-1" />
-        {next && (
-          <div className="max-w-[230px] text-right text-[12px] leading-relaxed text-muted-foreground">
-            Next to launch — <b className="font-medium text-foreground">{next.name}</b> opens in{" "}
-            {nextDays} days with {next.open_count} snags still open
+          <div>
+            <div className="font-mono text-[22px] leading-none" style={{ color: "#C75B4E" }}>
+              {totals.openHigh}
+            </div>
+            <div className="text-[9px] uppercase tracking-[0.06em] text-faint">Open high</div>
           </div>
-        )}
+          <div>
+            <div className="font-mono text-[22px] leading-none">{totals.raised}</div>
+            <div className="text-[9px] uppercase tracking-[0.06em] text-faint">Raised</div>
+          </div>
+        </div>
+
+        <div className={cn(CARD_HOVER, "flex flex-col justify-center rounded-card border border-border bg-card p-3.5")}>
+          <div className="text-[9px] uppercase tracking-[0.06em] text-faint">Next to launch</div>
+          {next ? (
+            <>
+              <div className="mt-1 text-[15px] font-medium text-foreground">{next.name}</div>
+              <div className="mt-0.5 text-[12px] text-muted-foreground">
+                Opens in {nextDays} days with {next.open_count} snags still open
+              </div>
+            </>
+          ) : (
+            <div className="mt-1 text-[12px] text-muted-foreground">No upcoming launch date set</div>
+          )}
+        </div>
       </div>
 
       <div className="mb-2.5 text-[11px] uppercase tracking-[0.07em] text-faint">
