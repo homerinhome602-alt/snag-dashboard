@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { PhotoCaptureInput } from "@/components/photo-capture";
+import { DuplicateCheckModal } from "@/components/duplicate-check-modal";
 import { createClient } from "@/lib/supabase/client";
 import { uploadAttachment, type PhotoCapture } from "@/lib/media";
 import { enqueueSnag } from "@/lib/offline-queue";
@@ -15,7 +16,7 @@ import {
   SEVERITY_LABELS,
   SUB_CATEGORY_LABELS,
 } from "@/lib/snags";
-import { raiseSnag } from "./actions";
+import { findSimilarSnags, raiseSnag, type DuplicateCandidate } from "./actions";
 
 // Minimum 56px tap targets throughout — this form is used with gloved
 // hands at -25°C (PLAN.md §5.7).
@@ -70,6 +71,50 @@ export function AddSnagForm({
   const [scope, setScope] = useState("infra");
   const [severity, setSeverity] = useState("medium");
   const [photo, setPhoto] = useState<PhotoCapture | null>(null);
+  const [duplicates, setDuplicates] = useState<DuplicateCandidate[] | null>(null);
+
+  async function doRaise(suppressedDuplicateIds: string[]) {
+    const subCategoryOtherValue = subCategory === "others" ? subCategoryOther.trim() : null;
+
+    const result = await raiseSnag(
+      warehouseId,
+      {
+        description: description.trim(),
+        category,
+        subCategory,
+        subCategoryOther: subCategoryOtherValue,
+        location,
+        scope,
+        severity,
+      },
+      suppressedDuplicateIds
+    );
+
+    if (result.error || !result.snagId) {
+      setError(result.error ?? "Could not raise the snag.");
+      return;
+    }
+
+    if (photo) {
+      const supabase = createClient();
+      const uploadResult = await uploadAttachment(supabase, {
+        warehouseId,
+        snagId: result.snagId,
+        mediaType: "image",
+        file: photo.annotated,
+        original: photo.original,
+        thumbnail: photo.thumbnail,
+        fileName: "snag-photo.jpg",
+        uploaderId: currentUserId,
+      });
+      if (uploadResult.error) {
+        setError(`Snag raised, but the photo failed to upload: ${uploadResult.error}`);
+        return;
+      }
+    }
+
+    router.push(`/warehouses/${warehouseId}?raised=${result.serialNo}`);
+  }
 
   function submit() {
     setError(null);
@@ -77,7 +122,8 @@ export function AddSnagForm({
       const subCategoryOtherValue = subCategory === "others" ? subCategoryOther.trim() : null;
 
       // Offline-capable: queue locally and sync when connection returns
-      // rather than letting the request hang or fail (PLAN.md §5.7).
+      // rather than letting the request hang or fail (PLAN.md §5.7). No
+      // duplicate check while offline — that needs a network round trip.
       if (typeof navigator !== "undefined" && !navigator.onLine) {
         await enqueueSnag({
           localId: crypto.randomUUID(),
@@ -99,40 +145,13 @@ export function AddSnagForm({
         return;
       }
 
-      const result = await raiseSnag(warehouseId, {
-        description: description.trim(),
-        category,
-        subCategory,
-        subCategoryOther: subCategoryOtherValue,
-        location,
-        scope,
-        severity,
-      });
-
-      if (result.error || !result.snagId) {
-        setError(result.error ?? "Could not raise the snag.");
+      const candidates = await findSimilarSnags(warehouseId, location, subCategory, description.trim());
+      if (candidates.length > 0) {
+        setDuplicates(candidates);
         return;
       }
 
-      if (photo) {
-        const supabase = createClient();
-        const uploadResult = await uploadAttachment(supabase, {
-          warehouseId,
-          snagId: result.snagId,
-          mediaType: "image",
-          file: photo.annotated,
-          original: photo.original,
-          thumbnail: photo.thumbnail,
-          fileName: "snag-photo.jpg",
-          uploaderId: currentUserId,
-        });
-        if (uploadResult.error) {
-          setError(`Snag raised, but the photo failed to upload: ${uploadResult.error}`);
-          return;
-        }
-      }
-
-      router.push(`/warehouses/${warehouseId}?raised=${result.serialNo}`);
+      await doRaise([]);
     });
   }
 
@@ -235,6 +254,19 @@ export function AddSnagForm({
           {pending ? "Raising…" : "Raise snag"}
         </Button>
       </div>
+
+      {duplicates && (
+        <DuplicateCheckModal
+          candidates={duplicates}
+          pending={pending}
+          onCancel={() => setDuplicates(null)}
+          onRaiseAnyway={() => {
+            startTransition(async () => {
+              await doRaise(duplicates.map((d) => d.id));
+            });
+          }}
+        />
+      )}
     </div>
   );
 }
