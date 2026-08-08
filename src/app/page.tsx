@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "./actions";
 import { Button } from "@/components/ui/button";
@@ -28,11 +29,18 @@ export default async function Home() {
         {profile?.is_dashboard_admin ? " · Dashboard Admin" : ""}.
         Warehouse cards and the readiness gate land in Phase 2.
       </p>
-      <form action={signOut}>
-        <Button variant="outline" type="submit">
-          Sign out
-        </Button>
-      </form>
+      <div className="flex gap-2">
+        {profile?.is_dashboard_admin && (
+          <Button variant="outline" render={<Link href="/admin/users" />}>
+            User management
+          </Button>
+        )}
+        <form action={signOut}>
+          <Button variant="outline" type="submit">
+            Sign out
+          </Button>
+        </form>
+      </div>
     </div>
   );
 }
