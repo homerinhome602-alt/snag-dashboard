@@ -53,7 +53,13 @@ export function AppShell({
         >
           <HamburgerIcon />
         </button>
-        <div style={{ width: SIDEBAR_WIDTH }} className="flex flex-1 flex-col">
+        <div
+          style={{ width: SIDEBAR_WIDTH }}
+          className={cn(
+            "flex flex-1 flex-col transition-opacity ease-in-out",
+            open ? "opacity-100 duration-150 delay-100" : "pointer-events-none opacity-0 duration-75"
+          )}
+        >
           <div className="px-4 pb-2 text-[10px] uppercase tracking-[0.09em] text-faint">Warehouses</div>
           {warehouses.length === 0 && (
             <div className="px-4 py-1 text-[12px] text-muted-foreground">None yet</div>
