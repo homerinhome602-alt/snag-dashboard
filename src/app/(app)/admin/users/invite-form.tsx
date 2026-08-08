@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { MEMBER_ROLES } from "@/lib/roles";
+import { MEMBER_ROLES, roleLabel } from "@/lib/roles";
 import { createInvitation } from "./actions";
 
 type State = { error: string | null };
@@ -27,7 +27,7 @@ export function InviteForm() {
         <Input name="email" type="email" placeholder="name@company.com" required />
         <Select name="default_role" defaultValue="hvac_engineer">
           <SelectTrigger className="w-full">
-            <SelectValue />
+            <SelectValue>{(value: string) => roleLabel(value)}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             {MEMBER_ROLES.map((r) => (
