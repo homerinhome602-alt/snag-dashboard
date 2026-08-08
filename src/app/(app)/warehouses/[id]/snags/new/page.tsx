@@ -21,7 +21,7 @@ export default async function NewSnagPage({
   if (!warehouse) notFound();
 
   const isReporter = (membership ?? []).some((m) => REPORTER_ROLES.includes(m.role));
-  if (!isReporter) {
+  if (!isReporter || !uid) {
     redirect(`/warehouses/${id}`);
   }
 
@@ -32,7 +32,7 @@ export default async function NewSnagPage({
           Raise a snag
         </h1>
         <p className="mb-4 mt-0.5 text-[12px] text-muted-foreground">{warehouse.name}</p>
-        <AddSnagForm warehouseId={id} />
+        <AddSnagForm warehouseId={id} currentUserId={uid} />
       </div>
     </div>
   );

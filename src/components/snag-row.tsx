@@ -18,6 +18,9 @@ import {
 } from "@/lib/snags";
 import { postSnagUpdate, verifySnagClosure } from "@/app/(app)/warehouses/[id]/snag-actions";
 import type { SnagRow as SnagRowData } from "@/components/snag-table";
+import { VideoCaptureInput } from "@/components/video-capture";
+import { createClient } from "@/lib/supabase/client";
+import { uploadAttachment, type VideoCapture } from "@/lib/media";
 
 export type UpdateRow = {
   id: string;
@@ -26,14 +29,57 @@ export type UpdateRow = {
   author: { full_name: string | null; email: string } | null;
 };
 
+export type AttachmentRow = {
+  id: string;
+  update_id: string | null;
+  media_type: string;
+  thumbnail_url: string;
+  file_url: string;
+};
+
+function AttachmentThumbs({ attachments }: { attachments: AttachmentRow[] }) {
+  if (attachments.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {attachments.map((a) => (
+        <a
+          key={a.id}
+          href={a.file_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="relative block h-14 w-14 overflow-hidden rounded-md border border-border"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={a.thumbnail_url} alt="" className="h-full w-full object-cover" />
+          {a.media_type === "video" && (
+            <span className="absolute inset-0 flex items-center justify-center bg-black/25 text-[16px] text-white">
+              ▶
+            </span>
+          )}
+        </a>
+      ))}
+    </div>
+  );
+}
+
 function fmtDate(d: string) {
   return new Date(d + "T00:00:00").toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
 }
 
-function UpdateForm({ warehouseId, snagId }: { warehouseId: string; snagId: string }) {
+function UpdateForm({
+  warehouseId,
+  snagId,
+  currentUserId,
+}: {
+  warehouseId: string;
+  snagId: string;
+  currentUserId: string;
+}) {
   const [body, setBody] = useState("");
   const [etc, setEtc] = useState("");
   const [nextStatus, setNextStatus] = useState("");
+  const [video, setVideo] = useState<VideoCapture | null>(null);
+  const [videoInputKey, setVideoInputKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -46,6 +92,9 @@ function UpdateForm({ warehouseId, snagId }: { warehouseId: string; snagId: stri
         placeholder="Motor replaced. Ran two defrost cycles, no fault."
         className="w-full rounded-md border border-input bg-card px-2 py-1.5 text-[12.5px] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
       />
+      <div className="mt-1.5 w-56">
+        <VideoCaptureInput key={videoInputKey} onChange={setVideo} />
+      </div>
       <div className="mt-1.5 flex flex-wrap items-center gap-2">
         <label className="flex items-center gap-1 text-[11px] text-muted-foreground">
           ETC
@@ -72,14 +121,33 @@ function UpdateForm({ warehouseId, snagId }: { warehouseId: string; snagId: stri
           onClick={() =>
             startTransition(async () => {
               const result = await postSnagUpdate(warehouseId, snagId, body, etc || null, nextStatus || null);
-              if (result.error) {
-                setError(result.error);
+              if (result.error || !result.updateId) {
+                setError(result.error ?? "Could not post the update.");
                 return;
+              }
+              if (video) {
+                const supabase = createClient();
+                const uploadResult = await uploadAttachment(supabase, {
+                  warehouseId,
+                  snagId,
+                  updateId: result.updateId,
+                  mediaType: "video",
+                  file: video.file,
+                  thumbnail: video.thumbnail,
+                  fileName: "snag-video.mp4",
+                  uploaderId: currentUserId,
+                });
+                if (uploadResult.error) {
+                  setError(`Update posted, but the video failed to upload: ${uploadResult.error}`);
+                  return;
+                }
               }
               setError(null);
               setBody("");
               setEtc("");
               setNextStatus("");
+              setVideo(null);
+              setVideoInputKey((k) => k + 1);
             })
           }
         >
@@ -129,17 +197,26 @@ function VerifyActions({ warehouseId, snagId }: { warehouseId: string; snagId: s
 export function SnagRow({
   snag: s,
   updates,
+  attachments,
   warehouseId,
   isReporter,
   isResolver,
+  currentUserId,
 }: {
   snag: SnagRowData;
   updates: UpdateRow[];
+  attachments: AttachmentRow[];
   warehouseId: string;
   isReporter: boolean;
   isResolver: boolean;
+  currentUserId: string;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const snagPhotos = attachments.filter((a) => a.update_id === null);
+  const attachmentsByUpdate = new Map<string, AttachmentRow[]>();
+  for (const a of attachments) {
+    if (a.update_id) attachmentsByUpdate.set(a.update_id, [...(attachmentsByUpdate.get(a.update_id) ?? []), a]);
+  }
   const days = ageingDays(s.date_raised, s.closed_at);
   const overdue = isOverdue(s.etc_date, s.status);
   const subCategory =
@@ -200,8 +277,9 @@ export function SnagRow({
       </TableRow>
       {expanded && (
         <TableRow>
-          <TableCell colSpan={12} className="bg-background">
+          <TableCell colSpan={13} className="bg-background">
             <div className="flex flex-col gap-2 py-1" onClick={(e) => e.stopPropagation()}>
+              <AttachmentThumbs attachments={snagPhotos} />
               {updates.length > 0 ? (
                 <div className="flex flex-col gap-1.5">
                   {updates.map((u) => (
@@ -211,13 +289,20 @@ export function SnagRow({
                         · {u.author?.full_name ?? u.author?.email ?? "—"} ·{" "}
                         {new Date(u.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}
                       </span>
+                      {attachmentsByUpdate.has(u.id) && (
+                        <div className="mt-1">
+                          <AttachmentThumbs attachments={attachmentsByUpdate.get(u.id)!} />
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
               ) : (
                 <p className="text-[12px] text-muted-foreground">No updates yet.</p>
               )}
-              {isResolver && <UpdateForm warehouseId={warehouseId} snagId={s.id} />}
+              {isResolver && (
+                <UpdateForm warehouseId={warehouseId} snagId={s.id} currentUserId={currentUserId} />
+              )}
               {isReporter && s.status === "ready_to_close" && (
                 <VerifyActions warehouseId={warehouseId} snagId={s.id} />
               )}

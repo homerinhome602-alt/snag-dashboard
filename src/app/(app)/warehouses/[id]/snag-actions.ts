@@ -9,25 +9,28 @@ export async function postSnagUpdate(
   body: string,
   etcDate: string | null,
   status: string | null
-): Promise<{ error: string | null }> {
+): Promise<{ updateId: string | null; error: string | null }> {
   if (!body.trim()) {
-    return { error: "Update text is required." };
+    return { updateId: null, error: "Update text is required." };
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.rpc("post_snag_update", {
-    p_snag_id: snagId,
-    p_body: body.trim(),
-    p_etc_date: etcDate || null,
-    p_status: status || null,
-  });
+  const { data, error } = await supabase
+    .rpc("post_snag_update", {
+      p_snag_id: snagId,
+      p_body: body.trim(),
+      p_etc_date: etcDate || null,
+      p_status: status || null,
+    })
+    .select()
+    .single();
 
   if (error) {
-    return { error: error.message };
+    return { updateId: null, error: error.message };
   }
 
   revalidatePath(`/warehouses/${warehouseId}`);
-  return { error: null };
+  return { updateId: (data as { id: string }).id, error: null };
 }
 
 export async function verifySnagClosure(

@@ -5,7 +5,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { SnagRow, type UpdateRow } from "@/components/snag-row";
+import { SnagRow, type UpdateRow, type AttachmentRow } from "@/components/snag-row";
 
 export type SnagRow = {
   id: string;
@@ -32,15 +32,19 @@ const HEADERS = [
 export function SnagTable({
   snags,
   updatesBySnag,
+  attachmentsBySnag,
   warehouseId,
   isReporter,
   isResolver,
+  currentUserId,
 }: {
   snags: SnagRow[];
   updatesBySnag: Record<string, UpdateRow[]>;
+  attachmentsBySnag: Record<string, AttachmentRow[]>;
   warehouseId: string;
   isReporter: boolean;
   isResolver: boolean;
+  currentUserId: string;
 }) {
   if (snags.length === 0) {
     return (
@@ -68,9 +72,11 @@ export function SnagTable({
               key={s.id}
               snag={s}
               updates={updatesBySnag[s.id] ?? []}
+              attachments={attachmentsBySnag[s.id] ?? []}
               warehouseId={warehouseId}
               isReporter={isReporter}
               isResolver={isResolver}
+              currentUserId={currentUserId}
             />
           ))}
         </TableBody>

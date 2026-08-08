@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 import { SnagTable, type SnagRow } from "@/components/snag-table";
-import type { UpdateRow } from "@/components/snag-row";
+import type { UpdateRow, AttachmentRow } from "@/components/snag-row";
 import { TeamBlock } from "@/components/team-block";
 import { BurnUpChart } from "@/components/burn-up-chart";
 import { STATUS_LABELS } from "@/lib/snags";
@@ -86,6 +86,31 @@ export default async function WarehouseDetailPage({
   for (const u of updates ?? []) {
     const key = (u as { snag_id: string }).snag_id;
     (updatesBySnag[key] ??= []).push(u as unknown as UpdateRow);
+  }
+
+  const { data: attachmentRows } = snagIds.length
+    ? await supabase
+        .from("attachments")
+        .select("id, snag_id, update_id, media_type, thumbnail_url, file_url")
+        .in("snag_id", snagIds)
+        .order("created_at")
+    : { data: [] as never[] };
+
+  const paths = (attachmentRows ?? []).flatMap((a) => [a.thumbnail_url, a.file_url]);
+  const { data: signedUrls } = paths.length
+    ? await supabase.storage.from("attachments").createSignedUrls(paths, 3600)
+    : { data: [] as { path: string | null; signedUrl: string }[] | null };
+  const urlByPath = new Map((signedUrls ?? []).map((s) => [s.path, s.signedUrl]));
+
+  const attachmentsBySnag: Record<string, AttachmentRow[]> = {};
+  for (const a of attachmentRows ?? []) {
+    (attachmentsBySnag[a.snag_id] ??= []).push({
+      id: a.id,
+      update_id: a.update_id,
+      media_type: a.media_type,
+      thumbnail_url: urlByPath.get(a.thumbnail_url) ?? "",
+      file_url: urlByPath.get(a.file_url) ?? "",
+    });
   }
 
   return (
@@ -172,13 +197,15 @@ export default async function WarehouseDetailPage({
       <SnagTable
         snags={(snags ?? []) as unknown as SnagRow[]}
         updatesBySnag={updatesBySnag}
+        attachmentsBySnag={attachmentsBySnag}
         warehouseId={id}
         isReporter={isReporter}
         isResolver={isResolver}
+        currentUserId={uid ?? ""}
       />
 
       <p className="mt-3 text-[12.5px] text-muted-foreground">
-        Click a row to expand its update log. Photo/video attachments land in Phase 6.
+        Click a row to expand its update log and see attached photos/videos.
       </p>
     </div>
   );

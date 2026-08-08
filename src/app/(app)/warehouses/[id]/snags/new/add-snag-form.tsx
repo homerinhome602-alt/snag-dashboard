@@ -1,8 +1,12 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { PhotoCaptureInput } from "@/components/photo-capture";
+import { createClient } from "@/lib/supabase/client";
+import { uploadAttachment, type PhotoCapture } from "@/lib/media";
 import {
   CATEGORY_LABELS,
   LOCATION_LABELS,
@@ -13,12 +17,10 @@ import {
 import { raiseSnag } from "./actions";
 
 function RadioCards({
-  name,
   options,
   value,
   onChange,
 }: {
-  name: string;
   options: [string, string][];
   value: string;
   onChange: (v: string) => void;
@@ -39,31 +41,73 @@ function RadioCards({
           {label}
         </button>
       ))}
-      <input type="hidden" name={name} value={value} />
     </div>
   );
 }
 
-export function AddSnagForm({ warehouseId }: { warehouseId: string }) {
-  const [state, formAction, pending] = useActionState(
-    raiseSnag.bind(null, warehouseId),
-    { error: null }
-  );
+export function AddSnagForm({ warehouseId, currentUserId }: { warehouseId: string; currentUserId: string }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
 
+  const [description, setDescription] = useState("");
   const [category, setCategory] = useState("hvac");
   const [subCategory, setSubCategory] = useState("odu");
+  const [subCategoryOther, setSubCategoryOther] = useState("");
   const [location, setLocation] = useState("frozen_chamber");
   const [scope, setScope] = useState("infra");
   const [severity, setSeverity] = useState("medium");
+  const [photo, setPhoto] = useState<PhotoCapture | null>(null);
+
+  function submit() {
+    setError(null);
+    startTransition(async () => {
+      const result = await raiseSnag(warehouseId, {
+        description: description.trim(),
+        category,
+        subCategory,
+        subCategoryOther: subCategory === "others" ? subCategoryOther.trim() : null,
+        location,
+        scope,
+        severity,
+      });
+
+      if (result.error || !result.snagId) {
+        setError(result.error ?? "Could not raise the snag.");
+        return;
+      }
+
+      if (photo) {
+        const supabase = createClient();
+        const uploadResult = await uploadAttachment(supabase, {
+          warehouseId,
+          snagId: result.snagId,
+          mediaType: "image",
+          file: photo.annotated,
+          original: photo.original,
+          thumbnail: photo.thumbnail,
+          fileName: "snag-photo.jpg",
+          uploaderId: currentUserId,
+        });
+        if (uploadResult.error) {
+          setError(`Snag raised, but the photo failed to upload: ${uploadResult.error}`);
+          return;
+        }
+      }
+
+      router.push(`/warehouses/${warehouseId}?raised=${result.serialNo}`);
+    });
+  }
 
   return (
-    <form action={formAction} className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4">
       <div>
         <Label className="mb-1.5 text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
           Description
         </Label>
         <textarea
-          name="description"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
           required
           rows={3}
           className="w-full rounded-md border border-input bg-background px-2.5 py-2 text-[13px] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
@@ -73,14 +117,16 @@ export function AddSnagForm({ warehouseId }: { warehouseId: string }) {
 
       <div>
         <Label className="mb-1.5 text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
+          Photo (optional)
+        </Label>
+        <PhotoCaptureInput onChange={setPhoto} />
+      </div>
+
+      <div>
+        <Label className="mb-1.5 text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
           Category
         </Label>
-        <RadioCards
-          name="category"
-          value={category}
-          onChange={setCategory}
-          options={Object.entries(CATEGORY_LABELS) as [string, string][]}
-        />
+        <RadioCards value={category} onChange={setCategory} options={Object.entries(CATEGORY_LABELS) as [string, string][]} />
       </div>
 
       <div>
@@ -88,14 +134,14 @@ export function AddSnagForm({ warehouseId }: { warehouseId: string }) {
           Sub-category
         </Label>
         <RadioCards
-          name="sub_category"
           value={subCategory}
           onChange={setSubCategory}
           options={Object.entries(SUB_CATEGORY_LABELS) as [string, string][]}
         />
         {subCategory === "others" && (
           <input
-            name="sub_category_other"
+            value={subCategoryOther}
+            onChange={(e) => setSubCategoryOther(e.target.value)}
             required
             placeholder="Describe the sub-category"
             className="mt-1.5 w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-[12.5px] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
@@ -107,51 +153,36 @@ export function AddSnagForm({ warehouseId }: { warehouseId: string }) {
         <Label className="mb-1.5 text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
           Location
         </Label>
-        <RadioCards
-          name="location"
-          value={location}
-          onChange={setLocation}
-          options={Object.entries(LOCATION_LABELS) as [string, string][]}
-        />
+        <RadioCards value={location} onChange={setLocation} options={Object.entries(LOCATION_LABELS) as [string, string][]} />
       </div>
 
       <div>
         <Label className="mb-1.5 text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
           Scope
         </Label>
-        <RadioCards
-          name="scope"
-          value={scope}
-          onChange={setScope}
-          options={Object.entries(SCOPE_LABELS) as [string, string][]}
-        />
+        <RadioCards value={scope} onChange={setScope} options={Object.entries(SCOPE_LABELS) as [string, string][]} />
       </div>
 
       <div>
         <Label className="mb-1.5 text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
           Severity
         </Label>
-        <RadioCards
-          name="severity"
-          value={severity}
-          onChange={setSeverity}
-          options={Object.entries(SEVERITY_LABELS) as [string, string][]}
-        />
+        <RadioCards value={severity} onChange={setSeverity} options={Object.entries(SEVERITY_LABELS) as [string, string][]} />
         <p className="mt-1.5 text-[11.5px] font-medium text-red-deep">
           High means this stops the warehouse launching.
         </p>
       </div>
 
-      {state.error && <p className="text-[12.5px] text-destructive">{state.error}</p>}
+      {error && <p className="text-[12.5px] text-destructive">{error}</p>}
 
       <div className="flex justify-end gap-2 border-t border-line-soft pt-3.5">
         <Button type="button" variant="outline" onClick={() => history.back()}>
           Cancel
         </Button>
-        <Button type="submit" disabled={pending}>
+        <Button type="button" disabled={pending || !description.trim()} onClick={submit}>
           {pending ? "Raising…" : "Raise snag"}
         </Button>
       </div>
-    </form>
+    </div>
   );
 }
