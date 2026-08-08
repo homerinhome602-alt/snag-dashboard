@@ -42,3 +42,18 @@ export async function setUserActive(userId: string, isActive: boolean) {
   revalidatePath("/admin/users");
   return { error: null };
 }
+
+export async function setDashboardAdmin(userId: string, isAdmin: boolean) {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_dashboard_admin", {
+    p_user_id: userId,
+    p_is_admin: isAdmin,
+  });
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath("/admin/users");
+  return { error: null };
+}

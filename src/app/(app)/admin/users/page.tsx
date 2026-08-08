@@ -12,12 +12,14 @@ import {
 import { roleLabel } from "@/lib/roles";
 import { InviteForm } from "./invite-form";
 import { StatusToggle } from "./status-toggle";
+import { AdminToggle } from "./admin-toggle";
 
 type Row = {
   email: string;
   defaultRole: string;
   status: "active" | "invited" | "deactivated";
   userId: string | null;
+  isAdmin: boolean;
 };
 
 export default async function UserManagementPage() {
@@ -37,7 +39,7 @@ export default async function UserManagementPage() {
 
   const [{ data: invitations }, { data: profiles }] = await Promise.all([
     supabase.from("invitations").select("email, default_role, accepted_at").order("created_at"),
-    supabase.from("profiles").select("id, email, is_active"),
+    supabase.from("profiles").select("id, email, is_active, is_dashboard_admin"),
   ]);
 
   const profileByEmail = new Map((profiles ?? []).map((p) => [p.email, p]));
@@ -49,6 +51,7 @@ export default async function UserManagementPage() {
       defaultRole: inv.default_role,
       userId: profile?.id ?? null,
       status: !profile ? "invited" : profile.is_active ? "active" : "deactivated",
+      isAdmin: profile?.is_dashboard_admin ?? false,
     };
   });
 
@@ -83,13 +86,16 @@ export default async function UserManagementPage() {
               <TableHead className="text-[9px] uppercase tracking-[0.07em] text-faint">
                 Status
               </TableHead>
+              <TableHead className="text-[9px] uppercase tracking-[0.07em] text-faint">
+                Admin
+              </TableHead>
               <TableHead />
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={4} className="text-center text-muted-foreground">
+                <TableCell colSpan={5} className="text-center text-muted-foreground">
                   No one invited yet.
                 </TableCell>
               </TableRow>
@@ -116,8 +122,18 @@ export default async function UserManagementPage() {
                         : "Deactivated"}
                   </Badge>
                 </TableCell>
+                <TableCell>
+                  {row.userId && (
+                    <span className="text-[11.5px] text-muted-foreground">{row.isAdmin ? "Yes" : "No"}</span>
+                  )}
+                </TableCell>
                 <TableCell className="text-right">
-                  {row.userId && <StatusToggle userId={row.userId} isActive={row.status === "active"} />}
+                  {row.userId && (
+                    <div className="flex justify-end gap-3">
+                      <AdminToggle userId={row.userId} isAdmin={row.isAdmin} />
+                      <StatusToggle userId={row.userId} isActive={row.status === "active"} />
+                    </div>
+                  )}
                 </TableCell>
               </TableRow>
             ))}

@@ -11,6 +11,9 @@ import { REPORTER_ROLES, RESOLVER_ROLES } from "@/lib/roles";
 import { daysUntil } from "@/lib/readiness";
 import { GoLiveEditor } from "./go-live-editor";
 import { SnagFilters } from "./snag-filters";
+import { SearchBox } from "./search-box";
+import { RaisedBanner } from "./raised-banner";
+import { parseMulti } from "./filter-utils";
 
 export default async function WarehouseDetailPage({
   params,
@@ -29,8 +32,14 @@ export default async function WarehouseDetailPage({
   }>;
 }) {
   const { id } = await params;
-  const { status = "all", q = "", raised, category, sub_category, location, scope, severity } =
+  const { status, q = "", raised, category, sub_category, location, scope, severity } =
     await searchParams;
+  const statusValues = parseMulti(status);
+  const categoryValues = parseMulti(category);
+  const subCategoryValues = parseMulti(sub_category);
+  const locationValues = parseMulti(location);
+  const scopeValues = parseMulti(scope);
+  const severityValues = parseMulti(severity);
   const supabase = await createClient();
 
   const { data: auth } = await supabase.auth.getClaims();
@@ -73,13 +82,13 @@ export default async function WarehouseDetailPage({
     .eq("warehouse_id", id)
     .order("serial_no", { ascending: false });
 
-  if (status !== "all") query = query.eq("status", status);
+  if (statusValues.length) query = query.in("status", statusValues);
   if (q) query = query.ilike("description", `%${q}%`);
-  if (category) query = query.eq("category", category);
-  if (sub_category) query = query.eq("sub_category", sub_category);
-  if (location) query = query.eq("location", location);
-  if (scope) query = query.eq("scope", scope);
-  if (severity) query = query.eq("severity", severity);
+  if (categoryValues.length) query = query.in("category", categoryValues);
+  if (subCategoryValues.length) query = query.in("sub_category", subCategoryValues);
+  if (locationValues.length) query = query.in("location", locationValues);
+  if (scopeValues.length) query = query.in("scope", scopeValues);
+  if (severityValues.length) query = query.in("severity", severityValues);
 
   const { data: snags } = await query;
 
@@ -170,21 +179,19 @@ export default async function WarehouseDetailPage({
           ))}
           <div className="col-span-2 rounded-md border border-border bg-card p-2.5 transition-colors hover:bg-blush">
             <div className="font-mono text-[19px]">{daysToGoLive ?? "—"}</div>
-            <div className="text-[9px] text-faint">days left</div>
+            <div className="text-[9px] text-faint">Days left for launch</div>
           </div>
         </div>
         <BurnUpChart snapshots={snapshots ?? []} goLiveDate={w.go_live_date} liveTotalRaised={w.total_raised} liveTotalClosed={w.total_raised - w.open_count} />
       </div>
 
-      {raised && (
-        <div className="mb-3 rounded-md border border-mint bg-mint px-3 py-2 text-[12.5px] text-mint-deep">
-          Snag #{String(raised).padStart(3, "0")} raised.
-        </div>
-      )}
+      {raised && <RaisedBanner serialNo={raised} />}
 
       <SnagFilters />
 
-      <div className="mb-3 flex flex-wrap items-center justify-end gap-2">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <SearchBox />
+        <div className="flex flex-wrap items-center gap-2">
         <ExportButton snags={(snags ?? []) as unknown as SnagRow[]} warehouseName={w.name} />
         {isReporter && (
           <>
@@ -196,6 +203,7 @@ export default async function WarehouseDetailPage({
             </Button>
           </>
         )}
+        </div>
       </div>
 
       <SnagTable

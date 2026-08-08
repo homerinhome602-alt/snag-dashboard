@@ -1,20 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { MEMBER_ROLES, roleLabel } from "@/lib/roles";
+import { MEMBER_ROLES, ROLE_COLOR_CLASS, roleLabel } from "@/lib/roles";
 
 type Member = { role: string; full_name: string | null; email: string };
-
-// Each role keeps the same color every time it's shown — a coherent,
-// deterministic mapping rather than one shared per reporter/resolver bucket.
-const ROLE_PILL_CLASS: Record<string, string> = {
-  operations: "bg-frost text-teal-deep border-frost",
-  hvac_engineer: "bg-sky text-teal-deep border-sky",
-  program_manager_infra: "bg-mint text-mint-deep border-mint",
-  pmc: "bg-amber text-amber-deep border-amber",
-  pmo: "bg-blush text-red-deep border-blush",
-  warehouse_admin: "bg-line-soft text-foreground border-line",
-};
 
 export function TeamBlock({ members }: { members: Member[] }) {
   const [expanded, setExpanded] = useState(false);
@@ -42,7 +31,7 @@ export function TeamBlock({ members }: { members: Member[] }) {
           {MEMBER_ROLES.filter((r) => byRole.has(r.value)).map((r) => (
             <span
               key={r.value}
-              className={`rounded-pill border px-2 py-0.5 text-[11px] ${ROLE_PILL_CLASS[r.value]}`}
+              className={`rounded-pill border px-2 py-0.5 text-[11px] ${ROLE_COLOR_CLASS[r.value]}`}
             >
               {r.label} · {byRole.get(r.value)!.length}
             </span>
@@ -58,7 +47,7 @@ export function TeamBlock({ members }: { members: Member[] }) {
       ) : (
         <div className="flex flex-col gap-2">
           {MEMBER_ROLES.filter((r) => byRole.has(r.value)).map((r) => (
-            <div key={r.value} className={`rounded-md border px-2.5 py-1.5 ${ROLE_PILL_CLASS[r.value]}`}>
+            <div key={r.value} className={`rounded-md border px-2.5 py-1.5 ${ROLE_COLOR_CLASS[r.value]}`}>
               <div className="text-[10.5px] font-medium opacity-80">{roleLabel(r.value)}</div>
               <div className="flex flex-wrap gap-1.5">
                 {byRole.get(r.value)!.map((m, i) => (

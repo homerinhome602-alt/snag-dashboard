@@ -25,7 +25,7 @@ export default async function Home() {
   if (warehouses.length === 0) {
     return (
       <div className="flex h-full items-center justify-center px-6 text-center text-sm text-muted-foreground">
-        No warehouses yet. Use &ldquo;+ Add warehouse&rdquo; in the sidebar to create the first one.
+        No warehouses yet. Use &ldquo;Warehouse management&rdquo; in the sidebar to create the first one.
       </div>
     );
   }

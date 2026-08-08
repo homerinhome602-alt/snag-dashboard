@@ -64,14 +64,24 @@ export function AddSnagForm({
   const [queued, setQueued] = useState(false);
 
   const [description, setDescription] = useState("");
-  const [category, setCategory] = useState("hvac");
-  const [subCategory, setSubCategory] = useState("odu");
+  const [category, setCategory] = useState("");
+  const [subCategory, setSubCategory] = useState("");
   const [subCategoryOther, setSubCategoryOther] = useState("");
-  const [location, setLocation] = useState("frozen_chamber");
-  const [scope, setScope] = useState("infra");
-  const [severity, setSeverity] = useState("medium");
+  const [location, setLocation] = useState("");
+  const [scope, setScope] = useState("");
+  const [severity, setSeverity] = useState("");
   const [photo, setPhoto] = useState<PhotoCapture | null>(null);
   const [duplicates, setDuplicates] = useState<DuplicateCandidate[] | null>(null);
+
+  const isComplete = Boolean(
+    description.trim() &&
+      category &&
+      subCategory &&
+      (subCategory !== "others" || subCategoryOther.trim()) &&
+      location &&
+      scope &&
+      severity
+  );
 
   async function doRaise(suppressedDuplicateIds: string[]) {
     const subCategoryOtherValue = subCategory === "others" ? subCategoryOther.trim() : null;
@@ -175,13 +185,6 @@ export function AddSnagForm({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
           <Label className="mb-1.5 text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
-            Photo (optional)
-          </Label>
-          <PhotoCaptureInput onChange={setPhoto} />
-        </div>
-
-        <div>
-          <Label className="mb-1.5 text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
             Description
           </Label>
           <textarea
@@ -192,6 +195,13 @@ export function AddSnagForm({
             className="w-full rounded-md border border-input bg-background px-2.5 py-2 text-[13px] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
             placeholder="Evaporator fan not coming back on after defrost"
           />
+        </div>
+
+        <div>
+          <Label className="mb-1.5 text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
+            Photo (optional)
+          </Label>
+          <PhotoCaptureInput onChange={setPhoto} />
         </div>
       </div>
 
@@ -254,7 +264,7 @@ export function AddSnagForm({
         <Button type="button" variant="outline" className="min-h-14" onClick={() => history.back()}>
           Cancel
         </Button>
-        <Button type="button" className="min-h-14" disabled={pending || !description.trim()} onClick={submit}>
+        <Button type="button" className="min-h-14" disabled={pending || !isComplete} onClick={submit}>
           {pending ? "Raising…" : "Raise snag"}
         </Button>
       </div>
