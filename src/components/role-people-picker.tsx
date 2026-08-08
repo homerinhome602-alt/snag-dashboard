@@ -19,14 +19,17 @@ export function RolePeoplePicker({
   selected,
   onChange,
   lockedIds = [],
+  onRemoveLocked,
 }: {
   role: MemberRole;
   label: string;
   people: Person[];
   selected: string[];
   onChange: (next: string[]) => void;
-  /** Already-a-member ids shown as non-removable chips (add-only flows). */
+  /** Already-a-member ids shown as locked chips (add-only flows unless onRemoveLocked is given). */
   lockedIds?: string[];
+  /** When provided, locked chips get a small × to remove that person from this role. */
+  onRemoveLocked?: (id: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -70,8 +73,21 @@ export function RolePeoplePicker({
           if (!p) return null;
           const locked = lockedIds.includes(id);
           return locked ? (
-            <span key={id} className={`rounded-pill border px-2 py-0.5 text-[11px] opacity-70 ${colorClass}`}>
+            <span key={id} className={`flex items-center gap-1 rounded-pill border px-2 py-0.5 text-[11px] ${colorClass} ${onRemoveLocked ? "" : "opacity-70"}`}>
               {displayName(p)}
+              {onRemoveLocked && (
+                <button
+                  type="button"
+                  aria-label={`Remove ${displayName(p)} from ${label}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemoveLocked(id);
+                  }}
+                  className="text-current opacity-60 hover:opacity-100"
+                >
+                  ×
+                </button>
+              )}
             </span>
           ) : (
             <button

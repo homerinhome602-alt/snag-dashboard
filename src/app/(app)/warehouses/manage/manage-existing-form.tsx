@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { RolePeoplePicker } from "@/components/role-people-picker";
 import { MEMBER_ROLES, type MemberRole } from "@/lib/roles";
-import { addWarehouseMembers, getWarehouseMembers } from "./actions";
+import { addWarehouseMembers, getWarehouseMembers, removeWarehouseMember } from "./actions";
 
 type Person = { id: string; full_name: string | null; email: string; default_role: MemberRole | null };
 type Warehouse = { id: string; name: string };
@@ -57,6 +57,19 @@ export function ManageExistingForm({ warehouses, people }: { warehouses: Warehou
     setSelections((prev) => ({ ...prev, [role]: next }));
   }
 
+  function removeMember(role: MemberRole, userId: string) {
+    setError(null);
+    startTransition(async () => {
+      const result = await removeWarehouseMember(warehouseId, role, userId);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      setExisting((prev) => ({ ...prev, [role]: prev[role].filter((id) => id !== userId) }));
+      setSelections((prev) => ({ ...prev, [role]: prev[role].filter((id) => id !== userId) }));
+    });
+  }
+
   function submit() {
     setError(null);
     const added = Object.entries(selections).flatMap(([role, ids]) =>
@@ -105,7 +118,7 @@ export function ManageExistingForm({ warehouses, people }: { warehouses: Warehou
       {warehouseId && !loading && (
         <>
           <p className="mb-3 text-[12px] text-muted-foreground">
-            Existing members are locked (this only adds people, it doesn&apos;t remove anyone).
+            Existing members show a × to remove them from a role, or add new people below.
           </p>
           <div className="grid grid-cols-1 gap-x-3.5 gap-y-3 sm:grid-cols-2">
             {MEMBER_ROLES.map((r) => (
@@ -117,6 +130,7 @@ export function ManageExistingForm({ warehouses, people }: { warehouses: Warehou
                 selected={selections[r.value]}
                 onChange={(next) => setRole(r.value, next)}
                 lockedIds={existing[r.value]}
+                onRemoveLocked={(id) => removeMember(r.value, id)}
               />
             ))}
           </div>

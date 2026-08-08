@@ -107,7 +107,12 @@ export default async function UserManagementPage() {
             )}
             {rows.map((row) => (
               <TableRow key={row.email}>
-                <TableCell className="font-mono text-[11px]">{row.email}</TableCell>
+                <TableCell className="font-mono text-[11px]">
+                  <div className="flex items-center gap-2.5">
+                    {row.email}
+                    {row.userId && <AdminToggle userId={row.userId} isAdmin={row.isAdmin} />}
+                  </div>
+                </TableCell>
                 <TableCell className="text-[13px]">{roleLabel(row.defaultRole)}</TableCell>
                 <TableCell>
                   <Badge
@@ -137,7 +142,6 @@ export default async function UserManagementPage() {
                 <TableCell className="text-right">
                   {row.userId && (
                     <div className="flex justify-end gap-3">
-                      <AdminToggle userId={row.userId} isAdmin={row.isAdmin} />
                       <StatusToggle userId={row.userId} isActive={row.status === "active"} />
                     </div>
                   )}

@@ -22,7 +22,7 @@ import { VideoCaptureInput } from "@/components/video-capture";
 import { createClient } from "@/lib/supabase/client";
 import { uploadAttachment, type VideoCapture } from "@/lib/media";
 import { cn } from "@/lib/utils";
-import { STICKY_SNO_CLASS, STICKY_DESC_CLASS } from "@/lib/table-sticky";
+import { STICKY_SNO_CLASS, STICKY_DATE_CLASS, STICKY_DESC_CLASS } from "@/lib/table-sticky";
 
 export type UpdateRow = {
   id: string;
@@ -232,14 +232,14 @@ export function SnagRow({
         <TableCell className={cn(STICKY_SNO_CLASS, "font-mono text-[11px] text-muted-foreground")}>
           {String(s.serial_no).padStart(3, "0")}
         </TableCell>
-        <TableCell className="whitespace-nowrap font-mono text-[11px] text-muted-foreground">
+        <TableCell className={cn(STICKY_DATE_CLASS, "whitespace-nowrap font-mono text-[11px] text-muted-foreground")}>
           {fmtDate(s.date_raised)}
-        </TableCell>
-        <TableCell className="whitespace-nowrap text-[12px]">
-          {s.raised_by_profile?.full_name ?? s.raised_by_profile?.email ?? "—"}
         </TableCell>
         <TableCell className={cn(STICKY_DESC_CLASS, "min-w-[220px] text-[12.5px] text-foreground")}>
           {s.description}
+        </TableCell>
+        <TableCell className="whitespace-nowrap text-[12px]">
+          {s.raised_by_profile?.full_name ?? s.raised_by_profile?.email ?? "—"}
         </TableCell>
         <TableCell className="whitespace-nowrap text-[12px] text-muted-foreground">
           {CATEGORY_LABELS[s.category] ?? s.category}
@@ -282,29 +282,38 @@ export function SnagRow({
         <TableRow>
           <TableCell colSpan={13} className="bg-background">
             <div className="flex flex-col gap-2 py-1" onClick={(e) => e.stopPropagation()}>
-              <AttachmentThumbs attachments={snagPhotos} />
-              {updates.length > 0 ? (
-                <div className="relative ml-2 pl-1">
-                  {updates.length > 1 && (
-                    <div className="absolute top-2 bottom-2 left-[3.5px] w-px bg-border" />
-                  )}
-                  <div className="flex flex-col gap-3">
-                    {updates.map((u) => (
-                      <div key={u.id} className="relative pl-4 text-[12px]">
-                        <span className="absolute top-1.5 left-0 h-2 w-2 rounded-full bg-primary" />
-                        <span className="text-foreground">{u.body}</span>{" "}
-                        <span className="font-mono text-[10px] text-faint">
-                          · {u.author?.full_name ?? u.author?.email ?? "—"} ·{" "}
-                          {new Date(u.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}
-                        </span>
-                        {attachmentsByUpdate.has(u.id) && (
-                          <div className="mt-1">
-                            <AttachmentThumbs attachments={attachmentsByUpdate.get(u.id)!} />
-                          </div>
-                        )}
+              {snagPhotos.length > 0 || updates.length > 0 ? (
+                <div className="ml-2 flex flex-col gap-3 pl-1">
+                  {snagPhotos.length > 0 && (
+                    <div className="relative pl-4 text-[12px]">
+                      <span className="absolute top-1.5 left-0 h-2 w-2 rounded-full bg-primary ring-4 ring-background" />
+                      {updates.length > 0 && (
+                        <span className="absolute top-3.5 bottom-[-18px] left-[3.5px] w-px bg-border" />
+                      )}
+                      <span className="text-foreground">Photo attached when raised</span>
+                      <div className="mt-1">
+                        <AttachmentThumbs attachments={snagPhotos} />
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  )}
+                  {updates.map((u, i) => (
+                    <div key={u.id} className="relative pl-4 text-[12px]">
+                      <span className="absolute top-1.5 left-0 h-2 w-2 rounded-full bg-primary ring-4 ring-background" />
+                      {i < updates.length - 1 && (
+                        <span className="absolute top-3.5 bottom-[-18px] left-[3.5px] w-px bg-border" />
+                      )}
+                      <span className="text-foreground">{u.body}</span>{" "}
+                      <span className="font-mono text-[10px] text-faint">
+                        · {u.author?.full_name ?? u.author?.email ?? "—"} ·{" "}
+                        {new Date(u.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}
+                      </span>
+                      {attachmentsByUpdate.has(u.id) && (
+                        <div className="mt-1">
+                          <AttachmentThumbs attachments={attachmentsByUpdate.get(u.id)!} />
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
               ) : (
                 <p className="text-[12px] text-muted-foreground">No updates yet.</p>

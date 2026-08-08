@@ -41,9 +41,6 @@ export async function getWarehouseMembers(
   return data ?? [];
 }
 
-// Add-only: existing members are never removed through this flow, only new
-// ones inserted (matches the requested "adding new emails to the 6 roles"
-// scope, not full membership editing).
 export async function addWarehouseMembers(
   warehouseId: string,
   members: { user_id: string; role: string }[]
@@ -54,6 +51,27 @@ export async function addWarehouseMembers(
   const { error } = await supabase.from("warehouse_members").insert(
     members.map((m) => ({ warehouse_id: warehouseId, user_id: m.user_id, role: m.role }))
   );
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath("/", "layout");
+  return { error: null };
+}
+
+export async function removeWarehouseMember(
+  warehouseId: string,
+  role: string,
+  userId: string
+): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("warehouse_members")
+    .delete()
+    .eq("warehouse_id", warehouseId)
+    .eq("role", role)
+    .eq("user_id", userId);
 
   if (error) {
     return { error: error.message };

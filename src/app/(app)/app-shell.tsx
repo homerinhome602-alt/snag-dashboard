@@ -55,7 +55,7 @@ export function AppShell({
   const isAdmin = !!profile?.is_dashboard_admin;
 
   return (
-    <div className="flex h-full min-h-screen flex-1">
+    <div className="flex h-full min-h-screen flex-1 overflow-x-hidden">
       <nav
         onMouseEnter={() => setOpen(true)}
         onMouseLeave={() => setOpen(false)}
@@ -71,23 +71,6 @@ export function AppShell({
           >
             <HamburgerIcon />
           </button>
-          <Link
-            href="/"
-            aria-label="Home"
-            className={cn(SIDEBAR_LINK_HOVER, "flex h-8 items-center gap-2 rounded-md text-foreground hover:bg-muted")}
-          >
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center">
-              <HomeIcon />
-            </span>
-            <span
-              className={cn(
-                "text-[12px] whitespace-nowrap transition-opacity ease-in-out",
-                open ? "opacity-100 duration-150 delay-100" : "pointer-events-none opacity-0 duration-75"
-              )}
-            >
-              Home
-            </span>
-          </Link>
         </div>
         <div
           style={{ width: SIDEBAR_WIDTH }}
@@ -96,6 +79,15 @@ export function AppShell({
             open ? "opacity-100 duration-150 delay-100" : "pointer-events-none opacity-0 duration-75"
           )}
         >
+          <Link
+            href="/"
+            aria-label="Home"
+            className={cn(SIDEBAR_LINK_HOVER, "flex h-8 items-center gap-2 px-4 text-foreground hover:bg-muted")}
+          >
+            <HomeIcon />
+            <span className="text-[12px] whitespace-nowrap">Home</span>
+          </Link>
+          <div className="mx-4 my-2.5 h-px bg-border" />
           <div className="px-4 pb-2 text-[10px] uppercase tracking-[0.09em] text-faint">Warehouses</div>
           {warehouses.length === 0 && (
             <div className="px-4 py-1 text-[12px] text-muted-foreground">None yet</div>

@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/table";
 import { SnagRow, type UpdateRow, type AttachmentRow } from "@/components/snag-row";
 import { cn } from "@/lib/utils";
-import { STICKY_SNO_CLASS, STICKY_DESC_CLASS } from "@/lib/table-sticky";
+import { STICKY_SNO_CLASS, STICKY_DATE_CLASS, STICKY_DESC_CLASS } from "@/lib/table-sticky";
 
 export type SnagRow = {
   id: string;
@@ -27,7 +27,7 @@ export type SnagRow = {
 };
 
 const HEADERS = [
-  "S.No", "Raised", "Raised by", "Description", "Category", "Sub-category",
+  "S.No", "Raised", "Description", "Raised by", "Category", "Sub-category",
   "Location", "Scope", "Severity", "Status", "Update", "ETC", "Age",
 ];
 
@@ -67,6 +67,7 @@ export function SnagTable({
                 className={cn(
                   "whitespace-nowrap text-[9px] uppercase tracking-[0.07em] text-faint",
                   h === "S.No" && STICKY_SNO_CLASS,
+                  h === "Raised" && STICKY_DATE_CLASS,
                   h === "Description" && STICKY_DESC_CLASS
                 )}
               >
