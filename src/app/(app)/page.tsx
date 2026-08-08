@@ -31,7 +31,7 @@ export default async function Home() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-screen-2xl px-4 py-6 sm:px-6 sm:py-8 lg:px-10">
+    <div className="mx-auto w-full max-w-screen-2xl px-4 py-6 sm:px-6 sm:py-8 lg:px-[100px]">
       <div className="mb-4 flex items-center gap-6 rounded-card border border-border bg-card p-3.5">
         <div>
           <div className="font-mono text-[22px] leading-none">{totals.open}</div>

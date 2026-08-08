@@ -20,6 +20,7 @@ type Row = {
   status: "active" | "invited" | "deactivated";
   userId: string | null;
   isAdmin: boolean;
+  adminPending: boolean;
 };
 
 export default async function UserManagementPage() {
@@ -38,7 +39,10 @@ export default async function UserManagementPage() {
   }
 
   const [{ data: invitations }, { data: profiles }] = await Promise.all([
-    supabase.from("invitations").select("email, default_role, accepted_at").order("created_at"),
+    supabase
+      .from("invitations")
+      .select("email, default_role, accepted_at, grant_dashboard_admin")
+      .order("created_at"),
     supabase.from("profiles").select("id, email, is_active, is_dashboard_admin"),
   ]);
 
@@ -52,6 +56,7 @@ export default async function UserManagementPage() {
       userId: profile?.id ?? null,
       status: !profile ? "invited" : profile.is_active ? "active" : "deactivated",
       isAdmin: profile?.is_dashboard_admin ?? false,
+      adminPending: !profile && inv.grant_dashboard_admin,
     };
   });
 
@@ -59,7 +64,7 @@ export default async function UserManagementPage() {
   const invitedCount = rows.filter((r) => r.status === "invited").length;
 
   return (
-    <div className="mx-auto w-full max-w-screen-2xl px-4 py-6 sm:px-6 sm:py-8 lg:px-10">
+    <div className="mx-auto w-full max-w-screen-2xl px-4 py-6 sm:px-6 sm:py-8 lg:px-[100px]">
       <div className="mb-1 flex items-baseline justify-between">
         <h1 className="text-[17px] text-foreground">People</h1>
         <span className="text-[13px] text-muted-foreground">
@@ -123,9 +128,11 @@ export default async function UserManagementPage() {
                   </Badge>
                 </TableCell>
                 <TableCell>
-                  {row.userId && (
+                  {row.userId ? (
                     <span className="text-[11.5px] text-muted-foreground">{row.isAdmin ? "Yes" : "No"}</span>
-                  )}
+                  ) : row.adminPending ? (
+                    <span className="text-[11.5px] text-amber-deep">Yes, on signup</span>
+                  ) : null}
                 </TableCell>
                 <TableCell className="text-right">
                   {row.userId && (

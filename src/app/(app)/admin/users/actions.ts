@@ -7,6 +7,7 @@ import type { MemberRole } from "@/lib/roles";
 export async function createInvitation(formData: FormData) {
   const email = (formData.get("email") as string)?.trim().toLowerCase();
   const defaultRole = formData.get("default_role") as MemberRole;
+  const grantDashboardAdmin = formData.get("grant_dashboard_admin") === "on";
 
   if (!email || !defaultRole) {
     return { error: "Email and a default role are required." };
@@ -16,9 +17,10 @@ export async function createInvitation(formData: FormData) {
   const { data: auth } = await supabase.auth.getClaims();
   const invitedBy = auth?.claims?.sub;
 
-  const { error } = await supabase
-    .from("invitations")
-    .upsert({ email, default_role: defaultRole, invited_by: invitedBy }, { onConflict: "email" });
+  const { error } = await supabase.from("invitations").upsert(
+    { email, default_role: defaultRole, grant_dashboard_admin: grantDashboardAdmin, invited_by: invitedBy },
+    { onConflict: "email" }
+  );
 
   if (error) {
     return { error: error.message };

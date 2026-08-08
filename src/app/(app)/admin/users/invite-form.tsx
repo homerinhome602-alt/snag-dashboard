@@ -23,7 +23,7 @@ export function InviteForm() {
 
   return (
     <form action={formAction} className="mb-4">
-      <div className="grid grid-cols-[1fr_180px_auto] gap-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_180px_auto]">
         <Input name="email" type="email" placeholder="name@company.com" required />
         <Select name="default_role" defaultValue="hvac_engineer">
           <SelectTrigger className="w-full">
@@ -41,6 +41,10 @@ export function InviteForm() {
           {pending ? "Sending…" : "Send invite"}
         </Button>
       </div>
+      <label className="mt-2 flex items-center gap-1.5 text-[12px] text-muted-foreground">
+        <input type="checkbox" name="grant_dashboard_admin" className="accent-primary" />
+        Also make this person a Dashboard Admin
+      </label>
       {state.error && <p className="mt-2 text-[12.5px] text-destructive">{state.error}</p>}
     </form>
   );

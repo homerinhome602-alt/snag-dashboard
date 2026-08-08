@@ -140,7 +140,7 @@ export default async function WarehouseDetailPage({
   ];
 
   return (
-    <div className="mx-auto w-full max-w-screen-2xl px-4 py-6 sm:px-6 sm:py-8 lg:px-10">
+    <div className="mx-auto w-full max-w-screen-2xl px-4 py-6 sm:px-6 sm:py-8 lg:px-[100px]">
       <div className="mb-3 flex items-baseline justify-between">
         <h1 className="text-[16px] font-medium tracking-[-0.015em] text-foreground">{w.name}</h1>
         {isResolver ? (
