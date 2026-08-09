@@ -33,6 +33,21 @@ export async function postSnagUpdate(
   return { updateId: (data as { id: string }).id, error: null };
 }
 
+export async function closeSnagDirectly(
+  warehouseId: string,
+  snagId: string
+): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("close_snag_directly", { p_snag_id: snagId });
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath(`/warehouses/${warehouseId}`);
+  return { error: null };
+}
+
 export async function verifySnagClosure(
   warehouseId: string,
   snagId: string,

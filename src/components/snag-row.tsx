@@ -16,7 +16,7 @@ import {
   ageingDays,
   isOverdue,
 } from "@/lib/snags";
-import { postSnagUpdate, verifySnagClosure } from "@/app/(app)/warehouses/[id]/snag-actions";
+import { closeSnagDirectly, postSnagUpdate, verifySnagClosure } from "@/app/(app)/warehouses/[id]/snag-actions";
 import type { SnagRow as SnagRowData } from "@/components/snag-table";
 import { VideoCaptureInput } from "@/components/video-capture";
 import { createClient } from "@/lib/supabase/client";
@@ -160,6 +160,30 @@ function UpdateForm({
   );
 }
 
+function DirectCloseAction({ warehouseId, snagId }: { warehouseId: string; snagId: string }) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <div className="flex items-center justify-end gap-2">
+      {error && <p className="text-[11px] text-destructive">{error}</p>}
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={pending}
+        onClick={() =>
+          startTransition(async () => {
+            const r = await closeSnagDirectly(warehouseId, snagId);
+            if (r.error) setError(r.error);
+          })
+        }
+      >
+        {pending ? "Closing…" : "Close snag"}
+      </Button>
+    </div>
+  );
+}
+
 function VerifyActions({ warehouseId, snagId }: { warehouseId: string; snagId: string }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -226,16 +250,29 @@ export function SnagRow({
       : SUB_CATEGORY_LABELS[s.sub_category] ?? s.sub_category;
   const latest = updates[updates.length - 1];
 
+  // Expanding scrolls the table back to the frozen columns — a colSpan
+  // cell can't itself stay sticky while the row is scrolled right (that's
+  // a real position:sticky limitation on spanning table cells), so the
+  // expanded content would otherwise open off-screen to the left.
+  function toggleExpanded(e: React.MouseEvent<HTMLTableRowElement>) {
+    const container = (e.currentTarget as HTMLElement).closest<HTMLElement>('[data-slot="table-container"]');
+    setExpanded((v) => {
+      const next = !v;
+      if (next && container) container.scrollLeft = 0;
+      return next;
+    });
+  }
+
   return (
     <>
-      <TableRow className="group cursor-pointer" onClick={() => setExpanded((v) => !v)}>
+      <TableRow className="group cursor-pointer" onClick={toggleExpanded}>
         <TableCell className={cn(STICKY_SNO_CLASS, "font-mono text-[11px] text-muted-foreground")}>
           {String(s.serial_no).padStart(3, "0")}
         </TableCell>
         <TableCell className={cn(STICKY_DATE_CLASS, "whitespace-nowrap font-mono text-[11px] text-muted-foreground")}>
           {fmtDate(s.date_raised)}
         </TableCell>
-        <TableCell className={cn(STICKY_DESC_CLASS, "min-w-[220px] text-[12.5px] text-foreground")}>
+        <TableCell className={cn(STICKY_DESC_CLASS, "text-[12.5px] text-foreground")}>
           {s.description}
         </TableCell>
         <TableCell className="whitespace-nowrap text-[12px]">
@@ -326,6 +363,9 @@ export function SnagRow({
               )}
               {isReporter && s.status === "ready_to_close" && (
                 <VerifyActions warehouseId={warehouseId} snagId={s.id} />
+              )}
+              {isReporter && s.status !== "closed" && s.status !== "ready_to_close" && (
+                <DirectCloseAction warehouseId={warehouseId} snagId={s.id} />
               )}
             </div>
           </TableCell>

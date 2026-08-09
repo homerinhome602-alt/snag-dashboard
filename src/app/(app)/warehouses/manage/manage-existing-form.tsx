@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RolePeoplePicker } from "@/components/role-people-picker";
 import { MEMBER_ROLES, type MemberRole } from "@/lib/roles";
-import { addWarehouseMembers, getWarehouseMembers, removeWarehouseMember, renameWarehouse } from "./actions";
+import { addWarehouseMembers, deleteWarehouse, getWarehouseMembers, removeWarehouseMember, renameWarehouse } from "./actions";
 
 type Person = { id: string; full_name: string | null; email: string; default_role: MemberRole | null };
 type Warehouse = { id: string; name: string };
@@ -35,10 +35,16 @@ export function ManageExistingForm({ warehouses, people }: { warehouses: Warehou
   const [nameError, setNameError] = useState<string | null>(null);
   const [renaming, startRename] = useTransition();
 
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleting, startDelete] = useTransition();
+
   useEffect(() => {
     setName(warehouses.find((w) => w.id === warehouseId)?.name ?? "");
     setNameSaved(false);
     setNameError(null);
+    setConfirmingDelete(false);
+    setDeleteError(null);
   }, [warehouseId, warehouses]);
 
   function saveName() {
@@ -56,6 +62,20 @@ export function ManageExistingForm({ warehouses, people }: { warehouses: Warehou
 
   const currentName = warehouses.find((w) => w.id === warehouseId)?.name ?? "";
   const nameChanged = name.trim() !== currentName && name.trim().length > 0;
+
+  function confirmDelete() {
+    setDeleteError(null);
+    startDelete(async () => {
+      const result = await deleteWarehouse(warehouseId);
+      if (result.error) {
+        setDeleteError(result.error);
+        return;
+      }
+      setWarehouseId("");
+      setConfirmingDelete(false);
+      router.refresh();
+    });
+  }
 
   useEffect(() => {
     if (!warehouseId) {
@@ -161,6 +181,34 @@ export function ManageExistingForm({ warehouses, people }: { warehouses: Warehou
           </div>
           {nameError && <p className="mt-1.5 text-[12.5px] text-destructive">{nameError}</p>}
           {nameSaved && !nameChanged && <p className="mt-1.5 text-[12.5px] text-mint-deep">Renamed.</p>}
+        </div>
+      )}
+
+      {warehouseId && (
+        <div className="mb-4 rounded-md border border-destructive/30 p-3">
+          {!confirmingDelete ? (
+            <div className="flex items-center justify-between">
+              <p className="text-[12px] text-muted-foreground">Deleting a warehouse removes all its snags and history permanently.</p>
+              <Button type="button" variant="outline" className="border-destructive text-destructive hover:bg-destructive/10" onClick={() => setConfirmingDelete(true)}>
+                Delete warehouse
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between">
+              <p className="text-[12.5px] font-medium text-destructive">
+                Delete &ldquo;{currentName}&rdquo;? This can&apos;t be undone.
+              </p>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" disabled={deleting} onClick={() => setConfirmingDelete(false)}>
+                  Cancel
+                </Button>
+                <Button type="button" variant="destructive" disabled={deleting} onClick={confirmDelete}>
+                  {deleting ? "Deleting…" : "Yes, delete"}
+                </Button>
+              </div>
+            </div>
+          )}
+          {deleteError && <p className="mt-1.5 text-[12.5px] text-destructive">{deleteError}</p>}
         </div>
       )}
 

@@ -48,6 +48,18 @@ export async function renameWarehouse(
   return { error: null };
 }
 
+export async function deleteWarehouse(warehouseId: string): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  const { error } = await supabase.from("warehouses").delete().eq("id", warehouseId);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath("/", "layout");
+  return { error: null };
+}
+
 export async function getWarehouseMembers(
   warehouseId: string
 ): Promise<{ role: string; user_id: string }[]> {
