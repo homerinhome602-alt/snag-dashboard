@@ -1,8 +1,10 @@
 # Frozen Warehouse Launch Readiness
 
 **Domain:** Frozen / cold-storage warehouse launches
-**Status:** Planning only — no code yet
-**Stack (proposed):** Next.js + TypeScript + Tailwind + shadcn/ui · Supabase (Auth / Postgres / Storage) · ImageKit (media delivery)
+**Status:** **Built.** All ten phases shipped — see §14 for what landed and where the build diverged from this plan.
+**Stack (as built):** Next.js App Router + TypeScript + Tailwind + shadcn/ui · Supabase (Auth / Postgres / Storage)
+
+> This document is both the specification and the record. Sections marked **as built** were reconciled against the running code and database on 9 Aug 2026, most recently updated 11 Aug 2026 for the warehouse-scoped visibility, onboarding, and audit-history round. Where the build diverged from the original plan, the divergence is described rather than quietly overwritten — the reasoning matters more than the tidiness.
 
 ---
 
@@ -35,22 +37,23 @@ The Dashboard Admin role grants **three** powers, and nothing else:
 
 It does **not** confer the ability to raise snags, post updates, set ETC, set go-live dates, or change status. To do any of those, the admin must **tag themselves into the warehouse** in a role, at creation time, like anyone else. Their admin status grants no shortcut.
 
-Read access is unaffected — like every user, an admin can read every snag in every warehouse.
+Read access **is** affected, and is in fact the one place Dashboard Admin status does something automatically: an admin can read every snag in every warehouse without being tagged to any of them (§2.3). A non-admin user with no `warehouse_members` row anywhere sees nothing.
 
 Rationale: this keeps operational accountability with the named people rather than concentrating it in a super-user, and it means the audit trail records a real role for every action. Power 3 is the single exception, because a wrong raise date distorts ageing and burn-down for everyone and there is no one else positioned to fix it. Every such edit is written to `snag_activity` with the old and new value.
 
-### 2.3 Visibility — **changed**
+### 2.3 Visibility — **changed twice**
 
-> **Everyone can read every snag in every warehouse.**
+> **A user can only read a warehouse's data if they are tagged to it, or hold Dashboard Admin.**
 > Only users **tagged to a warehouse** can raise snags or post updates there.
 
-This is a deliberate reversal of the earlier scoped-read model. Consequences:
+The plan originally scoped reads to membership. Partway through the build this was deliberately opened up ("everyone reads everything") to keep read RLS simple. Live use showed that was wrong — anyone signed in could see every warehouse's snags, team, and history regardless of assignment — so it was reverted back to scoped reads. This is the second and current position; do not open it again without discussing the tradeoff.
 
-- The sidebar lists **all** warehouses for **all** users
-- The landing page shows **all** warehouse cards to everyone
+**As built**, the scoping is `private.is_dashboard_admin() OR private.is_warehouse_member(warehouse_id)`, applied to `warehouses`, `warehouse_members`, `snags`, `snag_updates`, `attachments`, `snag_activity`, and `snag_daily_snapshot`. Consequences:
+
+- The sidebar and landing page list only warehouses the current user is tagged to — **except** for Dashboard Admins, who see all of them (read access is their one form of implicit reach; see §2.2)
 - `Add Snag` appears only on warehouses where you are tagged as HVAC/Operations
 - `Add Update` appears only on warehouses where you are tagged as a resolver
-- Read RLS becomes trivially simple; write RLS carries all the logic
+- `warehouse_readiness` — the view behind the landing cards and sidebar, joining `warehouses` to a `snags` aggregate — is a view, and views in Postgres run with the *owner's* row-security context by default, not the querying user's. It's owned by `postgres`, which has `BYPASSRLS`, so it was silently ignoring every policy above regardless of who queried it. Fixed with `ALTER VIEW ... SET (security_invoker = true)`. Any future view over an RLS-protected table needs the same treatment, checked explicitly — it will not fail loudly, it will just quietly leak.
 
 ---
 
@@ -79,10 +82,16 @@ Backs the admin User Management screen and gates Google sign-in.
 | `id` | uuid PK |
 | `email` | text unique |
 | `default_role` | enum |
+| `grant_dashboard_admin` | boolean — **as built**, not in the original plan |
+| `warehouse_id` | uuid FK → warehouses, nullable — **as built**, not in the original plan |
 | `invited_by` | uuid FK → profiles |
 | `created_at` / `accepted_at` | timestamptz |
 
-Admin enters **email + role**, one-to-one. On first sign-in — by **either** method — a trigger matches `auth.users.email` against this table and creates the `profiles` row. **No matching invitation → access denied.**
+**`grant_dashboard_admin` is a build-time addition.** The original plan had no way to create a second admin: `is_dashboard_admin` lived only on `profiles`, and nothing wrote to it after the bootstrap seed. Ticking this box on the invitation makes the person an admin the moment they first sign in. `set_dashboard_admin()` covers the after-the-fact case.
+
+**`warehouse_id` is a build-time addition, added for the same reason.** Onboarding originally required two trips — invite the person here with a role, then separately go to Manage warehouse (§5.5) to tag them onto one. Picking a warehouse alongside the role at invite time does both in one step: `handle_new_user()` inserts the matching `warehouse_members` row (using this warehouse and the invitation's `default_role`) right after it creates the profile. Leaving the warehouse unset is still valid — an admin-only invitation, or someone who'll be tagged onto a warehouse later via Manage warehouse, needs no warehouse here.
+
+Admin enters **email + role** (+ optionally warehouse), one-to-one. On first sign-in — by **either** method — a trigger matches `auth.users.email` against this table and creates the `profiles` row. **No matching invitation → access denied.**
 
 ### 3.3 `warehouses`
 
@@ -92,7 +101,7 @@ Admin enters **email + role**, one-to-one. On first sign-in — by **either** me
 | `name` | text unique | |
 | `go_live_date` | date **nullable** | Set by resolvers from the warehouse screen, not at creation |
 | `snag_counter` | int default 0 | Backs per-warehouse serial numbers |
-| `site_location` | text | Optional |
+| `site_location` | text | Optional. **As built** — dropped from both the create and rename forms after feedback; the column and RPC parameter still exist (always passed `null`) but nothing in the UI sets it |
 | `created_by` | uuid FK → profiles | |
 | `created_at` | timestamptz | |
 
@@ -111,7 +120,9 @@ Single source of truth for both tagging and the detail-screen header.
 
 **`operations` is newly added** per your request.
 
-**This table is the authority on permissions.** Every write check reads it: "does `auth.uid()` hold a reporter role in this warehouse?" A user with no row here can still read the warehouse's snags, but cannot write anything to it. Dashboard Admins are no exception (§2.2).
+**This table is the authority on permissions, and now on read access too (§2.3).** Every write check reads it: "does `auth.uid()` hold a reporter role in this warehouse?" A user with no row here for a given warehouse cannot read it or write to it — Dashboard Admins are the one exception, and only for reads (§2.2).
+
+Rows are populated two ways: directly, via Manage warehouse (§5.5) adding or removing people from an existing warehouse's team; or automatically, when someone with an invitation carrying a `warehouse_id` (§3.2) signs in for the first time.
 
 ### 3.5 `snags`
 
@@ -173,6 +184,14 @@ open ──▶ wip ──▶ ready_to_close ──▶ closed
 
 Resolvers drive it up to `ready_to_close`. Confirmation to `closed` — or rejection back to `wip` — is made by **any reporter tagged to that warehouse**, not only the original raiser.
 
+> **As built — there are now two routes to `closed`, not one.**
+>
+> The plan above describes the *review* route, and it still works exactly as written via `verify_snag_closure()`, which refuses to run unless the snag is sitting in `ready_to_close`.
+>
+> A second route was added during the build: **`close_snag_directly()`** lets any tagged reporter close a snag from **any** status — `open`, `wip` or `ready_to_close` — without waiting for a resolver to stage it. It stamps `verified_by` and `verified_at` the same way and logs the same `verify_closure` activity row, so the audit trail is indistinguishable.
+>
+> The consequence worth understanding: **`ready_to_close` is now optional rather than mandatory.** A snag can go straight from `open` to `closed` in one action. The gate that survives is *who* — closure is still reporter-only, and a resolver still cannot close their own work. That was the point of the verification step, and it is intact. What was given up is the guarantee that every closure was explicitly staged for review first.
+
 This deliberately widens verification beyond the person who raised it. Verification requires someone who can physically walk to the defect and check it, and any HVAC or Operations person tagged to that warehouse can do so. It also means no snag is ever stranded when its raiser leaves the project — no admin override is needed, and none exists.
 
 The verifier is recorded in `verified_by`, so the audit trail still shows exactly who signed it off even when that differs from `raised_by`.
@@ -211,7 +230,9 @@ Serves both the original snag photos and media attached to individual updates.
 | `created_at` | timestamptz | |
 
 ### 3.13 `snag_activity`
-Append-only audit log: actor, action, field, old value, new value, timestamp.
+Append-only audit log: actor, action, field, old value, new value, timestamp. Every RPC that changes a snag writes here — raise, status change, ETC update, verify/reject closure, direct close, duplicate-suppressed.
+
+**As built** — this table existed from Phase 0 but had no viewer until a later round. Each expanded snag row now has a "View history" toggle rendering these rows as plain-English lines (`{actor} moved status from Open to WIP · 08 Aug 19:05`), sourced entirely from this table with no schema change. See `describeActivity()` in `snag-row.tsx` for the action → sentence mapping.
 
 ---
 
@@ -219,14 +240,32 @@ Append-only audit log: actor, action, field, old value, new value, timestamp.
 
 Reporters and resolvers write different columns of the same row, and Postgres RLS is row-level only. All writes therefore go through RPC functions, each accepting only its role's fields and checking `auth.uid()` membership internally:
 
-- `raise_snag(...)` — any reporter tagged to the warehouse; allocates serial number, stamps `date_raised` and `raised_by`
+- `raise_snag(...)` — any reporter tagged to the warehouse; allocates serial number, stamps `date_raised` and `raised_by`, records suppressed duplicate ids
 - `post_snag_update(...)` — any resolver tagged to the warehouse; inserts into `snag_updates`, optionally sets `etc_date`/status
-- `verify_snag_closure(snag_id, approved)` — **any reporter tagged to the warehouse**; records `verified_by`
+- `verify_snag_closure(snag_id, approved)` — any tagged reporter; requires `ready_to_close`
+- `close_snag_directly(snag_id)` — **as built**; any tagged reporter, from any status (§3.9)
 - `set_go_live_date(warehouse_id, date)` — any resolver tagged to the warehouse
 - `correct_date_raised(snag_id, new_date)` — **Dashboard Admin only**; writes to `snag_activity`
 - `find_similar_snags(...)` — duplicate detection (§7)
+- `create_warehouse(name, site_location, members)` — admin; warehouse + member rows in one transaction
+- `set_user_active(user_id, is_active)` · `set_dashboard_admin(user_id, is_admin)` — admin
+- `refresh_snag_daily_snapshot()` — called by the `pg_cron` job
 
 Note that none of these accept a Dashboard Admin bypass except `correct_date_raised`. An admin who has not tagged themselves into a warehouse is rejected by the same check as anyone else.
+
+### 4.1 As built — the rule applies to snags, not to everything
+
+The "never a raw `UPDATE`" rule turned out to be the right constraint for **snag data** and the wrong one for **administration**. What actually shipped is a deliberate split:
+
+| Tables | Write path | Enforced by |
+|---|---|---|
+| `snags`, `snag_updates` | **RPC only** | No `UPDATE` or `DELETE` policy exists at all — direct writes are impossible, not merely discouraged |
+| `warehouses`, `warehouse_members`, `invitations` | Direct table access | Admin-only RLS policies on insert / update / delete |
+| `attachments` | Direct insert | Member-scoped insert policy; select open to all |
+
+The reasoning: the RPCs exist to stop one role overwriting another role's columns on a shared row. Warehouse and user administration has no such problem — it is admin-only end to end, so a policy expresses the rule more simply than a function would.
+
+Worth knowing when reading the code: warehouse rename, delete, and member add/remove are plain PostgREST calls in `warehouses/manage/actions.ts`, not RPCs. That is intentional, not an oversight.
 
 Keep these in a non-exposed schema with explicit `auth.uid()` checks in the body.
 
@@ -243,7 +282,7 @@ Keep these in a non-exposed schema with explicit `auth.uid()` checks in the body
 Because the gate is the email address, a user invited as `x@company.com` must sign in with exactly that address — a personal Gmail will not match. The User Management screen should say so.
 
 ### 5.2 Landing — warehouse cards
-Top bar: **Frozen Warehouse Launch Readiness**. All warehouses visible to all users.
+Top bar: **Frozen Warehouse Launch Readiness**. Shows the warehouses the current user can read (§2.3) — all of them for a Dashboard Admin, only tagged ones otherwise.
 
 Each card shows:
 - Warehouse name
@@ -282,21 +321,58 @@ Cards sort by **launch proximity**, not alphabetically:
 A warehouse with no date cannot be assessed for readiness, so it drops below every dated one — but the busiest of them still surfaces first, because an undated warehouse carrying 40 open snags needs a date more urgently than one carrying two.
 
 ### 5.3 Collapsible sidebar
-- Heading **Warehouses**, then every warehouse
-- **+ Add Warehouse** — Dashboard Admin only
+- Heading **Warehouses**, then every warehouse the current user can read (§2.3) — all of them for a Dashboard Admin, only tagged ones otherwise
+- **Warehouse management** — Dashboard Admin only. Renamed from "+ Add Warehouse" once the screen grew Manage-existing capability (§5.5)
 - **User Management** — Dashboard Admin only, lives here per your instruction
 
 ### 5.4 Add Warehouse (Admin only)
-Name + six **multi-select** user pickers: Operations, HVAC Engineer, Program Manager (Infra), PMC, PMO, Warehouse Admin. Each accepts **any number of people** — three HVAC engineers on one warehouse is normal.
+
+**As built** — this is the "Add new" tab of **Warehouse management** (renamed from a standalone "Add Warehouse" screen once Manage-existing, §5.5, was added alongside it).
+
+Name (no site location — see §3.3) + six **searchable multi-select** pickers: Operations, HVAC Engineer, Program Manager (Infra), PMC, PMO, Warehouse Admin. Each accepts **any number of people** — three HVAC engineers on one warehouse is normal. Selected people render as role-coloured chips, matching the six fixed role colours used everywhere else in the product (team block, table, pickers).
 
 Each picker lists all active users, sorted so that people whose `default_role` matches the slot appear first — a hint, not a restriction. Each has an inline "invite" escape hatch. **No go-live date field** — resolvers set it later from the detail screen.
 
 **"Add me" affordance:** because Dashboard Admin grants no operational rights (§2.2), the form needs a prominent one-click way for the admin to tag themselves into a role on the warehouse they are creating. Without it, an admin creates a warehouse they cannot then participate in — and the failure would only become obvious later, from the detail screen, which is a bad time to discover it.
 
-### 5.5 User Management (Admin only)
-Table of invitations: email, role, status (invited / active / deactivated). Add a row = email + role, one-to-one. Deactivate rather than delete, to preserve snag history.
+### 5.5 Manage warehouse — **as built**, not in the original plan
 
-### 5.6 Warehouse detail
+The original plan covered creation only. Three management capabilities were added during the build, all Dashboard Admin only, all on the manage screen:
+
+| Action | Notes |
+|---|---|
+| **Rename** | Plain update on `warehouses.name`. Empty names rejected client-side |
+| **Add / remove members** | Insert and delete on `warehouse_members`, so a team can change after creation. Existing member chips show a × to remove; add-only was the original scope, remove was added on feedback |
+| **Delete warehouse** | Two-step confirm ("Delete warehouse" → "Delete \"X\"? This can't be undone." + Cancel / Yes, delete). ⚠️ See the warning below |
+
+#### ⚠️ Deleting a warehouse is destructive and irreversible
+
+`snags.warehouse_id` carries `ON DELETE CASCADE`, and every snag child table cascades in turn. Deleting one warehouse silently destroys:
+
+```
+warehouses
+ └── snags                → snag_updates      → attachments
+                          → snag_activity     (the audit trail)
+                          → attachments
+ └── warehouse_members
+ └── snag_daily_snapshot  (all burn-up history)
+```
+
+There is no soft delete and no archive — only the two-step confirm above stands between a click and permanent loss. **The audit trail goes with it** — which is precisely the record you would want if a deletion were ever disputed.
+
+This sits awkwardly against the deliberate "deactivate, never delete" rule for users in §5.6, where preserving history was the stated reason. The same argument applies at least as strongly to a warehouse carrying months of snags.
+
+**Recommended follow-up:** add `warehouses.archived_at` and filter archived sites out of the sidebar and landing grid, reserving hard delete for genuine mistakes made minutes after creation. Deliberately recorded here rather than silently fixed, because it is a product decision, not a bug.
+
+### 5.6 User Management (Admin only)
+Table of invitations: email, default role, **warehouse** (§3.2), status (invited / active / deactivated), and Dashboard Admin status. Add a row = email + role + optional warehouse, one-to-one.
+
+**As built:**
+- **Warehouse column** shows the pending assignment (`"{name} (pending)"`) for invited-not-yet-signed-up rows, and the real, possibly-multiple current `warehouse_members` list for active ones — not the stale invitation value, since Manage warehouse can change membership after signup
+- **Make/Revoke admin** is a button beside the person's email, not a separate action column — toggles `is_dashboard_admin` directly for anyone with a profile (i.e. anyone past `status = invited`)
+- Deactivate rather than delete, to preserve snag history
+
+### 5.7 Warehouse detail
 Opens from a card or the sidebar.
 
 The screen opens with a **header block above the snag table**, laid out in three parts:
@@ -324,17 +400,20 @@ The screen opens with a **header block above the snag table**, laid out in three
 
 **Burn-down is deliberately not built.** A single-line burn-down cannot distinguish slow closure from scope growth, and in a cold-store commissioning — where snags arrive continuously as chambers are pulled to temperature — that distinction is the whole point. The burn-up shows everything a burn-down would, plus the cause.
 
-**Snag table columns:**
-S.No · Date Raised · **Raised By** · Description · Category · Sub-category · Location · Scope · Severity · Status · **Ageing** · Photo · Update · ETC
+**Snag table columns, as built:**
+S.No · Date Raised · Description · Raised By · Category · Sub-category · Location · Scope · Severity · Status · Update · ETC · **Ageing**
+
+S.No, Date and Description are reordered to the front and pinned (§ sticky columns, `DESIGN.md`) — Raised By moved to fourth to make room. Column order otherwise matches the plan.
 
 - **Ageing** shown in days, colour-banded
 - **Overdue ETC flagged** — red badge when `etc_date` has passed and the snag is not closed
-- Filter, sort, search across every column
+- Filter, sort, search across every column — filters are multi-select (§14.2)
 - `Add Snag` / `Add Update` shown only if you are tagged here
+- Expanding a row shows the update timeline, a "Close snag" action for tagged reporters (any status, not just `ready_to_close` — §3.9), and a "View history" toggle (§3.13)
 
 ---
 
-### 5.7 Mobile-first snag raising
+### 5.8 Mobile-first snag raising
 
 Snags are raised on the floor, not at a desk. The raise flow is designed for a phone held in a **gloved hand at −25 °C**, and the desktop version is the adaptation — not the other way round.
 
@@ -421,9 +500,9 @@ The snapshot job moves to Phase 0 deliberately — see §12.1. Everything else c
 | Sub-category | **No filtering** — all eleven always available under both categories |
 | Media storage | **Supabase Storage**, private buckets, signed URLs, client-side compression |
 | Serial number | Auto, per warehouse, atomic counter |
-| Status | Resolvers drive; **any tagged reporter** verifies closure |
-| Visibility | Everyone reads all snags; only tagged users write |
-| Dashboard Admin scope | User management + add warehouse + correct `date_raised`. Must self-tag for anything else |
+| Status | Resolvers drive to `ready_to_close`; **any tagged reporter** verifies closure — or closes directly from any status (§3.9) |
+| Visibility | Scoped to warehouse membership; Dashboard Admin reads everything (§2.3) |
+| Dashboard Admin scope | User management + create/rename/delete warehouse + correct `date_raised` + read everywhere. Must self-tag for any write |
 | Date raised | Auto on raise; **Dashboard Admin only** may correct it, audited |
 | People per role | **Many** per role per warehouse — multi-select pickers |
 | Launch-readiness gate | On landing cards: total open · open High · go-live date, RAG coloured |
@@ -444,7 +523,7 @@ The snapshot job moves to Phase 0 deliberately — see §12.1. Everything else c
 
 ## 12. Burn-up chart
 
-**The burn-up is the only chart in the product.** It lives at the top of the warehouse detail screen (§5.6) — not on the landing page, and nowhere else.
+**The burn-up is the only chart in the product.** It lives at the top of the warehouse detail screen (§5.7) — not on the landing page, and nowhere else.
 
 **How it is built**
 - **X axis** — time, from the warehouse's first snag to its go-live date
@@ -489,3 +568,58 @@ The chart derives entirely from this table, which keeps it a cheap indexed read 
 4. **OEM warranty expiry** on `scope = OEM` snags
 5. **Bulk status update** — select multiple rows, move together
 6. **Snag reassignment** — hand a snag to a different person when someone leaves
+
+---
+
+## 14. Implementation status — as built
+
+All ten phases shipped, then eight further rounds of live feedback and fixes (2ce86fb → 900ee51 at last count). 17 migrations applied — `supabase migration list`, or `mcp__supabase__list_migrations`, is the source of truth; this document does not try to enumerate them.
+
+| Phase | Commit | State |
+|---|---|---|
+| 0 · Schema, enums, RLS, RPCs, `pg_cron` snapshot | *(migrations)* | ✅ |
+| 1 · Auth, invitation gate, User Management | `78eb080`, `2501ada` | ✅ |
+| 2 · Warehouse CRUD, sidebar, landing cards | `800c15b` | ✅ |
+| 3 · Snag table, Add Snag | `bf4b5a9` | ✅ |
+| 4 · Header: team, metrics, burn-up | `eb99d6e` | ✅ |
+| 5 · Update log, resolver inline editing, verify | `0173e4a` | ✅ |
+| 6 · Photo upload, annotation, video on updates | `baf7aeb` | ✅ |
+| 7 · Mobile raise flow, offline queue | `313afa2` | ✅ |
+| 8 · Duplicate detection | `41d0fe6` | ✅ |
+| 9 · Excel export and import | `9149ed4` | ✅ |
+
+### 14.1 Where the build diverged from this plan
+
+Each is documented in place above; collected here so nothing is missed on a skim.
+
+| Divergence | Section |
+|---|---|
+| `close_snag_directly()` — `ready_to_close` became optional | §3.9 |
+| `invitations.grant_dashboard_admin` — admin granted at invite time | §3.2 |
+| `invitations.warehouse_id` — warehouse assigned at invite time, provisioned on signup | §3.2, §3.4 |
+| Visibility opened to everyone, then reverted back to scoped reads | §2.3 |
+| RPC-only rule applies to snags; admin tables use direct access + RLS | §4.1 |
+| Warehouse rename, delete, and member management added | §5.5 |
+| Warehouse delete cascades destructively, including the audit trail | §5.5 ⚠️ |
+| `snag_activity` gained a viewer ("View history") — table itself unchanged | §3.13 |
+
+### 14.2 UI behaviour added after the plan was written
+
+None of this changes the data model (except where noted in §14.1); it came out of live testing and is recorded so it is not mistaken for undocumented drift.
+
+- **Sticky columns** — S.No, Date and Description pin to the left edge while the remaining columns scroll under them. Fixed pixel widths (60 / 70 / 290 = 420px); see `lib/table-sticky.ts` for why percentages could not be used. A row's own expanded content can't be pinned the same way — `position: sticky` does not work on a cell spanning the full row width, a real browser limitation rather than a bug in this codebase — so expanding a row resets the table's horizontal scroll instead, which keeps the newly-opened content on screen.
+- **Collapsible sidebar** — collapses to an icon rail, content fully hidden rather than clipped, with a Home button (shown only while the rail is open) and sticky pin behaviour so it and the top header stay in place while the page scrolls.
+- **Team block** — expands **inline**, pushing the rest of the header down, with a close button in the top-right of the expanded box. (An earlier round tried an overlay that floated over the page instead; reverted back to inline on feedback — see the "changed twice" pattern in §2.3.)
+- **"Timeline"** — the UI name for what this document calls the update log. Each entry is a bulleted, dot-and-line-connected item; a photo attached at raise time (no update posted yet) still gets its own dot, tagged "Description."
+- **Filters are multi-select**, not single-value — every snag-table filter (status, category, sub-category, location, scope, severity) accepts more than one value at once.
+- **Multi-select filters, search box, Export/Import/Add-snag** all share a single row rather than stacking on separate lines.
+- **Snag-raised confirmation** — a banner appears after raising a snag and dismisses itself after 5 seconds with an animated exit rather than disappearing instantly.
+- Dashboard card split (all-warehouses totals vs. next-to-launch), hover-pop on cards, standardised laptop-viewport padding (50px), description tag in the table, Add Snag form starts with no field pre-selected.
+
+### 14.3 Known gaps
+
+- **Migrations are not in version control.** They exist only in the Supabase project. `npx supabase db pull` writes them to `supabase/migrations/` — do this before any environment move.
+- **No soft delete for warehouses** (§5.5).
+- **Category and scope are deferred on mobile**, so they are nullable for mobile-raised snags. The "finish this snag" prompt back at a desk was never built.
+- **Notifications** were never started — overdue ETC is visible in the UI but nothing reaches the person who can act on it.
+- **The scoped-visibility change (§2.3) has not been live-tested from a genuinely restricted, non-admin session.** It was verified by policy review, by confirming the Dashboard Admin account still sees everything, and by confirming the new `is_warehouse_member()` helper mirrors the exact pattern the pre-existing write-side checks already use successfully — but nobody has yet watched a non-admin, single-warehouse account's sidebar with their own eyes. Do that with a real second invited user before trusting this in front of a customer.
