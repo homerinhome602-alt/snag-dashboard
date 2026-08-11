@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -10,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { MultiSelectFilter } from "@/components/multi-select-filter";
 import { MEMBER_ROLES, roleLabel } from "@/lib/roles";
 import { createInvitation } from "./actions";
 
@@ -21,14 +22,19 @@ export function InviteForm({ warehouses }: { warehouses: Warehouse[] }) {
     async (_prev, formData) => createInvitation(formData),
     { error: null }
   );
+  const [warehouseIds, setWarehouseIds] = useState<string[]>([]);
 
   return (
-    <form action={formAction} className="mb-4">
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_170px_170px_auto]">
-        <Input name="email" type="email" placeholder="name@company.com" required />
-        <Select name="default_role" defaultValue="hvac_engineer">
-          <SelectTrigger className="w-full">
-            <SelectValue>{(value: string) => roleLabel(value)}</SelectValue>
+    <form action={formAction} className="mb-5">
+      <h2 className="mb-2 text-[13px] font-medium tracking-[-0.01em] text-foreground">
+        Invite people
+      </h2>
+      <div className="flex flex-wrap items-center gap-2">
+        <Input name="email" type="email" placeholder="name@company.com" required className="w-60" />
+
+        <Select name="default_role" required>
+          <SelectTrigger className="w-40">
+            <SelectValue>{(value: string | null) => (value ? roleLabel(value) : "Role")}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             {MEMBER_ROLES.map((r) => (
@@ -38,29 +44,33 @@ export function InviteForm({ warehouses }: { warehouses: Warehouse[] }) {
             ))}
           </SelectContent>
         </Select>
-        <Select name="warehouse_id" defaultValue="none">
-          <SelectTrigger className="w-full">
+
+        <MultiSelectFilter
+          label="Warehouse"
+          options={warehouses.map((w) => ({ value: w.id, label: w.name }))}
+          selected={warehouseIds}
+          onChange={setWarehouseIds}
+        />
+        {warehouseIds.map((id) => (
+          <input key={id} type="hidden" name="warehouse_ids" value={id} />
+        ))}
+
+        <Select name="grant_dashboard_admin" defaultValue="no">
+          <SelectTrigger className="w-36">
             <SelectValue>
-              {(value: string) => warehouses.find((w) => w.id === value)?.name ?? "No warehouse yet"}
+              {(value: string) => (value === "yes" ? "Make admin: Yes" : "Make admin: No")}
             </SelectValue>
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="none">No warehouse yet</SelectItem>
-            {warehouses.map((w) => (
-              <SelectItem key={w.id} value={w.id}>
-                {w.name}
-              </SelectItem>
-            ))}
+            <SelectItem value="no">No</SelectItem>
+            <SelectItem value="yes">Yes</SelectItem>
           </SelectContent>
         </Select>
+
         <Button type="submit" disabled={pending}>
           {pending ? "Sending…" : "Send invite"}
         </Button>
       </div>
-      <label className="mt-2 flex items-center gap-1.5 text-[12px] text-muted-foreground">
-        <input type="checkbox" name="grant_dashboard_admin" className="accent-primary" />
-        Also make this person a Dashboard Admin
-      </label>
       {state.error && <p className="mt-2 text-[12.5px] text-destructive">{state.error}</p>}
     </form>
   );

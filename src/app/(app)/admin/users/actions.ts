@@ -7,12 +7,11 @@ import type { MemberRole } from "@/lib/roles";
 export async function createInvitation(formData: FormData) {
   const email = (formData.get("email") as string)?.trim().toLowerCase();
   const defaultRole = formData.get("default_role") as MemberRole;
-  const grantDashboardAdmin = formData.get("grant_dashboard_admin") === "on";
-  const warehouseIdRaw = formData.get("warehouse_id") as string | null;
-  const warehouseId = warehouseIdRaw && warehouseIdRaw !== "none" ? warehouseIdRaw : null;
+  const grantDashboardAdmin = formData.get("grant_dashboard_admin") === "yes";
+  const warehouseIds = formData.getAll("warehouse_ids") as string[];
 
   if (!email || !defaultRole) {
-    return { error: "Email and a default role are required." };
+    return { error: "Email and a role are required." };
   }
 
   const supabase = await createClient();
@@ -24,7 +23,7 @@ export async function createInvitation(formData: FormData) {
       email,
       default_role: defaultRole,
       grant_dashboard_admin: grantDashboardAdmin,
-      warehouse_id: warehouseId,
+      warehouse_ids: warehouseIds,
       invited_by: invitedBy,
     },
     { onConflict: "email" }
@@ -43,21 +42,6 @@ export async function setUserActive(userId: string, isActive: boolean) {
   const { error } = await supabase.rpc("set_user_active", {
     p_user_id: userId,
     p_is_active: isActive,
-  });
-
-  if (error) {
-    return { error: error.message };
-  }
-
-  revalidatePath("/admin/users");
-  return { error: null };
-}
-
-export async function setDashboardAdmin(userId: string, isAdmin: boolean) {
-  const supabase = await createClient();
-  const { error } = await supabase.rpc("set_dashboard_admin", {
-    p_user_id: userId,
-    p_is_admin: isAdmin,
   });
 
   if (error) {

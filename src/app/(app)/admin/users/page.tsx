@@ -12,16 +12,15 @@ import {
 import { roleLabel } from "@/lib/roles";
 import { InviteForm } from "./invite-form";
 import { StatusToggle } from "./status-toggle";
-import { AdminToggle } from "./admin-toggle";
 
 type Row = {
-  email: string;
-  defaultRole: string;
+  key: string;
+  name: string;
+  role: string;
+  isAdmin: boolean;
+  warehouseNames: string[];
   status: "active" | "invited" | "deactivated";
   userId: string | null;
-  isAdmin: boolean;
-  adminPending: boolean;
-  warehouseDisplay: string;
 };
 
 export default async function UserManagementPage() {
@@ -43,39 +42,37 @@ export default async function UserManagementPage() {
     await Promise.all([
       supabase
         .from("invitations")
-        .select("email, default_role, accepted_at, grant_dashboard_admin, warehouse_id, warehouse:warehouses(name)")
+        .select("email, default_role, accepted_at, grant_dashboard_admin, warehouse_ids")
         .order("created_at"),
-      supabase.from("profiles").select("id, email, is_active, is_dashboard_admin"),
-      supabase.from("warehouses").select("id, name").order("name"),
-      supabase.from("warehouse_members").select("user_id, role, warehouse:warehouses(name)"),
+      supabase.from("profiles").select("id, email, full_name, is_active, is_dashboard_admin"),
+      supabase.from("warehouses").select("id, name, is_active").order("name"),
+      supabase.from("warehouse_members").select("user_id, warehouse:warehouses(name)"),
     ]);
 
+  const activeWarehouses = (warehouses ?? []).filter((w) => w.is_active);
+  const warehouseNameById = new Map((warehouses ?? []).map((w) => [w.id, w.name]));
   const profileByEmail = new Map((profiles ?? []).map((p) => [p.email, p]));
 
   const membershipsByUser = new Map<string, string[]>();
   for (const m of memberships ?? []) {
     const warehouseName = (m.warehouse as unknown as { name: string } | null)?.name;
     if (!warehouseName) continue;
-    const label = `${warehouseName} (${roleLabel(m.role)})`;
-    membershipsByUser.set(m.user_id, [...(membershipsByUser.get(m.user_id) ?? []), label]);
+    membershipsByUser.set(m.user_id, [...(membershipsByUser.get(m.user_id) ?? []), warehouseName]);
   }
 
   const rows: Row[] = (invitations ?? []).map((inv) => {
     const profile = profileByEmail.get(inv.email);
-    const invitedWarehouseName = (inv.warehouse as unknown as { name: string } | null)?.name;
-    const currentMemberships = profile ? membershipsByUser.get(profile.id) : undefined;
+    const invitedWarehouseNames = (inv.warehouse_ids ?? [])
+      .map((id: string) => warehouseNameById.get(id))
+      .filter((n: string | undefined): n is string => Boolean(n));
     return {
-      email: inv.email,
-      defaultRole: inv.default_role,
+      key: inv.email,
+      name: profile?.full_name ?? inv.email,
+      role: inv.default_role,
       userId: profile?.id ?? null,
       status: !profile ? "invited" : profile.is_active ? "active" : "deactivated",
-      isAdmin: profile?.is_dashboard_admin ?? false,
-      adminPending: !profile && inv.grant_dashboard_admin,
-      warehouseDisplay: profile
-        ? currentMemberships?.join(", ") ?? "—"
-        : invitedWarehouseName
-          ? `${invitedWarehouseName} (pending)`
-          : "—",
+      isAdmin: profile ? profile.is_dashboard_admin : inv.grant_dashboard_admin,
+      warehouseNames: profile ? membershipsByUser.get(profile.id) ?? [] : invitedWarehouseNames,
     };
   });
 
@@ -95,27 +92,17 @@ export default async function UserManagementPage() {
         with that exact address — a personal account won&apos;t match.
       </p>
 
-      <InviteForm warehouses={warehouses ?? []} />
+      <InviteForm warehouses={activeWarehouses} />
 
       <div className="overflow-hidden rounded-card border border-border">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="text-[9px] uppercase tracking-[0.07em] text-faint">
-                Email
-              </TableHead>
-              <TableHead className="text-[9px] uppercase tracking-[0.07em] text-faint">
-                Default role
-              </TableHead>
-              <TableHead className="text-[9px] uppercase tracking-[0.07em] text-faint">
-                Warehouse
-              </TableHead>
-              <TableHead className="text-[9px] uppercase tracking-[0.07em] text-faint">
-                Status
-              </TableHead>
-              <TableHead className="text-[9px] uppercase tracking-[0.07em] text-faint">
-                Admin
-              </TableHead>
+              <TableHead className="text-[9px] uppercase tracking-[0.07em] text-faint">Name</TableHead>
+              <TableHead className="text-[9px] uppercase tracking-[0.07em] text-faint">Role</TableHead>
+              <TableHead className="text-[9px] uppercase tracking-[0.07em] text-faint">Admin</TableHead>
+              <TableHead className="text-[9px] uppercase tracking-[0.07em] text-faint">Warehouse</TableHead>
+              <TableHead className="text-[9px] uppercase tracking-[0.07em] text-faint">Status</TableHead>
               <TableHead />
             </TableRow>
           </TableHeader>
@@ -128,15 +115,23 @@ export default async function UserManagementPage() {
               </TableRow>
             )}
             {rows.map((row) => (
-              <TableRow key={row.email}>
-                <TableCell className="font-mono text-[11px]">
-                  <div className="flex items-center gap-2.5">
-                    {row.email}
-                    {row.userId && <AdminToggle userId={row.userId} isAdmin={row.isAdmin} />}
-                  </div>
+              <TableRow key={row.key}>
+                <TableCell className="text-[13px] text-foreground">{row.name}</TableCell>
+                <TableCell className="text-[13px]">{roleLabel(row.role)}</TableCell>
+                <TableCell className="text-[11.5px] text-muted-foreground">
+                  {row.isAdmin ? "Yes" : "No"}
                 </TableCell>
-                <TableCell className="text-[13px]">{roleLabel(row.defaultRole)}</TableCell>
-                <TableCell className="text-[12.5px] text-muted-foreground">{row.warehouseDisplay}</TableCell>
+                <TableCell className="whitespace-normal text-[12.5px] text-muted-foreground">
+                  {row.warehouseNames.length === 0 ? (
+                    "—"
+                  ) : (
+                    <div className="flex flex-col gap-0.5">
+                      {row.warehouseNames.map((n) => (
+                        <span key={n}>{n}</span>
+                      ))}
+                    </div>
+                  )}
+                </TableCell>
                 <TableCell>
                   <Badge
                     variant="outline"
@@ -155,19 +150,8 @@ export default async function UserManagementPage() {
                         : "Deactivated"}
                   </Badge>
                 </TableCell>
-                <TableCell>
-                  {row.userId ? (
-                    <span className="text-[11.5px] text-muted-foreground">{row.isAdmin ? "Yes" : "No"}</span>
-                  ) : row.adminPending ? (
-                    <span className="text-[11.5px] text-amber-deep">Yes, on signup</span>
-                  ) : null}
-                </TableCell>
                 <TableCell className="text-right">
-                  {row.userId && (
-                    <div className="flex justify-end gap-3">
-                      <StatusToggle userId={row.userId} isActive={row.status === "active"} />
-                    </div>
-                  )}
+                  {row.userId && <StatusToggle userId={row.userId} isActive={row.status === "active"} />}
                 </TableCell>
               </TableRow>
             ))}

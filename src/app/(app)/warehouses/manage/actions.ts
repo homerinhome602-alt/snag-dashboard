@@ -3,109 +3,65 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 
-export async function createWarehouse(
-  name: string,
-  members: { user_id: string; role: string }[]
+export async function createWarehouseCode(
+  code: string
 ): Promise<{ id: string | null; error: string | null }> {
+  const trimmed = code.trim();
+  if (!trimmed) return { id: null, error: "Warehouse code can't be empty." };
+
   const supabase = await createClient();
+  const { data: auth } = await supabase.auth.getClaims();
+  const uid = auth?.claims?.sub;
 
   const { data, error } = await supabase
-    .rpc("create_warehouse", {
-      p_name: name,
-      p_site_location: null,
-      p_members: members,
-    })
-    .select()
+    .from("warehouses")
+    .insert({ name: trimmed, created_by: uid })
+    .select("id")
     .single();
 
   if (error) {
     return { id: null, error: error.message };
   }
 
+  await supabase.from("warehouse_activity").insert({
+    warehouse_id: data.id,
+    actor_id: uid,
+    action: "create",
+  });
+
   // Revalidate the whole layout tree, not just the current segment — the
   // sidebar's warehouse list lives in the shared (app) layout, and a plain
-  // client-side router.push() to the new warehouse won't refetch it.
+  // client-side router.refresh() to this page won't refetch it.
   revalidatePath("/", "layout");
 
-  return { id: (data as { id: string }).id, error: null };
+  return { id: data.id, error: null };
 }
 
-export async function renameWarehouse(
+export async function setWarehouseActive(
   warehouseId: string,
-  name: string
-): Promise<{ error: string | null }> {
-  const trimmed = name.trim();
-  if (!trimmed) return { error: "Warehouse name can't be empty." };
-
-  const supabase = await createClient();
-  const { error } = await supabase.from("warehouses").update({ name: trimmed }).eq("id", warehouseId);
-
-  if (error) {
-    return { error: error.message };
-  }
-
-  revalidatePath("/", "layout");
-  return { error: null };
-}
-
-export async function deleteWarehouse(warehouseId: string): Promise<{ error: string | null }> {
-  const supabase = await createClient();
-  const { error } = await supabase.from("warehouses").delete().eq("id", warehouseId);
-
-  if (error) {
-    return { error: error.message };
-  }
-
-  revalidatePath("/", "layout");
-  return { error: null };
-}
-
-export async function getWarehouseMembers(
-  warehouseId: string
-): Promise<{ role: string; user_id: string }[]> {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("warehouse_members")
-    .select("role, user_id")
-    .eq("warehouse_id", warehouseId);
-  return data ?? [];
-}
-
-export async function addWarehouseMembers(
-  warehouseId: string,
-  members: { user_id: string; role: string }[]
-): Promise<{ error: string | null }> {
-  if (members.length === 0) return { error: null };
-
-  const supabase = await createClient();
-  const { error } = await supabase.from("warehouse_members").insert(
-    members.map((m) => ({ warehouse_id: warehouseId, user_id: m.user_id, role: m.role }))
-  );
-
-  if (error) {
-    return { error: error.message };
-  }
-
-  revalidatePath("/", "layout");
-  return { error: null };
-}
-
-export async function removeWarehouseMember(
-  warehouseId: string,
-  role: string,
-  userId: string
+  isActive: boolean
 ): Promise<{ error: string | null }> {
   const supabase = await createClient();
+  const { data: auth } = await supabase.auth.getClaims();
+  const uid = auth?.claims?.sub;
+
   const { error } = await supabase
-    .from("warehouse_members")
-    .delete()
-    .eq("warehouse_id", warehouseId)
-    .eq("role", role)
-    .eq("user_id", userId);
+    .from("warehouses")
+    .update({ is_active: isActive })
+    .eq("id", warehouseId);
 
   if (error) {
     return { error: error.message };
   }
+
+  await supabase.from("warehouse_activity").insert({
+    warehouse_id: warehouseId,
+    actor_id: uid,
+    action: isActive ? "activate" : "deactivate",
+    field: "is_active",
+    old_value: String(!isActive),
+    new_value: String(isActive),
+  });
 
   revalidatePath("/", "layout");
   return { error: null };

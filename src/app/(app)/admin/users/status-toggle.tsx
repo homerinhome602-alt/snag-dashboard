@@ -18,7 +18,7 @@ export function StatusToggle({ userId, isActive }: { userId: string; isActive: b
         })
       }
     >
-      {isActive ? "Deactivate" : "Reactivate"}
+      {isActive ? "Deactivate" : "Activate"}
     </Button>
   );
 }
