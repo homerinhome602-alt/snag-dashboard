@@ -39,6 +39,39 @@ export type AttachmentRow = {
   file_url: string;
 };
 
+export type ActivityRow = {
+  id: string;
+  action: string;
+  field: string | null;
+  old_value: string | null;
+  new_value: string | null;
+  created_at: string;
+  actor: { full_name: string | null; email: string } | null;
+};
+
+function describeActivity(a: ActivityRow): string {
+  switch (a.action) {
+    case "raise":
+      return "raised this snag";
+    case "status_change":
+      return `moved status from ${STATUS_LABELS[a.old_value ?? ""] ?? a.old_value ?? "—"} to ${
+        STATUS_LABELS[a.new_value ?? ""] ?? a.new_value ?? "—"
+      }`;
+    case "etc_update":
+      return a.old_value
+        ? `updated ETC from ${fmtDate(a.old_value)} to ${a.new_value ? fmtDate(a.new_value) : "—"}`
+        : `set ETC to ${a.new_value ? fmtDate(a.new_value) : "—"}`;
+    case "verify_closure":
+      return "closed this snag";
+    case "reject_closure":
+      return "reopened this snag";
+    case "duplicate_suppressed":
+      return "raised this snag despite a possible duplicate match";
+    default:
+      return a.action.replaceAll("_", " ");
+  }
+}
+
 function AttachmentThumbs({ attachments }: { attachments: AttachmentRow[] }) {
   if (attachments.length === 0) return null;
   return (
@@ -223,6 +256,7 @@ export function SnagRow({
   snag: s,
   updates,
   attachments,
+  activity,
   warehouseId,
   isReporter,
   isResolver,
@@ -231,12 +265,14 @@ export function SnagRow({
   snag: SnagRowData;
   updates: UpdateRow[];
   attachments: AttachmentRow[];
+  activity: ActivityRow[];
   warehouseId: string;
   isReporter: boolean;
   isResolver: boolean;
   currentUserId: string;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const snagPhotos = attachments.filter((a) => a.update_id === null);
   const attachmentsByUpdate = new Map<string, AttachmentRow[]>();
   for (const a of attachments) {
@@ -366,6 +402,39 @@ export function SnagRow({
               )}
               {isReporter && s.status !== "closed" && s.status !== "ready_to_close" && (
                 <DirectCloseAction warehouseId={warehouseId} snagId={s.id} />
+              )}
+              {activity.length > 0 && (
+                <div className="border-t border-line-soft pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowHistory((v) => !v)}
+                    className="text-[11px] text-muted-foreground underline-offset-2 hover:underline"
+                  >
+                    {showHistory ? "Hide history" : `View history (${activity.length})`}
+                  </button>
+                  {showHistory && (
+                    <ul className="mt-1.5 flex flex-col gap-1 border-l border-border pl-2.5">
+                      {activity.map((a) => (
+                        <li key={a.id} className="text-[11px] text-muted-foreground">
+                          <span className="text-foreground">{a.actor?.full_name ?? a.actor?.email ?? "Someone"}</span>{" "}
+                          {describeActivity(a)}
+                          <span className="font-mono text-[10px] text-faint">
+                            {" "}
+                            ·{" "}
+                            {new Date(a.created_at).toLocaleDateString("en-GB", {
+                              day: "2-digit",
+                              month: "short",
+                            })}{" "}
+                            {new Date(a.created_at).toLocaleTimeString("en-GB", {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
               )}
             </div>
           </TableCell>

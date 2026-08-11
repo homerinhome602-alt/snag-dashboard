@@ -5,7 +5,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { SnagRow, type UpdateRow, type AttachmentRow } from "@/components/snag-row";
+import { SnagRow, type UpdateRow, type AttachmentRow, type ActivityRow } from "@/components/snag-row";
 import { cn } from "@/lib/utils";
 import { STICKY_SNO_CLASS, STICKY_DATE_CLASS, STICKY_DESC_CLASS } from "@/lib/table-sticky";
 
@@ -35,6 +35,7 @@ export function SnagTable({
   snags,
   updatesBySnag,
   attachmentsBySnag,
+  activityBySnag,
   warehouseId,
   isReporter,
   isResolver,
@@ -43,6 +44,7 @@ export function SnagTable({
   snags: SnagRow[];
   updatesBySnag: Record<string, UpdateRow[]>;
   attachmentsBySnag: Record<string, AttachmentRow[]>;
+  activityBySnag: Record<string, ActivityRow[]>;
   warehouseId: string;
   isReporter: boolean;
   isResolver: boolean;
@@ -83,6 +85,7 @@ export function SnagTable({
               snag={s}
               updates={updatesBySnag[s.id] ?? []}
               attachments={attachmentsBySnag[s.id] ?? []}
+              activity={activityBySnag[s.id] ?? []}
               warehouseId={warehouseId}
               isReporter={isReporter}
               isResolver={isResolver}

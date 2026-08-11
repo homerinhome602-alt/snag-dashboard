@@ -8,6 +8,8 @@ export async function createInvitation(formData: FormData) {
   const email = (formData.get("email") as string)?.trim().toLowerCase();
   const defaultRole = formData.get("default_role") as MemberRole;
   const grantDashboardAdmin = formData.get("grant_dashboard_admin") === "on";
+  const warehouseIdRaw = formData.get("warehouse_id") as string | null;
+  const warehouseId = warehouseIdRaw && warehouseIdRaw !== "none" ? warehouseIdRaw : null;
 
   if (!email || !defaultRole) {
     return { error: "Email and a default role are required." };
@@ -18,7 +20,13 @@ export async function createInvitation(formData: FormData) {
   const invitedBy = auth?.claims?.sub;
 
   const { error } = await supabase.from("invitations").upsert(
-    { email, default_role: defaultRole, grant_dashboard_admin: grantDashboardAdmin, invited_by: invitedBy },
+    {
+      email,
+      default_role: defaultRole,
+      grant_dashboard_admin: grantDashboardAdmin,
+      warehouse_id: warehouseId,
+      invited_by: invitedBy,
+    },
     { onConflict: "email" }
   );
 

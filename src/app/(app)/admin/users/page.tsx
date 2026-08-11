@@ -21,6 +21,7 @@ type Row = {
   userId: string | null;
   isAdmin: boolean;
   adminPending: boolean;
+  warehouseDisplay: string;
 };
 
 export default async function UserManagementPage() {
@@ -38,18 +39,31 @@ export default async function UserManagementPage() {
     redirect("/");
   }
 
-  const [{ data: invitations }, { data: profiles }] = await Promise.all([
-    supabase
-      .from("invitations")
-      .select("email, default_role, accepted_at, grant_dashboard_admin")
-      .order("created_at"),
-    supabase.from("profiles").select("id, email, is_active, is_dashboard_admin"),
-  ]);
+  const [{ data: invitations }, { data: profiles }, { data: warehouses }, { data: memberships }] =
+    await Promise.all([
+      supabase
+        .from("invitations")
+        .select("email, default_role, accepted_at, grant_dashboard_admin, warehouse_id, warehouse:warehouses(name)")
+        .order("created_at"),
+      supabase.from("profiles").select("id, email, is_active, is_dashboard_admin"),
+      supabase.from("warehouses").select("id, name").order("name"),
+      supabase.from("warehouse_members").select("user_id, role, warehouse:warehouses(name)"),
+    ]);
 
   const profileByEmail = new Map((profiles ?? []).map((p) => [p.email, p]));
 
+  const membershipsByUser = new Map<string, string[]>();
+  for (const m of memberships ?? []) {
+    const warehouseName = (m.warehouse as unknown as { name: string } | null)?.name;
+    if (!warehouseName) continue;
+    const label = `${warehouseName} (${roleLabel(m.role)})`;
+    membershipsByUser.set(m.user_id, [...(membershipsByUser.get(m.user_id) ?? []), label]);
+  }
+
   const rows: Row[] = (invitations ?? []).map((inv) => {
     const profile = profileByEmail.get(inv.email);
+    const invitedWarehouseName = (inv.warehouse as unknown as { name: string } | null)?.name;
+    const currentMemberships = profile ? membershipsByUser.get(profile.id) : undefined;
     return {
       email: inv.email,
       defaultRole: inv.default_role,
@@ -57,6 +71,11 @@ export default async function UserManagementPage() {
       status: !profile ? "invited" : profile.is_active ? "active" : "deactivated",
       isAdmin: profile?.is_dashboard_admin ?? false,
       adminPending: !profile && inv.grant_dashboard_admin,
+      warehouseDisplay: profile
+        ? currentMemberships?.join(", ") ?? "—"
+        : invitedWarehouseName
+          ? `${invitedWarehouseName} (pending)`
+          : "—",
     };
   });
 
@@ -76,7 +95,7 @@ export default async function UserManagementPage() {
         with that exact address — a personal account won&apos;t match.
       </p>
 
-      <InviteForm />
+      <InviteForm warehouses={warehouses ?? []} />
 
       <div className="overflow-hidden rounded-card border border-border">
         <Table>
@@ -87,6 +106,9 @@ export default async function UserManagementPage() {
               </TableHead>
               <TableHead className="text-[9px] uppercase tracking-[0.07em] text-faint">
                 Default role
+              </TableHead>
+              <TableHead className="text-[9px] uppercase tracking-[0.07em] text-faint">
+                Warehouse
               </TableHead>
               <TableHead className="text-[9px] uppercase tracking-[0.07em] text-faint">
                 Status
@@ -100,7 +122,7 @@ export default async function UserManagementPage() {
           <TableBody>
             {rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-muted-foreground">
+                <TableCell colSpan={6} className="text-center text-muted-foreground">
                   No one invited yet.
                 </TableCell>
               </TableRow>
@@ -114,6 +136,7 @@ export default async function UserManagementPage() {
                   </div>
                 </TableCell>
                 <TableCell className="text-[13px]">{roleLabel(row.defaultRole)}</TableCell>
+                <TableCell className="text-[12.5px] text-muted-foreground">{row.warehouseDisplay}</TableCell>
                 <TableCell>
                   <Badge
                     variant="outline"

@@ -14,8 +14,9 @@ import { MEMBER_ROLES, roleLabel } from "@/lib/roles";
 import { createInvitation } from "./actions";
 
 type State = { error: string | null };
+type Warehouse = { id: string; name: string };
 
-export function InviteForm() {
+export function InviteForm({ warehouses }: { warehouses: Warehouse[] }) {
   const [state, formAction, pending] = useActionState<State, FormData>(
     async (_prev, formData) => createInvitation(formData),
     { error: null }
@@ -23,7 +24,7 @@ export function InviteForm() {
 
   return (
     <form action={formAction} className="mb-4">
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_180px_auto]">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_170px_170px_auto]">
         <Input name="email" type="email" placeholder="name@company.com" required />
         <Select name="default_role" defaultValue="hvac_engineer">
           <SelectTrigger className="w-full">
@@ -33,6 +34,21 @@ export function InviteForm() {
             {MEMBER_ROLES.map((r) => (
               <SelectItem key={r.value} value={r.value}>
                 {r.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select name="warehouse_id" defaultValue="none">
+          <SelectTrigger className="w-full">
+            <SelectValue>
+              {(value: string) => warehouses.find((w) => w.id === value)?.name ?? "No warehouse yet"}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">No warehouse yet</SelectItem>
+            {warehouses.map((w) => (
+              <SelectItem key={w.id} value={w.id}>
+                {w.name}
               </SelectItem>
             ))}
           </SelectContent>

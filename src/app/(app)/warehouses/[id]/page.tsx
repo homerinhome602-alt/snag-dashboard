@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 import { SnagTable, type SnagRow } from "@/components/snag-table";
-import type { UpdateRow, AttachmentRow } from "@/components/snag-row";
+import type { UpdateRow, AttachmentRow, ActivityRow } from "@/components/snag-row";
 import { TeamBlock } from "@/components/team-block";
 import { BurnUpChart } from "@/components/burn-up-chart";
 import { ExportButton } from "@/components/export-button";
@@ -133,6 +133,20 @@ export default async function WarehouseDetailPage({
     });
   }
 
+  const { data: activityRows } = snagIds.length
+    ? await supabase
+        .from("snag_activity")
+        .select("id, snag_id, action, field, old_value, new_value, created_at, actor:profiles(full_name, email)")
+        .in("snag_id", snagIds)
+        .order("created_at")
+    : { data: [] as never[] };
+
+  const activityBySnag: Record<string, ActivityRow[]> = {};
+  for (const a of activityRows ?? []) {
+    const key = (a as { snag_id: string }).snag_id;
+    (activityBySnag[key] ??= []).push(a as unknown as ActivityRow);
+  }
+
   const summaryTiles = [
     { label: "Snags Open", value: w.open_count, highlight: false },
     { label: "Snags Closed", value: w.total_raised - w.open_count, highlight: false },
@@ -212,6 +226,7 @@ export default async function WarehouseDetailPage({
         snags={(snags ?? []) as unknown as SnagRow[]}
         updatesBySnag={updatesBySnag}
         attachmentsBySnag={attachmentsBySnag}
+        activityBySnag={activityBySnag}
         warehouseId={id}
         isReporter={isReporter}
         isResolver={isResolver}
