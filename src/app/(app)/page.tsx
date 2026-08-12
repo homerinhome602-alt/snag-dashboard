@@ -5,11 +5,15 @@ import { cn, CARD_HOVER } from "@/lib/utils";
 
 export default async function Home() {
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("warehouse_readiness")
-    .select("id, name, go_live_date, total_raised, open_count, open_high_count");
+  const [{ data }, { data: activeWarehouses }] = await Promise.all([
+    supabase
+      .from("warehouse_readiness")
+      .select("id, name, go_live_date, total_raised, open_count, open_high_count"),
+    supabase.from("warehouses").select("id").eq("is_active", true),
+  ]);
 
-  const warehouses = (data ?? []) as WarehouseReadiness[];
+  const activeIds = new Set((activeWarehouses ?? []).map((w) => w.id));
+  const warehouses = ((data ?? []) as WarehouseReadiness[]).filter((w) => activeIds.has(w.id));
   const sorted = sortByLaunchProximity(warehouses);
   const next = nextToLaunch(warehouses);
   const nextDays = next ? daysUntil(next.go_live_date) : null;

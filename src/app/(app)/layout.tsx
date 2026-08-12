@@ -8,7 +8,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const [{ data: profile }, { data: warehouses }] = await Promise.all([
     supabase.from("profiles").select("full_name, email, is_dashboard_admin").eq("id", uid).single(),
-    supabase.from("warehouses").select("id, name").order("name"),
+    supabase.from("warehouses").select("id, name").eq("is_active", true).order("name"),
   ]);
 
   return (

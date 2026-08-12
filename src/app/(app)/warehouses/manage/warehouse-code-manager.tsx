@@ -12,16 +12,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { MultiSelectFilter } from "@/components/multi-select-filter";
 import { createWarehouseCode } from "./actions";
 import { WarehouseRow, type WarehouseActivityRow } from "./warehouse-row";
+import { StatusFilter, type StatusFilterValue } from "./status-filter";
 
 type Warehouse = { id: string; name: string; is_active: boolean };
-
-const STATUS_OPTIONS = [
-  { value: "active", label: "Active" },
-  { value: "deactivated", label: "Deactivated" },
-];
 
 export function WarehouseCodeManager({
   warehouses,
@@ -34,7 +29,7 @@ export function WarehouseCodeManager({
   const [code, setCode] = useState("");
   const [creating, startCreate] = useTransition();
   const [createError, setCreateError] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  const [statusFilter, setStatusFilter] = useState<StatusFilterValue>("all");
 
   function submit() {
     setCreateError(null);
@@ -50,9 +45,9 @@ export function WarehouseCodeManager({
   }
 
   const filtered =
-    statusFilter.length === 0
+    statusFilter === "all"
       ? warehouses
-      : warehouses.filter((w) => statusFilter.includes(w.is_active ? "active" : "deactivated"));
+      : warehouses.filter((w) => (w.is_active ? "active" : "deactivated") === statusFilter);
 
   return (
     <div>
@@ -81,12 +76,7 @@ export function WarehouseCodeManager({
       </div>
 
       <div className="mb-3">
-        <MultiSelectFilter
-          label="Status"
-          options={STATUS_OPTIONS}
-          selected={statusFilter}
-          onChange={setStatusFilter}
-        />
+        <StatusFilter value={statusFilter} onChange={setStatusFilter} />
       </div>
 
       <div className="overflow-hidden rounded-card border border-border">
