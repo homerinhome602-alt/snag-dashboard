@@ -324,12 +324,12 @@ export function SnagRow({
         <TableCell className="whitespace-nowrap text-[12px] text-muted-foreground">
           {SCOPE_LABELS[s.scope] ?? s.scope}
         </TableCell>
-        <TableCell>
+        <TableCell className="text-center">
           <span className={`rounded-chip px-1.5 py-0.5 text-[10px] font-medium ${SEVERITY_CHIP[s.severity]}`}>
             {SEVERITY_LABELS[s.severity] ?? s.severity}
           </span>
         </TableCell>
-        <TableCell>
+        <TableCell className="text-center">
           <span className={`rounded-chip px-1.5 py-0.5 text-[10px] font-medium ${STATUS_CHIP[s.status]}`}>
             {STATUS_LABELS[s.status] ?? s.status}
           </span>

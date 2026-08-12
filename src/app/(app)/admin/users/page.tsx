@@ -106,10 +106,10 @@ export default async function UserManagementPage() {
             <TableRow>
               <TableHead className="text-[9px] uppercase tracking-[0.07em] text-faint">Name</TableHead>
               <TableHead className="text-[9px] uppercase tracking-[0.07em] text-faint">Role</TableHead>
-              <TableHead className="text-[9px] uppercase tracking-[0.07em] text-faint">Admin</TableHead>
+              <TableHead className="text-center text-[9px] uppercase tracking-[0.07em] text-faint">Admin</TableHead>
               <TableHead className="text-[9px] uppercase tracking-[0.07em] text-faint">Warehouse</TableHead>
-              <TableHead className="text-[9px] uppercase tracking-[0.07em] text-faint">Status</TableHead>
-              <TableHead className="text-[9px] uppercase tracking-[0.07em] text-faint">Change status</TableHead>
+              <TableHead className="text-center text-[9px] uppercase tracking-[0.07em] text-faint">Status</TableHead>
+              <TableHead className="text-right text-[9px] uppercase tracking-[0.07em] text-faint">Change status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -124,7 +124,7 @@ export default async function UserManagementPage() {
               <TableRow key={row.key}>
                 <TableCell className="text-[13px] text-foreground">{row.name}</TableCell>
                 <TableCell className="text-[13px]">{roleLabel(row.role)}</TableCell>
-                <TableCell className="text-[11.5px] text-muted-foreground">
+                <TableCell className="text-center text-[11.5px] text-muted-foreground">
                   {row.isAdmin ? "Yes" : "No"}
                 </TableCell>
                 <TableCell className="whitespace-normal text-[12.5px] text-muted-foreground">
@@ -138,7 +138,7 @@ export default async function UserManagementPage() {
                     </div>
                   )}
                 </TableCell>
-                <TableCell>
+                <TableCell className="text-center">
                   <Badge
                     variant="outline"
                     className={

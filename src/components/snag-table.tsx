@@ -68,6 +68,7 @@ export function SnagTable({
                 key={h}
                 className={cn(
                   "whitespace-nowrap text-[9px] uppercase tracking-[0.07em] text-faint",
+                  (h === "Severity" || h === "Status") && "text-center",
                   h === "S.No" && STICKY_SNO_CLASS,
                   h === "Raised" && STICKY_DATE_CLASS,
                   h === "Description" && STICKY_DESC_CLASS

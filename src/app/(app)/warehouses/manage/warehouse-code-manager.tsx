@@ -86,10 +86,10 @@ export function WarehouseCodeManager({
               <TableHead className="text-[9px] uppercase tracking-[0.07em] text-faint">
                 Warehouse code
               </TableHead>
-              <TableHead className="text-[9px] uppercase tracking-[0.07em] text-faint">
+              <TableHead className="text-center text-[9px] uppercase tracking-[0.07em] text-faint">
                 Current status
               </TableHead>
-              <TableHead className="text-[9px] uppercase tracking-[0.07em] text-faint">
+              <TableHead className="text-right text-[9px] uppercase tracking-[0.07em] text-faint">
                 Change status
               </TableHead>
             </TableRow>

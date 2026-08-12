@@ -51,7 +51,7 @@ export function WarehouseRow({
     <>
       <TableRow className="cursor-pointer" onClick={() => setExpanded((v) => !v)}>
         <TableCell className="text-[13px] text-foreground">{warehouse.name}</TableCell>
-        <TableCell>
+        <TableCell className="text-center">
           <Badge
             variant="outline"
             className={
