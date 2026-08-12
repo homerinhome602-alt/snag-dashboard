@@ -115,7 +115,7 @@ export default async function UserManagementPage() {
 
       <InviteForm warehouses={activeWarehouses} />
 
-      <div className="overflow-hidden rounded-card border border-border">
+      <div className="overflow-hidden rounded-card border border-border bg-card">
         <Table>
           <TableHeader>
             <TableRow>

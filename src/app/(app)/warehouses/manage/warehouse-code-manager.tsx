@@ -80,7 +80,7 @@ export function WarehouseCodeManager({
         <p className="text-[12.5px] text-muted-foreground">Click a row to see its status history.</p>
       </div>
 
-      <div className="overflow-hidden rounded-card border border-border">
+      <div className="overflow-hidden rounded-card border border-border bg-card">
         <Table>
           <TableHeader>
             <TableRow>
