@@ -7,11 +7,13 @@ export function MultiSelectFilter({
   options,
   selected,
   onChange,
+  className,
 }: {
   label: string;
   options: { value: string; label: string }[];
   selected: string[];
   onChange: (next: string[]) => void;
+  className?: string;
 }) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -39,7 +41,7 @@ export function MultiSelectFilter({
           selected.length > 0
             ? "border-primary bg-accent text-accent-foreground"
             : "border-input bg-background text-foreground"
-        }`}
+        } ${className ?? ""}`}
       >
         {label}
         {selected.length > 0 ? ` (${selected.length})` : ": All"}

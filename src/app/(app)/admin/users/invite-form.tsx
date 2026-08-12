@@ -33,7 +33,7 @@ export function InviteForm({ warehouses }: { warehouses: Warehouse[] }) {
         <Input name="email" type="email" placeholder="name@company.com" required className="w-60" />
 
         <Select name="default_role" required>
-          <SelectTrigger className="w-40">
+          <SelectTrigger className="w-56">
             <SelectValue>{(value: string | null) => (value ? roleLabel(value) : "Role")}</SelectValue>
           </SelectTrigger>
           <SelectContent>
@@ -50,16 +50,15 @@ export function InviteForm({ warehouses }: { warehouses: Warehouse[] }) {
           options={warehouses.map((w) => ({ value: w.id, label: w.name }))}
           selected={warehouseIds}
           onChange={setWarehouseIds}
+          className="w-56"
         />
         {warehouseIds.map((id) => (
           <input key={id} type="hidden" name="warehouse_ids" value={id} />
         ))}
 
         <Select name="grant_dashboard_admin" defaultValue="no">
-          <SelectTrigger className="w-36">
-            <SelectValue>
-              {(value: string) => (value === "yes" ? "Make admin: Yes" : "Make admin: No")}
-            </SelectValue>
+          <SelectTrigger className="w-56">
+            <SelectValue>{(value: string) => (value === "yes" ? "Admin: Yes" : "Admin: No")}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="no">No</SelectItem>
@@ -67,7 +66,7 @@ export function InviteForm({ warehouses }: { warehouses: Warehouse[] }) {
           </SelectContent>
         </Select>
 
-        <Button type="submit" disabled={pending}>
+        <Button type="submit" disabled={pending} className="w-56">
           {pending ? "Sending…" : "Send invite"}
         </Button>
       </div>

@@ -53,11 +53,15 @@ export default async function UserManagementPage() {
   const warehouseNameById = new Map((warehouses ?? []).map((w) => [w.id, w.name]));
   const profileByEmail = new Map((profiles ?? []).map((p) => [p.email, p]));
 
-  const membershipsByUser = new Map<string, string[]>();
+  const membershipsByUser = new Map<string, Set<string>>();
   for (const m of memberships ?? []) {
     const warehouseName = (m.warehouse as unknown as { name: string } | null)?.name;
     if (!warehouseName) continue;
-    membershipsByUser.set(m.user_id, [...(membershipsByUser.get(m.user_id) ?? []), warehouseName]);
+    // A person can hold more than one role on the same warehouse (two
+    // warehouse_members rows) — this column doesn't show roles, so the
+    // warehouse name itself should only ever appear once per person.
+    if (!membershipsByUser.has(m.user_id)) membershipsByUser.set(m.user_id, new Set());
+    membershipsByUser.get(m.user_id)!.add(warehouseName);
   }
 
   const rows: Row[] = (invitations ?? []).map((inv) => {
@@ -72,7 +76,9 @@ export default async function UserManagementPage() {
       userId: profile?.id ?? null,
       status: !profile ? "invited" : profile.is_active ? "active" : "deactivated",
       isAdmin: profile ? profile.is_dashboard_admin : inv.grant_dashboard_admin,
-      warehouseNames: profile ? membershipsByUser.get(profile.id) ?? [] : invitedWarehouseNames,
+      warehouseNames: profile
+        ? [...(membershipsByUser.get(profile.id) ?? [])]
+        : invitedWarehouseNames,
     };
   });
 
@@ -103,7 +109,7 @@ export default async function UserManagementPage() {
               <TableHead className="text-[9px] uppercase tracking-[0.07em] text-faint">Admin</TableHead>
               <TableHead className="text-[9px] uppercase tracking-[0.07em] text-faint">Warehouse</TableHead>
               <TableHead className="text-[9px] uppercase tracking-[0.07em] text-faint">Status</TableHead>
-              <TableHead />
+              <TableHead className="text-[9px] uppercase tracking-[0.07em] text-faint">Change status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
