@@ -15,6 +15,24 @@ export async function createInvitation(formData: FormData) {
   }
 
   const supabase = await createClient();
+
+  // handle_new_user() only ever runs on someone's first sign-in — once
+  // they have a profile, editing this invitation has no effect on their
+  // real access. Say so instead of silently upserting a value that will
+  // never take effect.
+  const { data: existingProfile } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("email", email)
+    .maybeSingle();
+
+  if (existingProfile) {
+    return {
+      error:
+        "This person has already signed in, so their role, warehouse, and admin status can't be changed here — there's currently no way to edit an existing member's access.",
+    };
+  }
+
   const { data: auth } = await supabase.auth.getClaims();
   const invitedBy = auth?.claims?.sub;
 

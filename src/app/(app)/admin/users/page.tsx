@@ -46,7 +46,7 @@ export default async function UserManagementPage() {
         .order("created_at"),
       supabase.from("profiles").select("id, email, full_name, is_active, is_dashboard_admin"),
       supabase.from("warehouses").select("id, name, is_active").order("name"),
-      supabase.from("warehouse_members").select("user_id, warehouse:warehouses(name)"),
+      supabase.from("warehouse_members").select("user_id, role, warehouse:warehouses(name)"),
     ]);
 
   const activeWarehouses = (warehouses ?? []).filter((w) => w.is_active);
@@ -54,6 +54,7 @@ export default async function UserManagementPage() {
   const profileByEmail = new Map((profiles ?? []).map((p) => [p.email, p]));
 
   const membershipsByUser = new Map<string, Set<string>>();
+  const rolesByUser = new Map<string, Set<string>>();
   for (const m of memberships ?? []) {
     const warehouseName = (m.warehouse as unknown as { name: string } | null)?.name;
     if (!warehouseName) continue;
@@ -62,6 +63,8 @@ export default async function UserManagementPage() {
     // warehouse name itself should only ever appear once per person.
     if (!membershipsByUser.has(m.user_id)) membershipsByUser.set(m.user_id, new Set());
     membershipsByUser.get(m.user_id)!.add(warehouseName);
+    if (!rolesByUser.has(m.user_id)) rolesByUser.set(m.user_id, new Set());
+    rolesByUser.get(m.user_id)!.add(m.role);
   }
 
   const rows: Row[] = (invitations ?? []).map((inv) => {
@@ -72,7 +75,14 @@ export default async function UserManagementPage() {
     return {
       key: inv.email,
       name: profile?.full_name ?? inv.email,
-      role: inv.default_role,
+      // Once someone has signed in, default_role on the invitation is no
+      // longer authoritative (PLAN.md §3.1) — show their real warehouse_members
+      // role(s) instead, same as warehouseNames does below. A pending
+      // invitation has no real membership yet, so it falls back to the
+      // invited default_role.
+      role: profile
+        ? [...(rolesByUser.get(profile.id) ?? [])].map(roleLabel).join(", ") || "—"
+        : roleLabel(inv.default_role),
       userId: profile?.id ?? null,
       status: !profile ? "invited" : profile.is_active ? "active" : "deactivated",
       isAdmin: profile ? profile.is_dashboard_admin : inv.grant_dashboard_admin,
@@ -123,7 +133,7 @@ export default async function UserManagementPage() {
             {rows.map((row) => (
               <TableRow key={row.key}>
                 <TableCell className="text-[13px] text-foreground">{row.name}</TableCell>
-                <TableCell className="text-[13px]">{roleLabel(row.role)}</TableCell>
+                <TableCell className="text-[13px]">{row.role}</TableCell>
                 <TableCell className="text-center text-[11.5px] text-muted-foreground">
                   {row.isAdmin ? "Yes" : "No"}
                 </TableCell>

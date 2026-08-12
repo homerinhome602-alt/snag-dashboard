@@ -14,18 +14,29 @@ import { MultiSelectFilter } from "@/components/multi-select-filter";
 import { MEMBER_ROLES, roleLabel } from "@/lib/roles";
 import { createInvitation } from "./actions";
 
-type State = { error: string | null };
+type State = { error: string | null; success: boolean };
 type Warehouse = { id: string; name: string };
 
 export function InviteForm({ warehouses }: { warehouses: Warehouse[] }) {
-  const [state, formAction, pending] = useActionState<State, FormData>(
-    async (_prev, formData) => createInvitation(formData),
-    { error: null }
-  );
+  const [formKey, setFormKey] = useState(0);
   const [warehouseIds, setWarehouseIds] = useState<string[]>([]);
+  const [state, formAction, pending] = useActionState<State, FormData>(
+    async (_prev, formData) => {
+      const result = await createInvitation(formData);
+      if (result.error) return { error: result.error, success: false };
+      // Role and Admin (base-ui Select) and the Warehouse multi-select
+      // manage their own state — a native form reset after the action
+      // doesn't reach them, so force a full remount to clear everything
+      // rather than leaving the last invite's values sitting there.
+      setWarehouseIds([]);
+      setFormKey((k) => k + 1);
+      return { error: null, success: true };
+    },
+    { error: null, success: false }
+  );
 
   return (
-    <form action={formAction} className="mb-5">
+    <form key={formKey} action={formAction} className="mb-5">
       <h2 className="mb-2 text-[14px] font-medium text-foreground">Invite people</h2>
       <div className="flex flex-wrap items-center gap-2">
         <Input name="email" type="email" placeholder="name@company.com" required className="w-60" />
@@ -69,6 +80,7 @@ export function InviteForm({ warehouses }: { warehouses: Warehouse[] }) {
         </Button>
       </div>
       {state.error && <p className="mt-2 text-[12.5px] text-destructive">{state.error}</p>}
+      {state.success && <p className="mt-2 text-[12.5px] text-mint-deep">Invite sent.</p>}
     </form>
   );
 }
