@@ -17,7 +17,6 @@ type Row = {
   key: string;
   name: string;
   role: string;
-  isAdmin: boolean;
   warehouseNames: string[];
   status: "active" | "invited" | "deactivated";
   userId: string | null;
@@ -72,20 +71,26 @@ export default async function UserManagementPage() {
     const invitedWarehouseNames = (inv.warehouse_ids ?? [])
       .map((id: string) => warehouseNameById.get(id))
       .filter((n: string | undefined): n is string => Boolean(n));
+    // Dashboard Admin is folded into this same column rather than shown
+    // separately — once someone has signed in, default_role on the
+    // invitation is no longer authoritative (PLAN.md §3.1), so an accepted
+    // profile shows its real is_dashboard_admin flag plus real
+    // warehouse_members role(s); a pending invitation has no real
+    // membership yet, so it falls back to what was invited.
+    const roleText = profile
+      ? [
+          ...(profile.is_dashboard_admin ? ["Dashboard Admin"] : []),
+          ...[...(rolesByUser.get(profile.id) ?? [])].map(roleLabel),
+        ].join(", ") || "—"
+      : inv.grant_dashboard_admin
+        ? "Dashboard Admin"
+        : roleLabel(inv.default_role);
     return {
       key: inv.email,
       name: profile?.full_name ?? inv.email,
-      // Once someone has signed in, default_role on the invitation is no
-      // longer authoritative (PLAN.md §3.1) — show their real warehouse_members
-      // role(s) instead, same as warehouseNames does below. A pending
-      // invitation has no real membership yet, so it falls back to the
-      // invited default_role.
-      role: profile
-        ? [...(rolesByUser.get(profile.id) ?? [])].map(roleLabel).join(", ") || "—"
-        : roleLabel(inv.default_role),
+      role: roleText,
       userId: profile?.id ?? null,
       status: !profile ? "invited" : profile.is_active ? "active" : "deactivated",
-      isAdmin: profile ? profile.is_dashboard_admin : inv.grant_dashboard_admin,
       warehouseNames: profile
         ? [...(membershipsByUser.get(profile.id) ?? [])]
         : invitedWarehouseNames,
@@ -116,7 +121,6 @@ export default async function UserManagementPage() {
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Role</TableHead>
-              <TableHead className="text-center">Admin</TableHead>
               <TableHead>Warehouse</TableHead>
               <TableHead className="text-center">Status</TableHead>
               <TableHead className="text-right">Change status</TableHead>
@@ -125,7 +129,7 @@ export default async function UserManagementPage() {
           <TableBody>
             {rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-muted-foreground">
+                <TableCell colSpan={5} className="text-center text-muted-foreground">
                   No one invited yet.
                 </TableCell>
               </TableRow>
@@ -134,9 +138,6 @@ export default async function UserManagementPage() {
               <TableRow key={row.key}>
                 <TableCell className="text-[13px] text-foreground">{row.name}</TableCell>
                 <TableCell className="text-[13px]">{row.role}</TableCell>
-                <TableCell className="text-center text-[11.5px] text-muted-foreground">
-                  {row.isAdmin ? "Yes" : "No"}
-                </TableCell>
                 <TableCell className="whitespace-normal text-[12.5px] text-muted-foreground">
                   {row.warehouseNames.length === 0 ? (
                     "—"

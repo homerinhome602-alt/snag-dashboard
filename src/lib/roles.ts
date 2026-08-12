@@ -9,8 +9,20 @@ export const MEMBER_ROLES = [
 
 export type MemberRole = (typeof MEMBER_ROLES)[number]["value"];
 
+// Dashboard Admin is a global flag (profiles.is_dashboard_admin), not a
+// warehouse_members.role value — this sentinel exists only so the invite
+// form can offer it in the same picker as the 6 operational roles. Never
+// write it to a default_role/role column; createInvitation branches on it
+// instead (grant_dashboard_admin: true, default_role: null).
+export const DASHBOARD_ADMIN_VALUE = "dashboard_admin";
+
+export const INVITE_ROLE_OPTIONS = [
+  ...MEMBER_ROLES,
+  { value: DASHBOARD_ADMIN_VALUE, label: "Dashboard Admin" },
+] as const;
+
 export function roleLabel(role: string | null | undefined) {
-  return MEMBER_ROLES.find((r) => r.value === role)?.label ?? role ?? "—";
+  return INVITE_ROLE_OPTIONS.find((r) => r.value === role)?.label ?? role ?? "—";
 }
 
 // Single source of truth for role color-coding: each of the 6 roles keeps

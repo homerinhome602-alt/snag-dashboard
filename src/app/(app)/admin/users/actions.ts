@@ -3,16 +3,23 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import type { MemberRole } from "@/lib/roles";
+import { DASHBOARD_ADMIN_VALUE } from "@/lib/roles";
 
 export async function createInvitation(formData: FormData) {
   const email = (formData.get("email") as string)?.trim().toLowerCase();
-  const defaultRole = formData.get("default_role") as MemberRole;
-  const grantDashboardAdmin = formData.get("grant_dashboard_admin") === "yes";
-  const warehouseIds = formData.getAll("warehouse_ids") as string[];
+  const role = formData.get("role") as string;
 
-  if (!email || !defaultRole) {
+  if (!email || !role) {
     return { error: "Email and a role are required." };
   }
+
+  // Dashboard Admin is mutually exclusive with an operational role here —
+  // picking it means no default_role and no warehouse tagging, since
+  // admin's powers are global, not warehouse-scoped (PLAN.md §2.2).
+  const isAdminPick = role === DASHBOARD_ADMIN_VALUE;
+  const defaultRole = isAdminPick ? null : (role as MemberRole);
+  const grantDashboardAdmin = isAdminPick;
+  const warehouseIds = isAdminPick ? [] : (formData.getAll("warehouse_ids") as string[]);
 
   const supabase = await createClient();
 

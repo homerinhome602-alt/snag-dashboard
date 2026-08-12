@@ -11,7 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { MultiSelectFilter } from "@/components/multi-select-filter";
-import { MEMBER_ROLES, roleLabel } from "@/lib/roles";
+import { INVITE_ROLE_OPTIONS, DASHBOARD_ADMIN_VALUE, roleLabel } from "@/lib/roles";
 import { createInvitation } from "./actions";
 
 type State = { error: string | null; success: boolean };
@@ -20,15 +20,18 @@ type Warehouse = { id: string; name: string };
 export function InviteForm({ warehouses }: { warehouses: Warehouse[] }) {
   const [formKey, setFormKey] = useState(0);
   const [warehouseIds, setWarehouseIds] = useState<string[]>([]);
+  const [role, setRole] = useState<string | null>(null);
+  const isAdminPick = role === DASHBOARD_ADMIN_VALUE;
   const [state, formAction, pending] = useActionState<State, FormData>(
     async (_prev, formData) => {
       const result = await createInvitation(formData);
       if (result.error) return { error: result.error, success: false };
-      // Role and Admin (base-ui Select) and the Warehouse multi-select
-      // manage their own state — a native form reset after the action
-      // doesn't reach them, so force a full remount to clear everything
-      // rather than leaving the last invite's values sitting there.
+      // Role (base-ui Select) and the Warehouse multi-select manage their
+      // own state — a native form reset after the action doesn't reach
+      // them, so force a full remount to clear everything rather than
+      // leaving the last invite's values sitting there.
       setWarehouseIds([]);
+      setRole(null);
       setFormKey((k) => k + 1);
       return { error: null, success: true };
     },
@@ -41,12 +44,14 @@ export function InviteForm({ warehouses }: { warehouses: Warehouse[] }) {
       <div className="flex flex-wrap items-center gap-2">
         <Input name="email" type="email" placeholder="name@company.com" required className="w-60" />
 
-        <Select name="default_role" required>
+        <Select name="role" required onValueChange={(v) => setRole(v as string)}>
           <SelectTrigger className="w-56">
-            <SelectValue>{(value: string | null) => (value ? roleLabel(value) : "Role")}</SelectValue>
+            <SelectValue>
+              {(value: string | null) => (value ? roleLabel(value) : "Role")}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
-            {MEMBER_ROLES.map((r) => (
+            {INVITE_ROLE_OPTIONS.map((r) => (
               <SelectItem key={r.value} value={r.value}>
                 {r.label}
               </SelectItem>
@@ -54,26 +59,20 @@ export function InviteForm({ warehouses }: { warehouses: Warehouse[] }) {
           </SelectContent>
         </Select>
 
-        <MultiSelectFilter
-          label="Warehouse"
-          options={warehouses.map((w) => ({ value: w.id, label: w.name }))}
-          selected={warehouseIds}
-          onChange={setWarehouseIds}
-          className="w-56"
-        />
-        {warehouseIds.map((id) => (
-          <input key={id} type="hidden" name="warehouse_ids" value={id} />
-        ))}
-
-        <Select name="grant_dashboard_admin" defaultValue="no">
-          <SelectTrigger className="w-56">
-            <SelectValue>{(value: string) => (value === "yes" ? "Admin: Yes" : "Admin: No")}</SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="no">No</SelectItem>
-            <SelectItem value="yes">Yes</SelectItem>
-          </SelectContent>
-        </Select>
+        {!isAdminPick && (
+          <>
+            <MultiSelectFilter
+              label="Warehouse"
+              options={warehouses.map((w) => ({ value: w.id, label: w.name }))}
+              selected={warehouseIds}
+              onChange={setWarehouseIds}
+              className="w-56"
+            />
+            {warehouseIds.map((id) => (
+              <input key={id} type="hidden" name="warehouse_ids" value={id} />
+            ))}
+          </>
+        )}
 
         <Button type="submit" disabled={pending} className="w-56">
           {pending ? "Sending…" : "Send invite"}
