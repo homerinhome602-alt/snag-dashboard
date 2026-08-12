@@ -63,7 +63,7 @@ export function WarehouseRow({
             {warehouse.is_active ? "Active" : "Deactivated"}
           </Badge>
         </TableCell>
-        <TableCell className="text-right">
+        <TableCell className="text-center">
           <Button
             size="sm"
             variant="outline"
@@ -92,9 +92,9 @@ export function WarehouseRow({
               <ul className="flex flex-col gap-1">
                 {activity.map((a) => (
                   <li key={a.id} className="text-[11.5px] text-muted-foreground">
-                    <span className="text-foreground">{a.actor?.full_name ?? a.actor?.email ?? "Someone"}</span>{" "}
+                    <span className="font-mono text-[10px] text-faint">{fmtDateTime(a.created_at)}</span>{" "}
+                    · <span className="text-foreground">{a.actor?.full_name ?? a.actor?.email ?? "Someone"}</span>{" "}
                     {describeActivity(a)}
-                    <span className="font-mono text-[10px] text-faint"> · {fmtDateTime(a.created_at)}</span>
                   </li>
                 ))}
               </ul>

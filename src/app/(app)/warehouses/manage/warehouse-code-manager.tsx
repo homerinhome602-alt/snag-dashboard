@@ -75,8 +75,9 @@ export function WarehouseCodeManager({
         {createError && <p className="mt-1.5 text-[12.5px] text-destructive">{createError}</p>}
       </div>
 
-      <div className="mb-3">
+      <div className="mb-3 flex items-center justify-between">
         <StatusFilter value={statusFilter} onChange={setStatusFilter} />
+        <p className="text-[12.5px] text-muted-foreground">Click a row to see its status history.</p>
       </div>
 
       <div className="overflow-hidden rounded-card border border-border">
@@ -89,7 +90,7 @@ export function WarehouseCodeManager({
               <TableHead className="text-center text-[9px] uppercase tracking-[0.07em] text-faint">
                 Current status
               </TableHead>
-              <TableHead className="text-right text-[9px] uppercase tracking-[0.07em] text-faint">
+              <TableHead className="text-center text-[9px] uppercase tracking-[0.07em] text-faint">
                 Change status
               </TableHead>
             </TableRow>
@@ -108,9 +109,6 @@ export function WarehouseCodeManager({
           </TableBody>
         </Table>
       </div>
-      <p className="mt-3 text-[12.5px] text-muted-foreground">
-        Click a row to see its status history.
-      </p>
     </div>
   );
 }
