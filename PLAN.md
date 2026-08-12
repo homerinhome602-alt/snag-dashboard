@@ -68,7 +68,7 @@ Extends Supabase `auth.users`, created on first sign-in.
 |---|---|---|
 | `id` | uuid PK | FK → `auth.users.id` |
 | `email` | text unique | The join key to `invitations` |
-| `full_name` | text | From the signed-in Google profile |
+| `full_name` | text | From Google profile, or entered on password signup |
 | `is_dashboard_admin` | boolean | The only **global** role |
 | `default_role` | enum | Pre-selected in the Add Warehouse pickers; not authoritative |
 | `is_active` | boolean | Deactivate leavers without deleting history |
@@ -275,12 +275,13 @@ Keep these in a non-exposed schema with explicit `auth.uid()` checks in the body
 
 ## 5. Screens
 
-### 5.1 Login — **Google-only, as built**
-- **Sign in with Google** is the only route. The original plan and an earlier build both had a parallel email + password path (invite-triggered set-password, plus forgot-password) for third-party HVAC engineers and OEM contractors without a Google account; it was built, then deliberately removed — password reset depends on a Supabase-hosted email link that can't set a session cookie on this app's own domain without a dashboard email-template edit, and rather than carry that fragility, the call was to require a Google account for everyone, including contractors.
-- Gated by `invitations`, same as before: the `handle_new_user()` trigger checks `auth.users.email` against the invitation list on every first sign-in, regardless of which auth method reached it. An uninvited Google account is rejected the same way an uninvited password login used to be.
-- **As built**, `signInWithOAuth({ provider: "google" })` redirects to Google, then to `/auth/callback` (`exchangeCodeForSession`), then to `/`. Requires the Google provider to be enabled in the Supabase dashboard (Authentication → Providers → Google) with a Google Cloud OAuth client — a manual, dashboard-only step with no equivalent tool access.
+### 5.1 Login
+- **Sign in with Google** — primary
+- **Email + password** — equal fallback, for third-party HVAC engineers and OEM contractors who have no Google account
+- Both routes are gated by `invitations`. An uninvited email is rejected with "Your account has not been set up — contact your administrator."
+- Password route needs: invite email with a set-password link, plus forgot-password
 
-Because the gate is the email address, a user invited as `x@company.com` must sign in with exactly that Google account — a different Google account will not match. The User Management screen should say so.
+Because the gate is the email address, a user invited as `x@company.com` must sign in with exactly that address — a personal Gmail will not match. The User Management screen should say so.
 
 ### 5.2 Landing — warehouse cards
 Top bar: **Frozen Warehouse Launch Readiness**. Shows the warehouses the current user can read (§2.3) — all of them for a Dashboard Admin, only tagged ones otherwise.
@@ -603,7 +604,6 @@ Each is documented in place above; collected here so nothing is missed on a skim
 | Warehouse rename, delete, and member management added | §5.5 |
 | Warehouse delete cascades destructively, including the audit trail | §5.5 ⚠️ |
 | `snag_activity` gained a viewer ("View history") — table itself unchanged | §3.13 |
-| Email + password login built, then removed in favour of Google-only | §5.1 |
 
 ### 14.2 UI behaviour added after the plan was written
 
@@ -624,4 +624,4 @@ None of this changes the data model (except where noted in §14.1); it came out 
 - **No soft delete for warehouses** (§5.5).
 - **Category and scope are deferred on mobile**, so they are nullable for mobile-raised snags. The "finish this snag" prompt back at a desk was never built.
 - **Notifications** were never started — overdue ETC is visible in the UI but nothing reaches the person who can act on it.
-- **Google sign-in needs a one-time Supabase dashboard step.** The Google provider must be enabled (Authentication → Providers → Google) with a Google Cloud OAuth client ID/secret before `/login` works at all — confirmed live: the app correctly builds the OAuth request, but Supabase's own `/authorize` endpoint currently rejects it with `"Unsupported provider: provider is not enabled"`.
+- **Password-reset email deliverability depends on a one-time Supabase dashboard step.** The "Reset Password" email template still needs its link changed to `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery&next=/auth/update-password`, since the default template points at Supabase's hosted verify page, which can't set a session cookie on this app's own domain. Supabase's built-in email sending is also heavily rate-limited — fine for testing, not for production volume.

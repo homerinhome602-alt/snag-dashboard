@@ -1,23 +1,19 @@
 "use server";
 
-import { headers } from "next/headers";
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
-export async function signInWithGoogle() {
+export async function signInWithPassword(formData: FormData) {
   const supabase = await createClient();
-  const origin = (await headers()).get("origin");
+  const email = formData.get("email") as string;
+  const password = formData.get("password") as string;
 
-  const { data, error } = await supabase.auth.signInWithOAuth({
-    provider: "google",
-    options: {
-      redirectTo: `${origin}/auth/callback`,
-    },
-  });
-
-  if (error || !data.url) {
-    redirect("/login?error=oauth_unavailable");
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) {
+    redirect(`/login?error=invalid_credentials`);
   }
 
-  redirect(data.url);
+  revalidatePath("/", "layout");
+  redirect("/");
 }
