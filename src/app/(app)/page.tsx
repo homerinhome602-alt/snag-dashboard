@@ -29,7 +29,7 @@ export default async function Home() {
 
   if (warehouses.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center px-6 text-center text-sm text-muted-foreground">
+      <div className="flex h-full items-center justify-center px-6 text-center text-[13px] text-muted-foreground">
         No warehouses yet. Use &ldquo;Warehouse management&rdquo; in the sidebar to create the first one.
       </div>
     );
@@ -39,27 +39,27 @@ export default async function Home() {
     <div className="mx-auto w-full max-w-screen-2xl px-4 py-6 sm:px-6 sm:py-8 lg:px-[50px]">
       <div className="mb-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
         <div className={cn(CARD_HOVER, "flex flex-col justify-center rounded-card border border-border bg-card p-3.5")}>
-          <div className="mb-1.5 text-[9px] uppercase tracking-[0.06em] text-faint">All warehouses</div>
+          <div className="mb-1.5 text-[9px] uppercase tracking-[0.07em] text-faint">All warehouses</div>
           <div className="flex items-center gap-6">
             <div>
               <div className="font-mono text-[22px] leading-none">{totals.open}</div>
-              <div className="text-[9px] uppercase tracking-[0.06em] text-faint">Open</div>
+              <div className="text-[9px] uppercase tracking-[0.07em] text-faint">Open</div>
             </div>
             <div>
               <div className="font-mono text-[22px] leading-none" style={{ color: "#C75B4E" }}>
                 {totals.openHigh}
               </div>
-              <div className="text-[9px] uppercase tracking-[0.06em] text-faint">Open high</div>
+              <div className="text-[9px] uppercase tracking-[0.07em] text-faint">Open high</div>
             </div>
             <div>
               <div className="font-mono text-[22px] leading-none">{totals.raised}</div>
-              <div className="text-[9px] uppercase tracking-[0.06em] text-faint">Raised</div>
+              <div className="text-[9px] uppercase tracking-[0.07em] text-faint">Raised</div>
             </div>
           </div>
         </div>
 
         <div className={cn(CARD_HOVER, "flex flex-col justify-center rounded-card border border-border bg-card p-3.5")}>
-          <div className="text-[9px] uppercase tracking-[0.06em] text-faint">Next to launch</div>
+          <div className="text-[9px] uppercase tracking-[0.07em] text-faint">Next to launch</div>
           {next ? (
             <>
               <div className="mt-1 text-[15px] font-medium text-foreground">{next.name}</div>
@@ -73,7 +73,7 @@ export default async function Home() {
         </div>
       </div>
 
-      <div className="mb-2.5 text-[11px] uppercase tracking-[0.07em] text-faint">
+      <div className="mb-2.5 text-[9px] uppercase tracking-[0.07em] text-faint">
         {warehouses.length} warehouse{warehouses.length === 1 ? "" : "s"} · soonest launch first
       </div>
       <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3">

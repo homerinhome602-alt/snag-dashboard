@@ -22,7 +22,7 @@ export default async function ForgotPasswordPage({
         </div>
         <div className="p-6">
           <h1 className="text-[17px] leading-tight text-foreground">Reset your password</h1>
-          <p className="mt-1 mb-5 text-sm text-muted-foreground">
+          <p className="mt-1 mb-5 text-[13px] text-muted-foreground">
             We&apos;ll email you a link to choose a new one.
           </p>
 

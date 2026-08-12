@@ -46,7 +46,7 @@ export default async function SetPasswordPage({
         </div>
         <div className="p-6">
           <h1 className="text-[17px] leading-tight text-foreground">Set your password</h1>
-          <p className="mt-1 mb-5 text-sm text-muted-foreground">
+          <p className="mt-1 mb-5 text-[13px] text-muted-foreground">
             For people invited by email who don&apos;t sign in with Google.
           </p>
 

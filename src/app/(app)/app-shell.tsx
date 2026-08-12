@@ -88,7 +88,7 @@ export function AppShell({
             <span className="text-[12px] whitespace-nowrap">Home</span>
           </Link>
           <div className="mx-4 my-2.5 h-px bg-border" />
-          <div className="px-4 pb-2 text-[10px] uppercase tracking-[0.09em] text-faint">Warehouses</div>
+          <div className="px-4 pb-2 text-[9px] uppercase tracking-[0.07em] text-faint">Warehouses</div>
           {warehouses.length === 0 && (
             <div className="px-4 py-1 text-[12px] text-muted-foreground">None yet</div>
           )}

@@ -33,7 +33,7 @@ export default async function UpdatePasswordPage({
       <div className="w-full max-w-[340px] overflow-hidden rounded-card border border-border bg-card">
         <div className="p-6">
           <h1 className="text-[17px] leading-tight text-foreground">Set a new password</h1>
-          <p className="mt-1 mb-5 text-sm text-muted-foreground">Choose a new password for your account.</p>
+          <p className="mt-1 mb-5 text-[13px] text-muted-foreground">Choose a new password for your account.</p>
 
           {errorCopy && (
             <div className="mb-4 rounded-md bg-accent p-3">

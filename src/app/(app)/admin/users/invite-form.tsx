@@ -26,9 +26,7 @@ export function InviteForm({ warehouses }: { warehouses: Warehouse[] }) {
 
   return (
     <form action={formAction} className="mb-5">
-      <h2 className="mb-2 text-[13px] font-medium tracking-[-0.01em] text-foreground">
-        Invite people
-      </h2>
+      <h2 className="mb-2 text-[14px] font-medium text-foreground">Invite people</h2>
       <div className="flex flex-wrap items-center gap-2">
         <Input name="email" type="email" placeholder="name@company.com" required className="w-60" />
 

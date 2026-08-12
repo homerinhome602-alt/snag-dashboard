@@ -38,7 +38,7 @@ export default async function LoginPage({
             <br />
             launch readiness
           </h1>
-          <p className="mt-1 mb-5 text-sm text-muted-foreground">Sign in to continue</p>
+          <p className="mt-1 mb-5 text-[13px] text-muted-foreground">Sign in to continue</p>
 
           {errorInfo && (
             <div className="mb-4 rounded-md bg-accent p-3">

@@ -53,7 +53,11 @@ Status: open `--blush` · in progress `--sky` · ready to close `--mint` · clos
 
 Mono is functional, not stylistic: serials and ageing values must align vertically in a table scanned at speed.
 
-**Scale** — screen title 17 · section 14 · body 12–13 · label 10–11 uppercase with `0.07em` tracking · metric numeral 19–34 mono.
+**Scale** — screen title 17 · section 14 · body 12–13 · metric numeral 19–34 mono.
+
+Uppercase labels split into two tiers by role, both `0.07em` tracking — **as built**, reconciled 12 Aug 2026 after a hygiene pass found drift (0.06–0.09em tracking, 9–11px sizes) across otherwise-identical labels:
+- **Micro-labels** (10px→**9px**, `text-faint`) — table/column headers, sidebar section dividers, metric captions. The load-bearing majority pattern; every data table in the app uses this.
+- **Field labels** (10.5px, `text-muted-foreground`) — sits directly above an input awaiting entry (form fields, the warehouse-code input). Slightly larger and a step darker than a micro-label, since it's addressing the user rather than labeling passive content.
 
 Sentence case everywhere except mono table headers, which are uppercase to separate them from data.
 
@@ -62,7 +66,7 @@ Sentence case everywhere except mono table headers, which are uppercase to separ
 ## Form
 
 - **Radii** — cards 14, controls 8, pills 20, table chips 4
-- **Table rows** — 8px vertical padding (B's density), mono for serial and ageing, uppercase mono headers on `--ground`
+- **Table rows** — 8px vertical padding (B's density), mono for serial and ageing, uppercase mono headers on `--ground`. **As built**: enforced once in the shared `TableHeader` (`components/ui/table.tsx`), which sets `bg-background` (`--ground`) regardless of caller — the table's own card frame stays `--surface` (pure white) around it via each usage site's wrapping `bg-card`, so the header reads as a distinct, slightly warmer band above a white body rather than blending into either.
 - **Borders over shadows** — no drop shadows anywhere; elevation is communicated by border and fill
 - **Spacing** — 26px between major sections, 12px between cards
 
