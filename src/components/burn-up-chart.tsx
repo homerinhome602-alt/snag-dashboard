@@ -181,7 +181,7 @@ export function BurnUpChart({
           />
         )}
         <line x1={todayX} y1={PAD_TOP} x2={todayX} y2={HEIGHT - PAD_BOTTOM} stroke="#D3C4BE" strokeDasharray="3 4" />
-        <text x={todayX + 4} y={PAD_TOP + 8} fontSize={9} fill="#A8938D">
+        <text x={todayX + 4} y={PAD_TOP + 8} fontSize={9} fill="var(--faint)">
           today
         </text>
         <text x={PAD_LEFT + 4} y={raisedPoints[0].y - 4} fontSize={9} fill="#C75B4E">

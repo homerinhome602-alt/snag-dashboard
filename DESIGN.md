@@ -35,8 +35,8 @@ Consequence: saturated warm tones are reserved for attention states. A screen wi
 | `--amber` | `#F7EAD8` | Medium severity |
 | `--amber-deep` | `#7A4A12` | Text on amber |
 | `--ink` | `#2E2422` | Primary text — warm near-black, never neutral grey |
-| `--muted` | `#8A7A75` | Secondary text |
-| `--faint` | `#A8938D` | Labels, placeholders, empty states |
+| `--muted` | `#736662` | Secondary text. **As built**, darkened from `#8A7A75` (12 Aug 2026) — the original was 3.9-4.1:1 against white/ground, below WCAG AA's 4.5:1 for normal text. Now 5.3-5.5:1. |
+| `--faint` | `#876E67` | Labels, placeholders, empty states. **As built**, darkened from `#A8938D` (12 Aug 2026) — the original was 2.8-2.9:1, well below even the 3:1 large-text minimum, and this token is used at the smallest sizes in the app (9-10.5px micro-labels, mono captions). Now 4.5-4.7:1. |
 
 Severity: high `--red` · medium `--amber` · low `--frost`
 Status: open `--blush` · in progress `--sky` · ready to close `--mint` · closed neutral

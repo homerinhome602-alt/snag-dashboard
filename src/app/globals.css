@@ -87,7 +87,7 @@
   --amber: #F7EAD8;
   --amber-deep: #7A4A12;
   --ink: #2E2422;
-  --faint: #A8938D;
+  --faint: #876E67;
 
   --background: var(--ground);
   --foreground: var(--ink);
@@ -100,7 +100,7 @@
   --secondary: var(--surface);
   --secondary-foreground: var(--ink);
   --muted: var(--line-soft);
-  --muted-foreground: #8A7A75;
+  --muted-foreground: #736662;
   --accent: var(--blush);
   --accent-foreground: var(--red-deep);
   --destructive: var(--red);
