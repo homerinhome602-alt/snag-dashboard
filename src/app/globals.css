@@ -135,6 +135,6 @@
   }
   h1, h2, h3 {
     @apply font-heading tracking-[-0.015em];
-    font-weight: 500;
+    font-weight: 700;
   }
 }

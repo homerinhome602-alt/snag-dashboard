@@ -67,11 +67,14 @@ export function SnagTable({
               <TableHead
                 key={h}
                 className={cn(
-                  "whitespace-nowrap text-[9px] uppercase tracking-[0.07em] text-faint",
                   (h === "Severity" || h === "Status") && "text-center",
-                  h === "S.No" && STICKY_SNO_CLASS,
-                  h === "Raised" && STICKY_DATE_CLASS,
-                  h === "Description" && STICKY_DESC_CLASS
+                  // Sticky cells paint their own opaque bg-card to hide
+                  // content scrolling underneath — override it back to the
+                  // header row's fill so they don't show up as a lighter
+                  // patch against the rest of the header.
+                  h === "S.No" && cn(STICKY_SNO_CLASS, "bg-line"),
+                  h === "Raised" && cn(STICKY_DATE_CLASS, "bg-line"),
+                  h === "Description" && cn(STICKY_DESC_CLASS, "bg-line")
                 )}
               >
                 {h}

@@ -37,10 +37,10 @@ export function StatusFilter({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className={`rounded-md border px-2 py-1 text-[11.5px] ${
+        className={`rounded-md border px-2 py-1 text-[11.5px] font-medium ${
           value !== "all"
             ? "border-primary bg-accent text-accent-foreground"
-            : "border-input bg-background text-foreground"
+            : "border-teal bg-frost text-teal-deep"
         }`}
       >
         Current status: {currentLabel}

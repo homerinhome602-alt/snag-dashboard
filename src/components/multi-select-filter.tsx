@@ -37,10 +37,10 @@ export function MultiSelectFilter({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className={`rounded-md border px-2 py-1 text-[11.5px] ${
+        className={`rounded-md border px-2 py-1 text-[11.5px] font-medium ${
           selected.length > 0
             ? "border-primary bg-accent text-accent-foreground"
-            : "border-input bg-background text-foreground"
+            : "border-teal bg-frost text-teal-deep"
         } ${className ?? ""}`}
       >
         {label}

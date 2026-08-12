@@ -47,7 +47,7 @@ Status: open `--blush` · in progress `--sky` · ready to close `--mint` · clos
 
 | Role | Face | Notes |
 |---|---|---|
-| Display | Instrument Sans | 500 weight, `-0.015em` tracking. Screen and section titles only |
+| Display | Instrument Sans | **700 weight** (bumped from 500 — as built, 12 Aug 2026, after a legibility pass found the original weight read as too quiet against the palette's soft tones), `-0.015em` tracking. Screen and section titles only |
 | Body | Inter | 400. All prose, form labels, descriptions |
 | Data | IBM Plex Mono | Serial numbers, dates, counts, ageing, metrics. Never for prose |
 
@@ -66,9 +66,10 @@ Sentence case everywhere except mono table headers, which are uppercase to separ
 ## Form
 
 - **Radii** — cards 14, controls 8, pills 20, table chips 4
-- **Table rows** — 8px vertical padding (B's density), mono for serial and ageing, uppercase mono headers on `--ground`. **As built**: enforced once in the shared `TableHeader` (`components/ui/table.tsx`), which sets `bg-background` (`--ground`) regardless of caller — the table's own card frame stays `--surface` (pure white) around it via each usage site's wrapping `bg-card`, so the header reads as a distinct, slightly warmer band above a white body rather than blending into either.
+- **Table rows** — 8px vertical padding (B's density), mono for serial and ageing, uppercase bold headers on `--line`. **As built**: enforced once in the shared `TableHeader`/`TableHead` (`components/ui/table.tsx`) — `bg-line` (#F2DED8) on the header row, `font-semibold` on the header cells, regardless of caller. First tried `--ground`, but that's only ~5 luminance points off pure white — too close to read as a deliberate band rather than noise, so a legibility pass (12 Aug 2026) moved it to `--line`, the app's border token, dual-purposed here as a fill since it's already the palette's next step down from `--ground`. The table's own card frame stays `--surface` (pure white) around it via each usage site's wrapping `bg-card`, so the header reads as a clearly darker band above a white body. Sticky header cells (`lib/table-sticky.ts`) paint their own opaque background to hide content scrolling underneath — that has to be overridden to `bg-line` too at each call site, or they show up as a lighter patch against the rest of the header.
 - **Borders over shadows** — no drop shadows anywhere; elevation is communicated by border and fill
 - **Spacing** — 26px between major sections, 12px between cards
+- **Secondary controls read cool, primary actions read warm — as built (12 Aug 2026).** Table filters (`MultiSelectFilter`, `StatusFilter`) and outline-variant buttons (Deactivate/Activate, Export, Import, Close snag, Cancel) share one idle treatment — `border-teal bg-frost text-teal-deep` — instead of blending into the page. This extends the thermal thesis rather than introducing a new accent: cool tones are already "under control" in this palette, which is exactly what an organizational filter or a reversible secondary action is. A filter's *selected* state still switches to the warm `--accent`/`--primary` pairing, so picking a filter value reads as the same kind of state change as anything else warm on this screen. Primary (`default`-variant) buttons are unchanged — solid `--primary` red, reserved for the one committing action per screen.
 
 ---
 

@@ -104,12 +104,12 @@ export default async function UserManagementPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="text-[9px] uppercase tracking-[0.07em] text-faint">Name</TableHead>
-              <TableHead className="text-[9px] uppercase tracking-[0.07em] text-faint">Role</TableHead>
-              <TableHead className="text-center text-[9px] uppercase tracking-[0.07em] text-faint">Admin</TableHead>
-              <TableHead className="text-[9px] uppercase tracking-[0.07em] text-faint">Warehouse</TableHead>
-              <TableHead className="text-center text-[9px] uppercase tracking-[0.07em] text-faint">Status</TableHead>
-              <TableHead className="text-right text-[9px] uppercase tracking-[0.07em] text-faint">Change status</TableHead>
+              <TableHead>Name</TableHead>
+              <TableHead>Role</TableHead>
+              <TableHead className="text-center">Admin</TableHead>
+              <TableHead>Warehouse</TableHead>
+              <TableHead className="text-center">Status</TableHead>
+              <TableHead className="text-right">Change status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

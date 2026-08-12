@@ -9,7 +9,7 @@ export function StatusToggle({ userId, isActive }: { userId: string; isActive: b
 
   return (
     <Button
-      variant="ghost"
+      variant="outline"
       size="sm"
       disabled={pending}
       onClick={() =>
