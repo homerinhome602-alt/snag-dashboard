@@ -27,19 +27,21 @@ One `snags` table keyed by `warehouse_id`, **not** a physical table per warehous
 
 Consequence: "reporter" and "resolver" are not properties of a user, they are properties of a **user-warehouse pair**. Every permission check must therefore name a warehouse. The same person can see `Add Snag` on one warehouse and `Add Update` on another.
 
-### 2.2 Dashboard Admin is deliberately narrow
+### 2.2 Dashboard Admin — **narrowed, then widened for snag actions (12 Aug 2026)**
 
-The Dashboard Admin role grants **three** powers, and nothing else:
+The Dashboard Admin role originally granted **three** powers, and nothing else:
 
 1. **User Management** — invite, assign, deactivate
 2. **Add Warehouse** — create warehouses and tag people
 3. **Correct `date_raised`** on any snag — a deliberate, narrow data-correction exception
 
-It does **not** confer the ability to raise snags, post updates, set ETC, set go-live dates, or change status. To do any of those, the admin must **tag themselves into the warehouse** in a role, at creation time, like anyone else. Their admin status grants no shortcut.
+Original rationale for stopping there: keep operational accountability with the named people tagged to a warehouse rather than concentrating it in a super-user, and make sure the audit trail records a real per-warehouse role for every action.
 
-Read access **is** affected, and is in fact the one place Dashboard Admin status does something automatically: an admin can read every snag in every warehouse without being tagged to any of them (§2.3). A non-admin user with no `warehouse_members` row anywhere sees nothing.
+**As built, this was deliberately widened.** Requested and confirmed explicitly for every Dashboard Admin (not one account): admin status now also bypasses the reporter/resolver tag on the snag write RPCs — `raise_snag`, `post_snag_update`, `verify_snag_closure`, `close_snag_directly` each accept `private.is_dashboard_admin()` as an alternative to the warehouse-scoped role check, mirroring the read-bypass pattern that already existed. The three pages that gate their own UI on reporter/resolver status (`warehouses/[id]/page.tsx`, `snags/new/page.tsx`, `import/page.tsx`) all OR in the same admin check, so the buttons and the RPC agree — verified live by raising a snag as Dashboard Admin on a warehouse with zero membership. `snag_activity` still records the admin's own `actor_id`, so the audit trail stays accurate even though the accountability boundary is gone.
 
-Rationale: this keeps operational accountability with the named people rather than concentrating it in a super-user, and it means the audit trail records a real role for every action. Power 3 is the single exception, because a wrong raise date distorts ageing and burn-down for everyone and there is no one else positioned to fix it. Every such edit is written to `snag_activity` with the old and new value.
+Read access remains the other place Dashboard Admin status does something automatically: an admin can read every snag in every warehouse without being tagged to any of them (§2.3). A non-admin user with no `warehouse_members` row anywhere sees nothing.
+
+Power 3 (`date_raised` correction) predates this change and is unaffected — a wrong raise date distorts ageing and burn-down for everyone and there is no one else positioned to fix it. Every such edit is written to `snag_activity` with the old and new value.
 
 ### 2.3 Visibility — **changed twice**
 
@@ -604,6 +606,7 @@ Each is documented in place above; collected here so nothing is missed on a skim
 | Warehouse rename, delete, and member management added | §5.5 |
 | Warehouse delete cascades destructively, including the audit trail | §5.5 ⚠️ |
 | `snag_activity` gained a viewer ("View history") — table itself unchanged | §3.13 |
+| Dashboard Admin gained a fourth power: bypass reporter/resolver on all snag RPCs | §2.2 |
 
 ### 14.2 UI behaviour added after the plan was written
 

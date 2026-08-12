@@ -46,28 +46,34 @@ export default async function WarehouseDetailPage({
   const { data: auth } = await supabase.auth.getClaims();
   const uid = auth?.claims?.sub;
 
-  const [{ data: w }, { data: membership }, { data: teamRows }, { data: snapshots }] = await Promise.all([
-    supabase
-      .from("warehouse_readiness")
-      .select("id, name, go_live_date, total_raised, open_count, open_high_count")
-      .eq("id", id)
-      .single(),
-    supabase.from("warehouse_members").select("role").eq("warehouse_id", id).eq("user_id", uid ?? ""),
-    supabase
-      .from("warehouse_members")
-      .select("role, profile:profiles(full_name, email)")
-      .eq("warehouse_id", id),
-    supabase
-      .from("snag_daily_snapshot")
-      .select("snapshot_date, total_raised, total_closed")
-      .eq("warehouse_id", id)
-      .order("snapshot_date"),
-  ]);
+  const [{ data: w }, { data: membership }, { data: teamRows }, { data: snapshots }, { data: me }] =
+    await Promise.all([
+      supabase
+        .from("warehouse_readiness")
+        .select("id, name, go_live_date, total_raised, open_count, open_high_count")
+        .eq("id", id)
+        .single(),
+      supabase.from("warehouse_members").select("role").eq("warehouse_id", id).eq("user_id", uid ?? ""),
+      supabase
+        .from("warehouse_members")
+        .select("role, profile:profiles(full_name, email)")
+        .eq("warehouse_id", id),
+      supabase
+        .from("snag_daily_snapshot")
+        .select("snapshot_date, total_raised, total_closed")
+        .eq("warehouse_id", id)
+        .order("snapshot_date"),
+      supabase.from("profiles").select("is_dashboard_admin").eq("id", uid ?? "").maybeSingle(),
+    ]);
 
   if (!w) notFound();
 
-  const isReporter = (membership ?? []).some((m) => REPORTER_ROLES.includes(m.role));
-  const isResolver = (membership ?? []).some((m) => RESOLVER_ROLES.includes(m.role));
+  // Dashboard Admin bypasses the reporter/resolver tag on snag actions the
+  // same way it already bypasses read scoping — matches the RPC-level
+  // check in raise_snag/post_snag_update/verify_snag_closure/close_snag_directly.
+  const isDashboardAdmin = me?.is_dashboard_admin ?? false;
+  const isReporter = (membership ?? []).some((m) => REPORTER_ROLES.includes(m.role)) || isDashboardAdmin;
+  const isResolver = (membership ?? []).some((m) => RESOLVER_ROLES.includes(m.role)) || isDashboardAdmin;
   const daysToGoLive = daysUntil(w.go_live_date);
   const team = (teamRows ?? []).map((t) => ({
     role: t.role,

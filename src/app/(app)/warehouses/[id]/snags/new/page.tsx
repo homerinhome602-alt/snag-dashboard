@@ -13,14 +13,17 @@ export default async function NewSnagPage({
   const { data } = await supabase.auth.getClaims();
   const uid = data?.claims?.sub;
 
-  const [{ data: warehouse }, { data: membership }] = await Promise.all([
+  const [{ data: warehouse }, { data: membership }, { data: me }] = await Promise.all([
     supabase.from("warehouses").select("id, name").eq("id", id).single(),
     supabase.from("warehouse_members").select("role").eq("warehouse_id", id).eq("user_id", uid ?? ""),
+    supabase.from("profiles").select("is_dashboard_admin").eq("id", uid ?? "").maybeSingle(),
   ]);
 
   if (!warehouse) notFound();
 
-  const isReporter = (membership ?? []).some((m) => REPORTER_ROLES.includes(m.role));
+  // Dashboard Admin bypasses the reporter tag here too — matches raise_snag's RPC-level check.
+  const isReporter =
+    (membership ?? []).some((m) => REPORTER_ROLES.includes(m.role)) || (me?.is_dashboard_admin ?? false);
   if (!isReporter || !uid) {
     redirect(`/warehouses/${id}`);
   }
