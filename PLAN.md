@@ -55,6 +55,8 @@ The plan originally scoped reads to membership. Partway through the build this w
 - `Add Update` appears only on warehouses where you are tagged as a resolver
 - `warehouse_readiness` — the view behind the landing cards and sidebar, joining `warehouses` to a `snags` aggregate — is a view, and views in Postgres run with the *owner's* row-security context by default, not the querying user's. It's owned by `postgres`, which has `BYPASSRLS`, so it was silently ignoring every policy above regardless of who queried it. Fixed with `ALTER VIEW ... SET (security_invoker = true)`. Any future view over an RLS-protected table needs the same treatment, checked explicitly — it will not fail loudly, it will just quietly leak.
 
+**Verified against a real non-admin account** (12 Aug 2026), by simulating that user's session directly against Postgres (`set local role authenticated` + `request.jwt.claim.sub`, inside a rolled-back transaction — no data touched) rather than a manual browser walkthrough: every scoped table returned exactly the rows belonging to their one tagged warehouse, matching row for row against an admin-context count filtered to that warehouse_id — not a subset, not a leak. `invitations` and `warehouse_activity` (admin-only) returned zero rows. The same simulation for the Dashboard Admin account confirmed the bypass still returns everything. This closes the gap previously noted below.
+
 ---
 
 ## 3. Schema
@@ -622,4 +624,4 @@ None of this changes the data model (except where noted in §14.1); it came out 
 - **No soft delete for warehouses** (§5.5).
 - **Category and scope are deferred on mobile**, so they are nullable for mobile-raised snags. The "finish this snag" prompt back at a desk was never built.
 - **Notifications** were never started — overdue ETC is visible in the UI but nothing reaches the person who can act on it.
-- **The scoped-visibility change (§2.3) has not been live-tested from a genuinely restricted, non-admin session.** It was verified by policy review, by confirming the Dashboard Admin account still sees everything, and by confirming the new `is_warehouse_member()` helper mirrors the exact pattern the pre-existing write-side checks already use successfully — but nobody has yet watched a non-admin, single-warehouse account's sidebar with their own eyes. Do that with a real second invited user before trusting this in front of a customer.
+- **Password-reset email deliverability depends on a one-time Supabase dashboard step.** The "Reset Password" email template still needs its link changed to `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery&next=/auth/update-password`, since the default template points at Supabase's hosted verify page, which can't set a session cookie on this app's own domain. Supabase's built-in email sending is also heavily rate-limited — fine for testing, not for production volume.
