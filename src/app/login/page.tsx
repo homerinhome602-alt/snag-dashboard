@@ -67,9 +67,13 @@ export default async function LoginPage({
             </Button>
           </form>
 
-          <p className="mt-3 text-center text-[13px] text-muted-foreground">
+          <p className="mt-3 flex items-center justify-center gap-3 text-center text-[13px] text-muted-foreground">
             <a href="/forgot-password" className="hover:text-foreground">
               Forgot your password?
+            </a>
+            <span className="text-line">·</span>
+            <a href="/set-password" className="hover:text-foreground">
+              Set your password
             </a>
           </p>
         </div>
