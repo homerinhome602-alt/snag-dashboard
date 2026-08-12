@@ -77,12 +77,13 @@ export default async function UserManagementPage() {
     // profile shows its real is_dashboard_admin flag plus real
     // warehouse_members role(s); a pending invitation has no real
     // membership yet, so it falls back to what was invited.
+    const isDashboardAdmin = profile ? profile.is_dashboard_admin : inv.grant_dashboard_admin;
     const roleText = profile
       ? [
-          ...(profile.is_dashboard_admin ? ["Dashboard Admin"] : []),
+          ...(isDashboardAdmin ? ["Dashboard Admin"] : []),
           ...[...(rolesByUser.get(profile.id) ?? [])].map(roleLabel),
         ].join(", ") || "—"
-      : inv.grant_dashboard_admin
+      : isDashboardAdmin
         ? "Dashboard Admin"
         : roleLabel(inv.default_role);
     return {
@@ -91,9 +92,15 @@ export default async function UserManagementPage() {
       role: roleText,
       userId: profile?.id ?? null,
       status: !profile ? "invited" : profile.is_active ? "active" : "deactivated",
-      warehouseNames: profile
-        ? [...(membershipsByUser.get(profile.id) ?? [])]
-        : invitedWarehouseNames,
+      // Dashboard Admin reads (and now writes) every warehouse regardless
+      // of warehouse_members tags (PLAN.md §2.2, §2.3) — show that
+      // directly instead of their real tag list (usually none) or a
+      // misleading "—".
+      warehouseNames: isDashboardAdmin
+        ? ["All"]
+        : profile
+          ? [...(membershipsByUser.get(profile.id) ?? [])]
+          : invitedWarehouseNames,
     };
   });
 
