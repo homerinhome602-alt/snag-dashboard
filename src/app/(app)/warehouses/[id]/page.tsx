@@ -72,8 +72,13 @@ export default async function WarehouseDetailPage({
   // same way it already bypasses read scoping — matches the RPC-level
   // check in raise_snag/post_snag_update/verify_snag_closure/close_snag_directly.
   const isDashboardAdmin = me?.is_dashboard_admin ?? false;
-  const isReporter = (membership ?? []).some((m) => REPORTER_ROLES.includes(m.role)) || isDashboardAdmin;
-  const isResolver = (membership ?? []).some((m) => RESOLVER_ROLES.includes(m.role)) || isDashboardAdmin;
+  // Real membership, not bypass-merged — the chat compose box needs to tell
+  // "genuinely tagged both reporter and resolver" apart from "admin with no
+  // tag at all," which an isReporter/isResolver OR'd with admin can't do.
+  const hasReporterTag = (membership ?? []).some((m) => REPORTER_ROLES.includes(m.role));
+  const hasResolverTag = (membership ?? []).some((m) => RESOLVER_ROLES.includes(m.role));
+  const isReporter = hasReporterTag || isDashboardAdmin;
+  const isResolver = hasResolverTag || isDashboardAdmin;
   const daysToGoLive = daysUntil(w.go_live_date);
   const team = (teamRows ?? []).map((t) => ({
     role: t.role,
@@ -103,7 +108,7 @@ export default async function WarehouseDetailPage({
   const { data: updates } = snagIds.length
     ? await supabase
         .from("snag_updates")
-        .select("id, snag_id, body, created_at, author:profiles(full_name, email)")
+        .select("id, snag_id, body, author_side, created_at, author:profiles(full_name, email)")
         .in("snag_id", snagIds)
         .order("created_at")
     : { data: [] as never[] };
@@ -234,8 +239,9 @@ export default async function WarehouseDetailPage({
         attachmentsBySnag={attachmentsBySnag}
         activityBySnag={activityBySnag}
         warehouseId={id}
-        isReporter={isReporter}
-        isResolver={isResolver}
+        hasReporterTag={hasReporterTag}
+        hasResolverTag={hasResolverTag}
+        isDashboardAdmin={isDashboardAdmin}
         currentUserId={uid ?? ""}
       />
 

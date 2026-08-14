@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { TableCell, TableRow } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
 import {
   CATEGORY_LABELS,
   LOCATION_LABELS,
@@ -16,17 +15,15 @@ import {
   ageingDays,
   isOverdue,
 } from "@/lib/snags";
-import { closeSnagDirectly, postSnagUpdate, verifySnagClosure } from "@/app/(app)/warehouses/[id]/snag-actions";
 import type { SnagRow as SnagRowData } from "@/components/snag-table";
-import { VideoCaptureInput } from "@/components/video-capture";
-import { createClient } from "@/lib/supabase/client";
-import { uploadAttachment, type VideoCapture } from "@/lib/media";
+import { SnagComposeArea } from "@/components/snag-compose";
 import { cn } from "@/lib/utils";
 import { STICKY_SNO_CLASS, STICKY_DATE_CLASS, STICKY_DESC_CLASS } from "@/lib/table-sticky";
 
 export type UpdateRow = {
   id: string;
   body: string;
+  author_side: "reporter" | "resolver" | "admin";
   created_at: string;
   author: { full_name: string | null; email: string } | null;
 };
@@ -67,6 +64,10 @@ function describeActivity(a: ActivityRow): string {
       return "reopened this snag";
     case "duplicate_suppressed":
       return "raised this snag despite a possible duplicate match";
+    case "correct_date_raised":
+      return `corrected the raised date from ${a.old_value ? fmtDate(a.old_value) : "—"} to ${
+        a.new_value ? fmtDate(a.new_value) : "—"
+      }`;
     default:
       return a.action.replaceAll("_", " ");
   }
@@ -101,155 +102,146 @@ function fmtDate(d: string) {
   return new Date(d + "T00:00:00").toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
 }
 
-function UpdateForm({
-  warehouseId,
-  snagId,
-  currentUserId,
+function fmtDateTime(iso: string) {
+  const d = new Date(iso);
+  return `${d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" })} ${d.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+  })}`;
+}
+
+const SIDE_LABEL: Record<string, string> = {
+  reporter: "Reporter",
+  resolver: "Resolver",
+  admin: "Dashboard Admin",
+};
+
+// Reporters raise defects (the problem), resolvers drive them to close (the
+// fix) — reusing the palette's own warm/cool thermal thesis for who's
+// speaking, not just severity, keeps the two sides visually distinct
+// without introducing a new accent.
+const SIDE_BADGE_CLASS: Record<string, string> = {
+  reporter: "bg-blush text-red-deep",
+  resolver: "bg-frost text-teal-deep",
+  admin: "bg-line-soft text-foreground",
+};
+
+const SIDE_JUSTIFY_CLASS: Record<string, string> = {
+  reporter: "justify-start",
+  resolver: "justify-end",
+  admin: "justify-center",
+};
+
+const SIDE_ITEMS_CLASS: Record<string, string> = {
+  reporter: "items-start",
+  resolver: "items-end",
+  admin: "items-center",
+};
+
+function ChatBubble({
+  side,
+  authorName,
+  body,
+  attachments,
+  timestamp,
 }: {
-  warehouseId: string;
-  snagId: string;
-  currentUserId: string;
+  side: "reporter" | "resolver" | "admin";
+  authorName: string;
+  body: string;
+  attachments: AttachmentRow[];
+  timestamp: string;
 }) {
-  const [body, setBody] = useState("");
-  const [etc, setEtc] = useState("");
-  const [nextStatus, setNextStatus] = useState("");
-  const [video, setVideo] = useState<VideoCapture | null>(null);
-  const [videoInputKey, setVideoInputKey] = useState(0);
-  const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
-
+  // A row wrapper positions the bubble via justify-content, with the bubble
+  // itself sized to its content (capped at 85%) as a flex-row child — a
+  // max-w column div with mx-auto/mr-auto looked right for reporter/resolver
+  // by coincidence (they hug an edge either way) but silently mis-centered
+  // admin's bubble, since a flex-col item stretches to fill the cross axis
+  // by default and auto-margins had no slack left to distribute.
   return (
-    <div className="rounded-md border border-border bg-background p-2.5">
-      <textarea
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-        rows={2}
-        placeholder="Type here"
-        className="w-full rounded-md border border-input bg-card px-2 py-1.5 text-[12.5px] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-      />
-      <div className="mt-1.5 w-56">
-        <VideoCaptureInput key={videoInputKey} onChange={setVideo} />
+    <div className={cn("flex", SIDE_JUSTIFY_CLASS[side])}>
+      <div className={cn("flex max-w-[85%] flex-col gap-0.5", SIDE_ITEMS_CLASS[side])}>
+        <div className="flex items-center gap-1.5 text-[10.5px]">
+          <span className="font-medium text-foreground">{authorName}</span>
+          <span className={cn("rounded-chip px-1.5 py-0.5 text-[9px] font-medium", SIDE_BADGE_CLASS[side])}>
+            {SIDE_LABEL[side]}
+          </span>
+        </div>
+        <div className="whitespace-normal rounded-md border border-border bg-card px-2.5 py-1.5 text-[12px] text-foreground">
+          {body}
+          {attachments.length > 0 && (
+            <div className="mt-1.5">
+              <AttachmentThumbs attachments={attachments} />
+            </div>
+          )}
+        </div>
+        <span className="font-mono text-[9.5px] text-faint">{timestamp}</span>
       </div>
-      <div className="mt-1.5 flex flex-wrap items-center gap-2">
-        <label className="flex items-center gap-1 text-[11px] text-muted-foreground">
-          ETC
-          <input
-            type="date"
-            value={etc}
-            onChange={(e) => setEtc(e.target.value)}
-            className="rounded-md border border-input bg-card px-1.5 py-0.5 text-[11px]"
-          />
-        </label>
-        <select
-          value={nextStatus}
-          onChange={(e) => setNextStatus(e.target.value)}
-          className="rounded-md border border-input bg-card px-1.5 py-0.5 text-[11px]"
-        >
-          <option value="">Keep status</option>
-          <option value="wip">Move to WIP</option>
-          <option value="ready_to_close">Ticket closed, verify</option>
-        </select>
-        <Button
-          size="sm"
-          disabled={pending || !body.trim()}
-          onClick={() =>
-            startTransition(async () => {
-              const result = await postSnagUpdate(warehouseId, snagId, body, etc || null, nextStatus || null);
-              if (result.error || !result.updateId) {
-                setError(result.error ?? "Could not post the update.");
-                return;
-              }
-              if (video) {
-                const supabase = createClient();
-                const uploadResult = await uploadAttachment(supabase, {
-                  warehouseId,
-                  snagId,
-                  updateId: result.updateId,
-                  mediaType: "video",
-                  file: video.file,
-                  thumbnail: video.thumbnail,
-                  fileName: "snag-video.mp4",
-                  uploaderId: currentUserId,
-                });
-                if (uploadResult.error) {
-                  setError(`Update posted, but the video failed to upload: ${uploadResult.error}`);
-                  return;
-                }
-              }
-              setError(null);
-              setBody("");
-              setEtc("");
-              setNextStatus("");
-              setVideo(null);
-              setVideoInputKey((k) => k + 1);
-            })
-          }
-        >
-          {pending ? "Posting…" : "Post update"}
-        </Button>
-      </div>
-      {error && <p className="mt-1 text-[11px] text-destructive">{error}</p>}
     </div>
   );
 }
 
-function DirectCloseAction({ warehouseId, snagId }: { warehouseId: string; snagId: string }) {
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-
+function SystemLine({ text, timestamp }: { text: string; timestamp: string }) {
   return (
-    <div className="flex items-center justify-end gap-2">
-      {error && <p className="text-[11px] text-destructive">{error}</p>}
-      <Button
-        size="sm"
-        variant="outline"
-        disabled={pending}
-        onClick={() =>
-          startTransition(async () => {
-            const r = await closeSnagDirectly(warehouseId, snagId);
-            if (r.error) setError(r.error);
-          })
-        }
-      >
-        {pending ? "Closing…" : "Close snag"}
-      </Button>
+    <div className="text-center text-[10.5px] text-muted-foreground">
+      {text} <span className="font-mono text-[9.5px] text-faint">· {timestamp}</span>
     </div>
   );
 }
 
-function VerifyActions({ warehouseId, snagId }: { warehouseId: string; snagId: string }) {
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
+type FeedItem =
+  | {
+      kind: "message";
+      id: string;
+      side: "reporter" | "resolver" | "admin";
+      authorName: string;
+      body: string;
+      attachments: AttachmentRow[];
+      createdAt: string;
+    }
+  | { kind: "system"; id: string; text: string; createdAt: string };
 
-  return (
-    <div className="flex items-center gap-2 rounded-md border border-mint bg-mint p-2.5">
-      <span className="text-[12px] text-mint-deep">Ready to close — confirm the fix on the floor?</span>
-      <div className="ml-auto flex gap-1.5">
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={pending}
-          onClick={() => startTransition(async () => {
-            const r = await verifySnagClosure(warehouseId, snagId, false);
-            if (r.error) setError(r.error);
-          })}
-        >
-          Reject — reopen
-        </Button>
-        <Button
-          size="sm"
-          disabled={pending}
-          onClick={() => startTransition(async () => {
-            const r = await verifySnagClosure(warehouseId, snagId, true);
-            if (r.error) setError(r.error);
-          })}
-        >
-          Confirm closed
-        </Button>
-      </div>
-      {error && <p className="text-[11px] text-destructive">{error}</p>}
-    </div>
-  );
+function buildFeed(
+  s: SnagRowData,
+  updates: UpdateRow[],
+  snagPhotos: AttachmentRow[],
+  attachmentsByUpdate: Map<string, AttachmentRow[]>,
+  activity: ActivityRow[]
+): FeedItem[] {
+  const items: FeedItem[] = [];
+
+  // The raise itself is always the thread's opening message — it always
+  // comes from the reporter side, even when a Dashboard Admin bypassing
+  // without a reporter tag is the one who clicked it.
+  const raiseActivity = activity.find((a) => a.action === "raise");
+  items.push({
+    kind: "message",
+    id: `raise-${s.id}`,
+    side: "reporter",
+    authorName: s.raised_by_profile?.full_name ?? s.raised_by_profile?.email ?? "Someone",
+    body: s.description,
+    attachments: snagPhotos,
+    createdAt: raiseActivity?.created_at ?? `${s.date_raised}T00:00:00`,
+  });
+
+  for (const u of updates) {
+    items.push({
+      kind: "message",
+      id: u.id,
+      side: u.author_side,
+      authorName: u.author?.full_name ?? u.author?.email ?? "Someone",
+      body: u.body,
+      attachments: attachmentsByUpdate.get(u.id) ?? [],
+      createdAt: u.created_at,
+    });
+  }
+
+  for (const a of activity) {
+    if (a.action === "raise") continue;
+    items.push({ kind: "system", id: a.id, text: describeActivity(a), createdAt: a.created_at });
+  }
+
+  items.sort((x, y) => new Date(x.createdAt).getTime() - new Date(y.createdAt).getTime());
+  return items;
 }
 
 export function SnagRow({
@@ -258,8 +250,9 @@ export function SnagRow({
   attachments,
   activity,
   warehouseId,
-  isReporter,
-  isResolver,
+  hasReporterTag,
+  hasResolverTag,
+  isDashboardAdmin,
   currentUserId,
 }: {
   snag: SnagRowData;
@@ -267,12 +260,12 @@ export function SnagRow({
   attachments: AttachmentRow[];
   activity: ActivityRow[];
   warehouseId: string;
-  isReporter: boolean;
-  isResolver: boolean;
+  hasReporterTag: boolean;
+  hasResolverTag: boolean;
+  isDashboardAdmin: boolean;
   currentUserId: string;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
   const snagPhotos = attachments.filter((a) => a.update_id === null);
   const attachmentsByUpdate = new Map<string, AttachmentRow[]>();
   for (const a of attachments) {
@@ -298,6 +291,8 @@ export function SnagRow({
       return next;
     });
   }
+
+  const feed = buildFeed(s, updates, snagPhotos, attachmentsByUpdate, activity);
 
   return (
     <>
@@ -354,88 +349,30 @@ export function SnagRow({
       {expanded && (
         <TableRow>
           <TableCell colSpan={13} className="bg-card">
-            <div className="flex flex-col gap-2 py-1" onClick={(e) => e.stopPropagation()}>
-              {snagPhotos.length > 0 || updates.length > 0 ? (
-                <div className="ml-2 flex flex-col gap-3 pl-1">
-                  {snagPhotos.length > 0 && (
-                    <div className="relative pl-4 text-[12px]">
-                      <span className="absolute top-1.5 left-0 h-2 w-2 rounded-full bg-primary ring-4 ring-background" />
-                      {updates.length > 0 && (
-                        <span className="absolute top-3.5 bottom-[-18px] left-[3.5px] w-px bg-border" />
-                      )}
-                      <span className="rounded-chip bg-sky px-1.5 py-0.5 text-[10px] font-medium text-teal-deep">
-                        Description
-                      </span>{" "}
-                      <span className="text-foreground">{s.description}</span>
-                      <div className="mt-1">
-                        <AttachmentThumbs attachments={snagPhotos} />
-                      </div>
-                    </div>
-                  )}
-                  {updates.map((u, i) => (
-                    <div key={u.id} className="relative pl-4 text-[12px]">
-                      <span className="absolute top-1.5 left-0 h-2 w-2 rounded-full bg-primary ring-4 ring-background" />
-                      {i < updates.length - 1 && (
-                        <span className="absolute top-3.5 bottom-[-18px] left-[3.5px] w-px bg-border" />
-                      )}
-                      <span className="text-foreground">{u.body}</span>{" "}
-                      <span className="font-mono text-[10px] text-faint">
-                        · {u.author?.full_name ?? u.author?.email ?? "—"} ·{" "}
-                        {new Date(u.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}
-                      </span>
-                      {attachmentsByUpdate.has(u.id) && (
-                        <div className="mt-1">
-                          <AttachmentThumbs attachments={attachmentsByUpdate.get(u.id)!} />
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-[12px] text-muted-foreground">No updates yet.</p>
+            <div className="flex flex-col gap-2.5 py-1" onClick={(e) => e.stopPropagation()}>
+              {feed.map((item) =>
+                item.kind === "message" ? (
+                  <ChatBubble
+                    key={item.id}
+                    side={item.side}
+                    authorName={item.authorName}
+                    body={item.body}
+                    attachments={item.attachments}
+                    timestamp={fmtDateTime(item.createdAt)}
+                  />
+                ) : (
+                  <SystemLine key={item.id} text={item.text} timestamp={fmtDateTime(item.createdAt)} />
+                )
               )}
-              {isResolver && (
-                <UpdateForm warehouseId={warehouseId} snagId={s.id} currentUserId={currentUserId} />
-              )}
-              {isReporter && s.status === "ready_to_close" && (
-                <VerifyActions warehouseId={warehouseId} snagId={s.id} />
-              )}
-              {isReporter && s.status !== "closed" && s.status !== "ready_to_close" && (
-                <DirectCloseAction warehouseId={warehouseId} snagId={s.id} />
-              )}
-              {activity.length > 0 && (
-                <div className="border-t border-line-soft pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowHistory((v) => !v)}
-                    className="text-[11px] text-muted-foreground underline-offset-2 hover:underline"
-                  >
-                    {showHistory ? "Hide history" : `View history (${activity.length})`}
-                  </button>
-                  {showHistory && (
-                    <ul className="mt-1.5 flex flex-col gap-1 border-l border-border pl-2.5">
-                      {activity.map((a) => (
-                        <li key={a.id} className="text-[11px] text-muted-foreground">
-                          <span className="text-foreground">{a.actor?.full_name ?? a.actor?.email ?? "Someone"}</span>{" "}
-                          {describeActivity(a)}
-                          <span className="font-mono text-[10px] text-faint">
-                            {" "}
-                            ·{" "}
-                            {new Date(a.created_at).toLocaleDateString("en-GB", {
-                              day: "2-digit",
-                              month: "short",
-                            })}{" "}
-                            {new Date(a.created_at).toLocaleTimeString("en-GB", {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              )}
+              <SnagComposeArea
+                warehouseId={warehouseId}
+                snagId={s.id}
+                status={s.status}
+                currentUserId={currentUserId}
+                hasReporterTag={hasReporterTag}
+                hasResolverTag={hasResolverTag}
+                isDashboardAdmin={isDashboardAdmin}
+              />
             </div>
           </TableCell>
         </TableRow>

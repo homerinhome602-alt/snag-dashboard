@@ -221,9 +221,12 @@ Your requirement that updates accumulate over weeks with timestamps means "Updat
 | `snag_id` | uuid FK |
 | `body` | text |
 | `author_id` | uuid FK → profiles |
+| `author_side` | enum `reporter`, `resolver`, `admin` — **as built**, not in the original plan |
 | `created_at` | timestamptz |
 
 In the table view the Update cell shows the **latest** entry plus a count ("3 updates"); expanding the row reveals the full chronological log. Updates are **append-only** — an edit would destroy the audit trail.
+
+**`author_side` is a build-time addition (14 Aug 2026)**, added when the update log became a two-sided chat thread (§5.7.1). It records which side of the conversation the message was posted on — **snapshotted at post time**, not derived from the author's current `warehouse_members` role, so a message's side stays correct even if that person's role tag later changes or is removed. Originally only resolvers could write to this table at all (`post_snag_update` was resolver-only); it's now open to reporters too, distinguished by this column. `admin` covers a Dashboard Admin bypassing without holding the real tag for whichever side they posted as — see `dashboard_admin_snag_bypass` and `post_snag_update_open_to_reporters` in the migration history for the exact rule.
 
 ### 3.12 `attachments`
 Serves both the original snag photos and media attached to individual updates.
@@ -242,9 +245,19 @@ Serves both the original snag photos and media attached to individual updates.
 | `created_at` | timestamptz | |
 
 ### 3.13 `snag_activity`
-Append-only audit log: actor, action, field, old value, new value, timestamp. Every RPC that changes a snag writes here — raise, status change, ETC update, verify/reject closure, direct close, duplicate-suppressed.
+Append-only audit log: actor, action, field, old value, new value, timestamp. Every RPC that changes a snag writes here — raise, status change, ETC update, verify/reject closure, direct close, duplicate-suppressed, date correction.
 
-**As built** — this table existed from Phase 0 but had no viewer until a later round. Each expanded snag row now has a "View history" toggle rendering these rows as plain-English lines (`{actor} moved status from Open to WIP · 08 Aug 19:05`), sourced entirely from this table with no schema change. See `describeActivity()` in `snag-row.tsx` for the action → sentence mapping.
+**As built** — this table existed from Phase 0 but had no viewer until a later round, and went through two different presentations since. It first gained a "View history" toggle rendering these rows as plain-English lines. That toggle is now gone (§5.7.1) — its rows merge directly into the chat feed instead, interleaved by timestamp with the `snag_updates` messages as small centered system lines with no avatar or bubble. See `describeActivity()` in `snag-row.tsx` for the action → sentence mapping.
+
+### 3.9.1 `snag_action_result` — **new composite type**
+`close_snag_directly` and `verify_snag_closure` both return this instead of a bare `snags` row, once they gained the ability to carry an optional comment (§5.7.1):
+
+| Field | Type |
+|---|---|
+| `snag` | `snags` |
+| `update_id` | uuid, nullable |
+
+`update_id` is set only when a non-empty comment was supplied — the caller uses it the same two-step way `raise_snag`/`post_snag_update` already work: the RPC creates the row, then the client uploads any attached photo/video to that id separately.
 
 ---
 
@@ -253,9 +266,9 @@ Append-only audit log: actor, action, field, old value, new value, timestamp. Ev
 Reporters and resolvers write different columns of the same row, and Postgres RLS is row-level only. All writes therefore go through RPC functions, each accepting only its role's fields and checking `auth.uid()` membership internally:
 
 - `raise_snag(...)` — any reporter tagged to the warehouse; allocates serial number, stamps `date_raised` and `raised_by`, records suppressed duplicate ids
-- `post_snag_update(...)` — any resolver tagged to the warehouse; inserts into `snag_updates`, optionally sets `etc_date`/status
-- `verify_snag_closure(snag_id, approved)` — any tagged reporter; requires `ready_to_close`
-- `close_snag_directly(snag_id)` — **as built**; any tagged reporter, from any status (§3.9)
+- `post_snag_update(snag_id, body, etc_date, status, acting_as)` — **as built (14 Aug 2026)**: open to both reporters and resolvers, not resolver-only as originally planned — `acting_as` states which hat the caller is posting under, verified server-side against their real membership (or Dashboard Admin bypass), never trusted from the client. `etc_date`/`status` are rejected outright unless `acting_as = 'resolver'` (§5.7.1)
+- `verify_snag_closure(snag_id, approved, body?)` — any tagged reporter; requires `ready_to_close`. `body` is optional (**as built**, 14 Aug 2026) — if supplied, posts as a real chat message on the reporter's side alongside the status change instead of just a system line
+- `close_snag_directly(snag_id, body?)` — **as built**; any tagged reporter, from any status (§3.9). Same optional `body` treatment as `verify_snag_closure`
 - `set_go_live_date(warehouse_id, date)` — any resolver tagged to the warehouse
 - `correct_date_raised(snag_id, new_date)` — **Dashboard Admin only**; writes to `snag_activity`
 - `find_similar_snags(...)` — duplicate detection (§7)
@@ -421,7 +434,23 @@ S.No, Date and Description are reordered to the front and pinned (§ sticky colu
 - **Overdue ETC flagged** — red badge when `etc_date` has passed and the snag is not closed
 - Filter, sort, search across every column — filters are multi-select (§14.2)
 - `Add Snag` / `Add Update` shown only if you are tagged here
-- Expanding a row shows the update timeline, a "Close snag" action for tagged reporters (any status, not just `ready_to_close` — §3.9), and a "View history" toggle (§3.13)
+- Expanding a row shows the update thread (§5.7.1)
+
+### 5.7.1 Update thread — **rebuilt as a two-sided chat (14 Aug 2026)**
+
+The expanded row was originally a single dot-and-line-connected timeline (resolver updates only, reporters had no way to comment) plus a separate collapsed "View history" toggle for the `snag_activity` audit log. Both are gone, replaced by one merged, chronological feed:
+
+- The raise (description + any raise-time photos) is the thread's opening message, always on the reporter's side.
+- Every `snag_updates` message renders as a bubble on the **left** (reporter), **right** (resolver), or **centered/neutral** (Dashboard Admin bypassing without a real tag) — governed by that row's `author_side` (§3.11), snapshotted at post time.
+- Every `snag_activity` row except `raise` (already represented by the opening message) interleaves by timestamp as a small centered muted system line, no bubble — including the duplicate-match note and admin date-corrections, which don't have a natural conversational partner but still belong in the sequence.
+- Below the feed, one role-aware compose box (`components/snag-compose.tsx`):
+  - **Reporter-only**: comment + photo + video, plus "Close ticket" (any status except `closed`/`ready_to_close`) or "Confirm closed" / "Reject — reopen" (when `ready_to_close`) — each with the same optional comment+media, matching the RPC's optional `body` (§3.9.1).
+  - **Resolver-only**: comment + photo + video + ETC date + status dropdown, unchanged in spirit from the original resolver-only update form.
+  - **Both roles genuinely tagged on this warehouse**: one box with a "Commenting as Reporter / Resolver" toggle that swaps which extra controls show and which side the message lands on — the caller states which hat they're using, but the RPC verifies it against real membership before honoring it.
+  - **Dashboard Admin with no tag on this warehouse**: every control shown at once (no toggle needed, since bypass already grants both capacities) — comment, photo, video, ETC, status, and the close/verify buttons all together.
+- Photo capture (with the circle-the-defect annotation tool) and video capture are both available on every compose box now — video was previously resolver-only, photo was previously raise-time-only.
+
+No real-time push: the other party sees a new message on their own next action or page load, matching the rest of the app (§14.2).
 
 ---
 
@@ -613,8 +642,9 @@ Each is documented in place above; collected here so nothing is missed on a skim
 | RPC-only rule applies to snags; admin tables use direct access + RLS | §4.1 |
 | Warehouse rename, delete, and member management added | §5.5 |
 | Warehouse delete cascades destructively, including the audit trail | §5.5 ⚠️ |
-| `snag_activity` gained a viewer ("View history") — table itself unchanged | §3.13 |
+| `snag_activity` gained a viewer ("View history"), later folded into the chat feed and the toggle removed | §3.13, §5.7.1 |
 | Dashboard Admin gained a fourth power: bypass reporter/resolver on all snag RPCs | §2.2 |
+| Update thread rebuilt from a resolver-only dot timeline into a two-sided reporter/resolver chat | §5.7.1 |
 
 ### 14.2 UI behaviour added after the plan was written
 
@@ -623,7 +653,7 @@ None of this changes the data model (except where noted in §14.1); it came out 
 - **Sticky columns** — S.No, Date and Description pin to the left edge while the remaining columns scroll under them. Fixed pixel widths (60 / 70 / 290 = 420px); see `lib/table-sticky.ts` for why percentages could not be used. A row's own expanded content can't be pinned the same way — `position: sticky` does not work on a cell spanning the full row width, a real browser limitation rather than a bug in this codebase — so expanding a row resets the table's horizontal scroll instead, which keeps the newly-opened content on screen.
 - **Collapsible sidebar** — collapses to an icon rail, content fully hidden rather than clipped, with a Home button (shown only while the rail is open) and sticky pin behaviour so it and the top header stay in place while the page scrolls.
 - **Team block** — expands **inline**, pushing the rest of the header down, with a close button in the top-right of the expanded box. (An earlier round tried an overlay that floated over the page instead; reverted back to inline on feedback — see the "changed twice" pattern in §2.3.)
-- **"Timeline"** — the UI name for what this document calls the update log. Each entry is a bulleted, dot-and-line-connected item; a photo attached at raise time (no update posted yet) still gets its own dot, tagged "Description."
+- **"Timeline" → chat thread** — the update log was originally a bulleted, dot-and-line-connected list (resolver-only, with a raise-time photo tagged "Description" getting its own dot). Rebuilt 14 Aug 2026 into the two-sided chat described in §5.7.1; the dot-timeline presentation and the "Description" tag are both gone.
 - **Filters are multi-select**, not single-value — every snag-table filter (status, category, sub-category, location, scope, severity) accepts more than one value at once.
 - **Multi-select filters, search box, Export/Import/Add-snag** all share a single row rather than stacking on separate lines.
 - **Snag-raised confirmation** — a banner appears after raising a snag and dismisses itself after 5 seconds with an animated exit rather than disappearing instantly.
@@ -634,5 +664,5 @@ None of this changes the data model (except where noted in §14.1); it came out 
 - **Migrations are not in version control.** They exist only in the Supabase project. `npx supabase db pull` writes them to `supabase/migrations/` — do this before any environment move.
 - **No soft delete for warehouses** (§5.5).
 - **Category and scope are deferred on mobile**, so they are nullable for mobile-raised snags. The "finish this snag" prompt back at a desk was never built.
-- **Notifications** were never started — overdue ETC is visible in the UI but nothing reaches the person who can act on it.
+- **Notifications** were never started — overdue ETC is visible in the UI but nothing reaches the person who can act on it. The chat thread (§5.7.1) has the same gap: no live push, so a new message from the other side is only seen on your own next action or reload, not in real time.
 - **Password-reset email deliverability depends on a one-time Supabase dashboard step.** The "Reset Password" email template still needs its link changed to `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery&next=/auth/update-password`, since the default template points at Supabase's hosted verify page, which can't set a session cookie on this app's own domain. Supabase's built-in email sending is also heavily rate-limited — fine for testing, not for production volume.

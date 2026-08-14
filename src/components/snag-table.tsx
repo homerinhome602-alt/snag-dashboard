@@ -37,8 +37,9 @@ export function SnagTable({
   attachmentsBySnag,
   activityBySnag,
   warehouseId,
-  isReporter,
-  isResolver,
+  hasReporterTag,
+  hasResolverTag,
+  isDashboardAdmin,
   currentUserId,
 }: {
   snags: SnagRow[];
@@ -46,8 +47,9 @@ export function SnagTable({
   attachmentsBySnag: Record<string, AttachmentRow[]>;
   activityBySnag: Record<string, ActivityRow[]>;
   warehouseId: string;
-  isReporter: boolean;
-  isResolver: boolean;
+  hasReporterTag: boolean;
+  hasResolverTag: boolean;
+  isDashboardAdmin: boolean;
   currentUserId: string;
 }) {
   if (snags.length === 0) {
@@ -91,8 +93,9 @@ export function SnagTable({
               attachments={attachmentsBySnag[s.id] ?? []}
               activity={activityBySnag[s.id] ?? []}
               warehouseId={warehouseId}
-              isReporter={isReporter}
-              isResolver={isResolver}
+              hasReporterTag={hasReporterTag}
+              hasResolverTag={hasResolverTag}
+              isDashboardAdmin={isDashboardAdmin}
               currentUserId={currentUserId}
             />
           ))}

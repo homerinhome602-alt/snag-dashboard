@@ -70,6 +70,7 @@ Sentence case everywhere except mono table headers, which are uppercase to separ
 - **Borders over shadows** — no drop shadows anywhere; elevation is communicated by border and fill
 - **Spacing** — 26px between major sections, 12px between cards
 - **Secondary controls read cool, primary actions read warm — as built (12 Aug 2026).** Table filters (`MultiSelectFilter`, `StatusFilter`) and outline-variant buttons (Deactivate/Activate, Export, Import, Close snag, Cancel) share one idle treatment — `border-teal bg-frost text-teal-deep` — instead of blending into the page. This extends the thermal thesis rather than introducing a new accent: cool tones are already "under control" in this palette, which is exactly what an organizational filter or a reversible secondary action is. A filter's *selected* state still switches to the warm `--accent`/`--primary` pairing, so picking a filter value reads as the same kind of state change as anything else warm on this screen. Primary (`default`-variant) buttons are unchanged — solid `--primary` red, reserved for the one committing action per screen.
+- **Chat bubble sides carry the same thesis one step further — as built (14 Aug 2026).** The update thread's role badges use `bg-blush text-red-deep` for the reporter (left) and `bg-frost text-teal-deep` for the resolver (right) — reporters raise the problem, resolvers drive it to the fix, so warm-left/cool-right mirrors "warm means wrong, cool means under control" applied to *who's speaking* rather than *what severity something is*. A Dashboard Admin's message (centered, neither side) gets a third, deliberately neutral `bg-line-soft text-foreground` badge instead of stretching the warm/cool pairing to cover a case it doesn't describe.
 
 ---
 
@@ -166,6 +167,7 @@ Where each design element lives:
 | Team block (inline expand) | `components/team-block.tsx` |
 | Burn-up chart | `components/burn-up-chart.tsx` |
 | Snag table and rows | `components/snag-table.tsx`, `snag-row.tsx` |
+| Update thread (chat feed + compose box) | `components/snag-row.tsx` (feed/bubbles), `snag-compose.tsx` (compose box) |
 | Sticky column classes | `lib/table-sticky.ts` |
 | RAG colour and card sort | `lib/readiness.ts` |
 | Photo capture and annotation | `components/photo-capture.tsx` |
