@@ -40,12 +40,6 @@ export function AddWarehouseControl({
     });
   }
 
-  // Nothing left to offer — say so instead of showing a control that opens
-  // to an empty, confusing dropdown.
-  if (warehouses.length === 0) {
-    return <p className="mt-0.5 text-[11px] text-faint">All warehouses added</p>;
-  }
-
   if (!open) {
     return (
       <button
@@ -55,6 +49,19 @@ export function AddWarehouseControl({
       >
         + Add warehouse
       </button>
+    );
+  }
+
+  // Nothing left to offer — say so instead of showing a picker that opens
+  // onto an empty, confusing dropdown.
+  if (warehouses.length === 0) {
+    return (
+      <div className="mt-1 flex items-center gap-1.5">
+        <p className="text-[11px] text-faint">All warehouses added</p>
+        <Button type="button" variant="outline" size="sm" onClick={reset}>
+          Close
+        </Button>
+      </div>
     );
   }
 
