@@ -380,7 +380,7 @@ export function SnagRow({
         <TableCell className={cn(STICKY_DESC_CLASS, "text-[12.5px] text-foreground")}>
           {s.description}
         </TableCell>
-        <TableCell className="whitespace-nowrap text-[12px]">
+        <TableCell className="max-w-[130px] truncate whitespace-nowrap text-[12px]">
           {s.raised_by_profile?.full_name ?? s.raised_by_profile?.email ?? "—"}
         </TableCell>
         <TableCell className="whitespace-nowrap text-[12px] text-muted-foreground">
@@ -403,10 +403,10 @@ export function SnagRow({
             {STATUS_LABELS[s.status] ?? s.status}
           </span>
         </TableCell>
-        <TableCell className="w-[290px] min-w-[290px] max-w-[290px] text-[11px]">
+        <TableCell className="w-[190px] min-w-[190px] max-w-[190px] whitespace-normal break-words text-[11px]">
           {latest ? (
             <>
-              <div className="truncate text-[11.5px] text-foreground">{latest.body}</div>
+              <div className="text-[11.5px] text-foreground">{latest.body}</div>
               <div className="font-mono text-[9.5px] text-faint">
                 {updates.length} update{updates.length === 1 ? "" : "s"}
               </div>

@@ -82,9 +82,14 @@ export function SnagTable({
                   h === "S.No" && cn(STICKY_SNO_CLASS, "bg-line"),
                   h === "Raised" && cn(STICKY_DATE_CLASS, "bg-line"),
                   h === "Description" && cn(STICKY_DESC_CLASS, "bg-line"),
-                  // Matches Description's width so the two longest-text
-                  // columns in the table read as a consistent pair.
-                  h === "Update" && "w-[290px] min-w-[290px] max-w-[290px]"
+                  // Wraps onto multiple lines in the body instead of
+                  // truncating, so a fixed width here just bounds the
+                  // column rather than clipping the update text.
+                  h === "Update" && "w-[190px] min-w-[190px] max-w-[190px]",
+                  // Caps long names/emails so one wide value doesn't push
+                  // the whole table past the viewport and force horizontal
+                  // scroll to see the rest of the columns.
+                  h === "Raised by" && "max-w-[130px]"
                 )}
               >
                 {h}
