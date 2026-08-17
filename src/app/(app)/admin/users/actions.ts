@@ -64,29 +64,51 @@ export async function createInvitation(formData: FormData) {
 
 // Adds warehouse_members rows for someone who has already signed in — the
 // gap CLAUDE.md documents (handle_new_user only runs on first sign-in, so
-// re-inviting has no effect on real access). Matches the invite form: one
-// role per warehouse, never null. If the person already holds a (possibly
-// different) role on one of these warehouses, that tag is replaced rather
-// than left in place alongside the new one — otherwise re-running this for
-// someone already tagged would silently leave them holding two roles on
-// the same warehouse. Still can't remove a warehouse entirely or touch
-// admin status — see the "no way to edit an existing member" gotcha.
-export async function addWarehouseMembership(
-  userId: string,
-  role: MemberRole,
-  warehouseIds: string[]
-) {
-  if (!role || warehouseIds.length === 0) {
-    return { error: "Pick a role and at least one warehouse." };
+// re-inviting has no effect on real access). A person holds exactly one
+// role, full stop — not chosen here, but read from profiles.default_role
+// (set once at invite time and otherwise unused as anything but a sort
+// hint elsewhere, but authoritative for this control). Every call
+// re-derives the person's *entire* warehouse_members set from their
+// current + newly-picked warehouses, all under that one role, so this
+// also self-heals anyone left holding two different roles by an earlier
+// version of this action that let the caller pass a role per call. Still
+// can't remove a warehouse entirely or touch admin status — see the
+// "no way to edit an existing member" gotcha.
+export async function addWarehouseMembership(userId: string, newWarehouseIds: string[]) {
+  if (newWarehouseIds.length === 0) {
+    return { error: "Pick at least one warehouse." };
   }
 
   const supabase = await createClient();
 
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("default_role")
+    .eq("id", userId)
+    .maybeSingle();
+  const role = profile?.default_role as MemberRole | null;
+
+  if (!role) {
+    return { error: "This person has no role on file, so they can't be tagged to a warehouse here." };
+  }
+
+  const { data: existingRows, error: readError } = await supabase
+    .from("warehouse_members")
+    .select("warehouse_id")
+    .eq("user_id", userId);
+
+  if (readError) {
+    return { error: readError.message };
+  }
+
+  const warehouseIds = Array.from(
+    new Set([...(existingRows ?? []).map((r) => r.warehouse_id), ...newWarehouseIds])
+  );
+
   const { error: deleteError } = await supabase
     .from("warehouse_members")
     .delete()
-    .eq("user_id", userId)
-    .in("warehouse_id", warehouseIds);
+    .eq("user_id", userId);
 
   if (deleteError) {
     return { error: deleteError.message };
