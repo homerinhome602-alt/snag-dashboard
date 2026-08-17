@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { MultiPhotoCaptureInput } from "@/components/photo-capture";
 import { MultiVideoCaptureInput } from "@/components/video-capture";
@@ -105,6 +106,7 @@ export function SnagComposeArea({
 }) {
   const isPureAdmin = isDashboardAdmin && !hasReporterTag && !hasResolverTag;
   const isDualReal = hasReporterTag && hasResolverTag;
+  const router = useRouter();
 
   const [body, setBody] = useState("");
   const [photos, setPhotos] = useState<PhotoCapture[]>([]);
@@ -142,6 +144,12 @@ export function SnagComposeArea({
         setError(`Posted, but an attachment failed to upload: ${r.error}`);
         return;
       }
+      // The attachment upload happens client-side after postSnagUpdate's own
+      // revalidatePath already ran, so without this the new photos/videos
+      // wouldn't show up in the feed until some later, unrelated refresh —
+      // the text bubble would appear immediately but its attachments
+      // wouldn't, even for the person who just sent them.
+      router.refresh();
     }
     setError(null);
     resetDraft();
