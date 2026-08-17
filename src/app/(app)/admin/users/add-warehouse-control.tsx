@@ -87,7 +87,7 @@ export function AddWarehouseControl({
           onSelectAll={() => setWarehouseIds(warehouses.map((w) => w.id))}
         />
 
-        <Button type="button" size="sm" disabled={pending} onClick={submit}>
+        <Button type="button" size="sm" disabled={pending || !role || warehouseIds.length === 0} onClick={submit}>
           {pending ? "Adding…" : "Add"}
         </Button>
         <Button type="button" variant="outline" size="sm" disabled={pending} onClick={reset}>
