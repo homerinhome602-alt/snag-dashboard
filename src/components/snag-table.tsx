@@ -23,6 +23,7 @@ export type SnagRow = {
   status: string;
   etc_date: string | null;
   closed_at: string | null;
+  raised_by: string;
   raised_by_profile: { full_name: string | null; email: string } | null;
 };
 
@@ -40,6 +41,7 @@ export function SnagTable({
   hasReporterTag,
   hasResolverTag,
   isDashboardAdmin,
+  rolesByUserId,
   currentUserId,
 }: {
   snags: SnagRow[];
@@ -50,6 +52,7 @@ export function SnagTable({
   hasReporterTag: boolean;
   hasResolverTag: boolean;
   isDashboardAdmin: boolean;
+  rolesByUserId: Record<string, string[]>;
   currentUserId: string;
 }) {
   if (snags.length === 0) {
@@ -96,6 +99,7 @@ export function SnagTable({
               hasReporterTag={hasReporterTag}
               hasResolverTag={hasResolverTag}
               isDashboardAdmin={isDashboardAdmin}
+              rolesByUserId={rolesByUserId}
               currentUserId={currentUserId}
             />
           ))}

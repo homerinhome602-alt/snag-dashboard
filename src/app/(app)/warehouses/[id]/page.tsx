@@ -7,7 +7,7 @@ import type { UpdateRow, AttachmentRow, ActivityRow } from "@/components/snag-ro
 import { TeamBlock } from "@/components/team-block";
 import { BurnUpChart } from "@/components/burn-up-chart";
 import { ExportButton } from "@/components/export-button";
-import { REPORTER_ROLES, RESOLVER_ROLES } from "@/lib/roles";
+import { REPORTER_ROLES, RESOLVER_ROLES, roleLabel } from "@/lib/roles";
 import { daysUntil } from "@/lib/readiness";
 import { GoLiveEditor } from "./go-live-editor";
 import { SnagFilters } from "./snag-filters";
@@ -56,7 +56,7 @@ export default async function WarehouseDetailPage({
       supabase.from("warehouse_members").select("role").eq("warehouse_id", id).eq("user_id", uid ?? ""),
       supabase
         .from("warehouse_members")
-        .select("role, profile:profiles(full_name, email)")
+        .select("user_id, role, profile:profiles(full_name, email)")
         .eq("warehouse_id", id),
       supabase
         .from("snag_daily_snapshot")
@@ -86,10 +86,19 @@ export default async function WarehouseDetailPage({
     email: (t.profile as unknown as { full_name: string | null; email: string } | null)?.email ?? "",
   }));
 
+  // Lets the chat feed show a message's author's actual operational role
+  // (e.g. "HVAC Engineer") instead of just the generic reporter/resolver
+  // bucket. A person can hold more than one role on this warehouse, so this
+  // is a list per user, joined at render time.
+  const rolesByUserId: Record<string, string[]> = {};
+  for (const t of teamRows ?? []) {
+    (rolesByUserId[t.user_id] ??= []).push(roleLabel(t.role));
+  }
+
   let query = supabase
     .from("snags")
     .select(
-      "id, serial_no, date_raised, description, category, sub_category, sub_category_other, location, scope, severity, status, etc_date, closed_at, raised_by_profile:profiles!snags_raised_by_fkey(full_name, email)"
+      "id, serial_no, date_raised, description, category, sub_category, sub_category_other, location, scope, severity, status, etc_date, closed_at, raised_by, raised_by_profile:profiles!snags_raised_by_fkey(full_name, email)"
     )
     .eq("warehouse_id", id)
     .order("serial_no", { ascending: false });
@@ -108,7 +117,7 @@ export default async function WarehouseDetailPage({
   const { data: updates } = snagIds.length
     ? await supabase
         .from("snag_updates")
-        .select("id, snag_id, body, author_side, created_at, author:profiles(full_name, email)")
+        .select("id, snag_id, body, author_id, author_side, created_at, author:profiles(full_name, email)")
         .in("snag_id", snagIds)
         .order("created_at")
     : { data: [] as never[] };
@@ -242,6 +251,7 @@ export default async function WarehouseDetailPage({
         hasReporterTag={hasReporterTag}
         hasResolverTag={hasResolverTag}
         isDashboardAdmin={isDashboardAdmin}
+        rolesByUserId={rolesByUserId}
         currentUserId={uid ?? ""}
       />
 

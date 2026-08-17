@@ -217,9 +217,13 @@ export function SnagComposeArea({
         className="w-full rounded-md border border-input bg-card px-2 py-1.5 text-[12.5px] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
       />
 
-      <div key={mediaKey} className="mt-1.5 flex flex-col gap-1.5">
-        <PhotoCaptureInput onChange={setPhoto} />
-        <VideoCaptureInput onChange={setVideo} />
+      <div key={mediaKey} className="mt-1.5 flex flex-col gap-1.5 sm:flex-row">
+        <div className="flex-1">
+          <PhotoCaptureInput onChange={setPhoto} />
+        </div>
+        <div className="flex-1">
+          <VideoCaptureInput onChange={setVideo} />
+        </div>
       </div>
 
       {showResolverControls && (

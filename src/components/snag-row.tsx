@@ -23,6 +23,7 @@ import { STICKY_SNO_CLASS, STICKY_DATE_CLASS, STICKY_DESC_CLASS } from "@/lib/ta
 export type UpdateRow = {
   id: string;
   body: string;
+  author_id: string;
   author_side: "reporter" | "resolver" | "admin";
   created_at: string;
   author: { full_name: string | null; email: string } | null;
@@ -102,12 +103,13 @@ function fmtDate(d: string) {
   return new Date(d + "T00:00:00").toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
 }
 
-function fmtDateTime(iso: string) {
+// Time before date, per feedback — "14:57 · 12 Aug" reads as a log entry
+// timestamp, matching how the format is used elsewhere in the feed.
+function fmtTimeDate(iso: string) {
   const d = new Date(iso);
-  return `${d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" })} ${d.toLocaleTimeString("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-  })}`;
+  const time = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  const date = d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+  return `${time} · ${date}`;
 }
 
 const SIDE_LABEL: Record<string, string> = {
@@ -116,14 +118,30 @@ const SIDE_LABEL: Record<string, string> = {
   admin: "Dashboard Admin",
 };
 
+// A message shows the author's actual current operational role(s) on this
+// warehouse (e.g. "HVAC Engineer") rather than the generic reporter/
+// resolver bucket — falls back to the bucket label if they're no longer
+// tagged here (or for a pure Dashboard Admin, who was never tagged at all).
+function roleTextFor(side: "reporter" | "resolver" | "admin", authorId: string, rolesByUserId: Record<string, string[]>) {
+  const roles = rolesByUserId[authorId];
+  return roles && roles.length > 0 ? roles.join(", ") : SIDE_LABEL[side];
+}
+
 // Reporters raise defects (the problem), resolvers drive them to close (the
 // fix) — reusing the palette's own warm/cool thermal thesis for who's
 // speaking, not just severity, keeps the two sides visually distinct
-// without introducing a new accent.
+// without introducing a new accent. The message box itself carries the same
+// tint now, not just the name badge.
 const SIDE_BADGE_CLASS: Record<string, string> = {
   reporter: "bg-blush text-red-deep",
   resolver: "bg-frost text-teal-deep",
   admin: "bg-line-soft text-foreground",
+};
+
+const SIDE_BOX_CLASS: Record<string, string> = {
+  reporter: "border-blush bg-blush",
+  resolver: "border-frost bg-frost",
+  admin: "border-line-soft bg-line-soft",
 };
 
 const SIDE_JUSTIFY_CLASS: Record<string, string> = {
@@ -141,12 +159,14 @@ const SIDE_ITEMS_CLASS: Record<string, string> = {
 function ChatBubble({
   side,
   authorName,
+  roleText,
   body,
   attachments,
   timestamp,
 }: {
   side: "reporter" | "resolver" | "admin";
   authorName: string;
+  roleText: string;
   body: string;
   attachments: AttachmentRow[];
   timestamp: string;
@@ -160,13 +180,20 @@ function ChatBubble({
   return (
     <div className={cn("flex", SIDE_JUSTIFY_CLASS[side])}>
       <div className={cn("flex max-w-[85%] flex-col gap-0.5", SIDE_ITEMS_CLASS[side])}>
-        <div className="flex items-center gap-1.5 text-[10.5px]">
+        <div className="flex flex-wrap items-center gap-1.5 text-[10.5px]">
+          <span className="font-mono text-faint">{timestamp}</span>
+          <span className="text-muted-foreground">·</span>
           <span className="font-medium text-foreground">{authorName}</span>
           <span className={cn("rounded-chip px-1.5 py-0.5 text-[9px] font-medium", SIDE_BADGE_CLASS[side])}>
-            {SIDE_LABEL[side]}
+            {roleText}
           </span>
         </div>
-        <div className="whitespace-normal rounded-md border border-border bg-card px-2.5 py-1.5 text-[12px] text-foreground">
+        <div
+          className={cn(
+            "whitespace-normal rounded-md border px-2.5 py-1.5 text-[12px] text-foreground",
+            SIDE_BOX_CLASS[side]
+          )}
+        >
           {body}
           {attachments.length > 0 && (
             <div className="mt-1.5">
@@ -174,16 +201,15 @@ function ChatBubble({
             </div>
           )}
         </div>
-        <span className="font-mono text-[9.5px] text-faint">{timestamp}</span>
       </div>
     </div>
   );
 }
 
-function SystemLine({ text, timestamp }: { text: string; timestamp: string }) {
+function SystemLine({ actorName, text, timestamp }: { actorName: string; text: string; timestamp: string }) {
   return (
     <div className="text-center text-[10.5px] text-muted-foreground">
-      {text} <span className="font-mono text-[9.5px] text-faint">· {timestamp}</span>
+      <span className="font-mono text-faint">{timestamp}</span> · {actorName} {text}
     </div>
   );
 }
@@ -194,18 +220,20 @@ type FeedItem =
       id: string;
       side: "reporter" | "resolver" | "admin";
       authorName: string;
+      roleText: string;
       body: string;
       attachments: AttachmentRow[];
       createdAt: string;
     }
-  | { kind: "system"; id: string; text: string; createdAt: string };
+  | { kind: "system"; id: string; actorName: string; text: string; createdAt: string };
 
 function buildFeed(
   s: SnagRowData,
   updates: UpdateRow[],
   snagPhotos: AttachmentRow[],
   attachmentsByUpdate: Map<string, AttachmentRow[]>,
-  activity: ActivityRow[]
+  activity: ActivityRow[],
+  rolesByUserId: Record<string, string[]>
 ): FeedItem[] {
   const items: FeedItem[] = [];
 
@@ -218,6 +246,7 @@ function buildFeed(
     id: `raise-${s.id}`,
     side: "reporter",
     authorName: s.raised_by_profile?.full_name ?? s.raised_by_profile?.email ?? "Someone",
+    roleText: roleTextFor("reporter", s.raised_by, rolesByUserId),
     body: s.description,
     attachments: snagPhotos,
     createdAt: raiseActivity?.created_at ?? `${s.date_raised}T00:00:00`,
@@ -229,6 +258,7 @@ function buildFeed(
       id: u.id,
       side: u.author_side,
       authorName: u.author?.full_name ?? u.author?.email ?? "Someone",
+      roleText: roleTextFor(u.author_side, u.author_id, rolesByUserId),
       body: u.body,
       attachments: attachmentsByUpdate.get(u.id) ?? [],
       createdAt: u.created_at,
@@ -237,7 +267,13 @@ function buildFeed(
 
   for (const a of activity) {
     if (a.action === "raise") continue;
-    items.push({ kind: "system", id: a.id, text: describeActivity(a), createdAt: a.created_at });
+    items.push({
+      kind: "system",
+      id: a.id,
+      actorName: a.actor?.full_name ?? a.actor?.email ?? "Someone",
+      text: describeActivity(a),
+      createdAt: a.created_at,
+    });
   }
 
   items.sort((x, y) => new Date(x.createdAt).getTime() - new Date(y.createdAt).getTime());
@@ -253,6 +289,7 @@ export function SnagRow({
   hasReporterTag,
   hasResolverTag,
   isDashboardAdmin,
+  rolesByUserId,
   currentUserId,
 }: {
   snag: SnagRowData;
@@ -263,6 +300,7 @@ export function SnagRow({
   hasReporterTag: boolean;
   hasResolverTag: boolean;
   isDashboardAdmin: boolean;
+  rolesByUserId: Record<string, string[]>;
   currentUserId: string;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -279,10 +317,9 @@ export function SnagRow({
       : SUB_CATEGORY_LABELS[s.sub_category] ?? s.sub_category;
   const latest = updates[updates.length - 1];
 
-  // Expanding scrolls the table back to the frozen columns — a colSpan
-  // cell can't itself stay sticky while the row is scrolled right (that's
-  // a real position:sticky limitation on spanning table cells), so the
-  // expanded content would otherwise open off-screen to the left.
+  // Expanding scrolls the table back to the frozen columns so the panel
+  // opens on screen — the panel itself then stays put via position:sticky
+  // (see the wrapper below) however far the table gets scrolled after that.
   function toggleExpanded(e: React.MouseEvent<HTMLTableRowElement>) {
     const container = (e.currentTarget as HTMLElement).closest<HTMLElement>('[data-slot="table-container"]');
     setExpanded((v) => {
@@ -292,7 +329,7 @@ export function SnagRow({
     });
   }
 
-  const feed = buildFeed(s, updates, snagPhotos, attachmentsByUpdate, activity);
+  const feed = buildFeed(s, updates, snagPhotos, attachmentsByUpdate, activity, rolesByUserId);
 
   return (
     <>
@@ -349,30 +386,48 @@ export function SnagRow({
       {expanded && (
         <TableRow>
           <TableCell colSpan={13} className="bg-card">
-            <div className="flex flex-col gap-2.5 py-1" onClick={(e) => e.stopPropagation()}>
+            {/* Sticks to the left edge of the table's own scroll container
+                as it's scrolled horizontally — a colSpan cell can't itself
+                be sticky (position:sticky doesn't work on a cell spanning
+                the full row width), but a plain block inside a wide cell
+                can. Width is capped well under typical viewport width so it
+                reads as a normal panel rather than stretching to match the
+                (much wider) row it's nested in. */}
+            <div
+              className="sticky left-0 z-10 flex w-[min(1000px,90vw)] flex-col gap-2.5 bg-card py-1"
+              onClick={(e) => e.stopPropagation()}
+            >
               {feed.map((item) =>
                 item.kind === "message" ? (
                   <ChatBubble
                     key={item.id}
                     side={item.side}
                     authorName={item.authorName}
+                    roleText={item.roleText}
                     body={item.body}
                     attachments={item.attachments}
-                    timestamp={fmtDateTime(item.createdAt)}
+                    timestamp={fmtTimeDate(item.createdAt)}
                   />
                 ) : (
-                  <SystemLine key={item.id} text={item.text} timestamp={fmtDateTime(item.createdAt)} />
+                  <SystemLine
+                    key={item.id}
+                    actorName={item.actorName}
+                    text={item.text}
+                    timestamp={fmtTimeDate(item.createdAt)}
+                  />
                 )
               )}
-              <SnagComposeArea
-                warehouseId={warehouseId}
-                snagId={s.id}
-                status={s.status}
-                currentUserId={currentUserId}
-                hasReporterTag={hasReporterTag}
-                hasResolverTag={hasResolverTag}
-                isDashboardAdmin={isDashboardAdmin}
-              />
+              {s.status !== "closed" && (
+                <SnagComposeArea
+                  warehouseId={warehouseId}
+                  snagId={s.id}
+                  status={s.status}
+                  currentUserId={currentUserId}
+                  hasReporterTag={hasReporterTag}
+                  hasResolverTag={hasResolverTag}
+                  isDashboardAdmin={isDashboardAdmin}
+                />
+              )}
             </div>
           </TableCell>
         </TableRow>
