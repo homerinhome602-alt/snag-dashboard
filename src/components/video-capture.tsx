@@ -40,7 +40,7 @@ export function VideoCaptureInput({ onChange }: { onChange: (capture: VideoCaptu
   return (
     <div>
       {!fileName ? (
-        <label className="flex h-10 cursor-pointer items-center justify-center rounded-md border border-dashed border-input text-[12px] text-muted-foreground hover:bg-muted">
+        <label className="flex h-14 cursor-pointer items-center justify-center rounded-md border border-dashed border-input text-[13px] text-muted-foreground hover:bg-muted">
           {busy ? "Checking…" : "Attach a video"}
           <input
             type="file"

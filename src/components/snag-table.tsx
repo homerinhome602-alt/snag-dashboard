@@ -81,7 +81,10 @@ export function SnagTable({
                   // patch against the rest of the header.
                   h === "S.No" && cn(STICKY_SNO_CLASS, "bg-line"),
                   h === "Raised" && cn(STICKY_DATE_CLASS, "bg-line"),
-                  h === "Description" && cn(STICKY_DESC_CLASS, "bg-line")
+                  h === "Description" && cn(STICKY_DESC_CLASS, "bg-line"),
+                  // Matches Description's width so the two longest-text
+                  // columns in the table read as a consistent pair.
+                  h === "Update" && "w-[290px] min-w-[290px] max-w-[290px]"
                 )}
               >
                 {h}
