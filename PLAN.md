@@ -397,6 +397,8 @@ Table of invitations: email, default role, **warehouse** (§3.2), status (invite
 - **Make/Revoke admin** is a button beside the person's email, not a separate action column — toggles `is_dashboard_admin` directly for anyone with a profile (i.e. anyone past `status = invited`)
 - Deactivate rather than delete, to preserve snag history
 
+**As built (17 Aug 2026) — a "+ Add warehouse" control per row** (`add-warehouse-control.tsx`) fills part of the gap noted in `CLAUDE.md`: `handle_new_user()` only provisions `warehouse_members` on first sign-in, so re-inviting someone already active has no effect (§3.2's `createInvitation` refuses this outright). The control lets an admin pick a role (the 6 operational roles only, not the Dashboard Admin sentinel) and one or more warehouses — "All" selects every currently active one, mirroring the invite form's own picker — and inserts new `warehouse_members` rows directly, the same admin-tables-use-plain-RLS convention as everything else in this section. Shown only for accepted, non-admin profiles (Dashboard Admin already reads/writes everywhere without a tag, and a pending invitation has no `user_id` yet to attach rows to). Additive only — there's still no way to remove a `warehouse_members` row or change `is_dashboard_admin` for someone already signed in from this screen.
+
 ### 5.7 Warehouse detail
 Opens from a card or the sidebar.
 

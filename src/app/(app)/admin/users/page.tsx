@@ -12,6 +12,7 @@ import {
 import { roleLabel } from "@/lib/roles";
 import { InviteForm } from "./invite-form";
 import { StatusToggle } from "./status-toggle";
+import { AddWarehouseControl } from "./add-warehouse-control";
 
 type Row = {
   key: string;
@@ -20,6 +21,7 @@ type Row = {
   warehouseNames: string[];
   status: "active" | "invited" | "deactivated";
   userId: string | null;
+  isDashboardAdmin: boolean;
 };
 
 export default async function UserManagementPage() {
@@ -91,6 +93,7 @@ export default async function UserManagementPage() {
       name: profile?.full_name ?? inv.email,
       role: roleText,
       userId: profile?.id ?? null,
+      isDashboardAdmin,
       status: !profile ? "invited" : profile.is_active ? "active" : "deactivated",
       // Dashboard Admin reads (and now writes) every warehouse regardless
       // of warehouse_members tags (PLAN.md §2.2, §2.3) — show that
@@ -147,13 +150,16 @@ export default async function UserManagementPage() {
                 <TableCell className="text-[13px]">{row.role}</TableCell>
                 <TableCell className="whitespace-normal text-[12.5px] text-muted-foreground">
                   {row.warehouseNames.length === 0 ? (
-                    "—"
+                    <span className="block">—</span>
                   ) : (
                     <div className="flex flex-col gap-0.5">
                       {row.warehouseNames.map((n) => (
                         <span key={n}>{n}</span>
                       ))}
                     </div>
+                  )}
+                  {row.userId && !row.isDashboardAdmin && (
+                    <AddWarehouseControl userId={row.userId} warehouses={activeWarehouses} />
                   )}
                 </TableCell>
                 <TableCell className="text-center">
