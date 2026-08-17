@@ -29,7 +29,7 @@ export default async function NewSnagPage({
   }
 
   return (
-    <div className="mx-auto w-full max-w-xl px-4 py-6 sm:max-w-3xl sm:px-6 sm:py-8 lg:max-w-4xl lg:px-[50px]">
+    <div className="mx-auto w-full max-w-screen-2xl px-4 py-6 sm:px-6 sm:py-8 lg:px-[50px]">
       <div className="rounded-card border border-border bg-card p-5 sm:p-7">
         <h1 className="text-[15px] font-medium tracking-[-0.015em] text-foreground">
           Raise a snag
