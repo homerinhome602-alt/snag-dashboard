@@ -16,9 +16,7 @@ export type QueuedSnag = {
   location: string;
   scope: string;
   severity: string;
-  photoAnnotated: Blob | null;
-  photoOriginal: Blob | null;
-  photoThumbnail: Blob | null;
+  photos: { annotated: Blob; original: Blob; thumbnail: Blob }[];
   createdAt: number;
 };
 

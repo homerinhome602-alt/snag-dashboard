@@ -2,8 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
-import { PhotoCaptureInput } from "@/components/photo-capture";
-import { VideoCaptureInput } from "@/components/video-capture";
+import { MultiPhotoCaptureInput } from "@/components/photo-capture";
+import { MultiVideoCaptureInput } from "@/components/video-capture";
 import { createClient } from "@/lib/supabase/client";
 import { uploadAttachment, type PhotoCapture, type VideoCapture } from "@/lib/media";
 import { postSnagUpdate, closeSnagDirectly, verifySnagClosure } from "@/app/(app)/warehouses/[id]/snag-actions";
@@ -13,33 +13,33 @@ async function attachDraftMedia(opts: {
   snagId: string;
   updateId: string;
   currentUserId: string;
-  photo: PhotoCapture | null;
-  video: VideoCapture | null;
+  photos: PhotoCapture[];
+  videos: VideoCapture[];
 }): Promise<{ error: string | null }> {
   const supabase = createClient();
-  if (opts.photo) {
+  for (let i = 0; i < opts.photos.length; i++) {
     const r = await uploadAttachment(supabase, {
       warehouseId: opts.warehouseId,
       snagId: opts.snagId,
       updateId: opts.updateId,
       mediaType: "image",
-      file: opts.photo.annotated,
-      original: opts.photo.original,
-      thumbnail: opts.photo.thumbnail,
-      fileName: "snag-photo.jpg",
+      file: opts.photos[i].annotated,
+      original: opts.photos[i].original,
+      thumbnail: opts.photos[i].thumbnail,
+      fileName: `snag-photo-${i + 1}.jpg`,
       uploaderId: opts.currentUserId,
     });
     if (r.error) return r;
   }
-  if (opts.video) {
+  for (let i = 0; i < opts.videos.length; i++) {
     const r = await uploadAttachment(supabase, {
       warehouseId: opts.warehouseId,
       snagId: opts.snagId,
       updateId: opts.updateId,
       mediaType: "video",
-      file: opts.video.file,
-      thumbnail: opts.video.thumbnail,
-      fileName: "snag-video.mp4",
+      file: opts.videos[i].file,
+      thumbnail: opts.videos[i].thumbnail,
+      fileName: `snag-video-${i + 1}.mp4`,
       uploaderId: opts.currentUserId,
     });
     if (r.error) return r;
@@ -107,8 +107,8 @@ export function SnagComposeArea({
   const isDualReal = hasReporterTag && hasResolverTag;
 
   const [body, setBody] = useState("");
-  const [photo, setPhoto] = useState<PhotoCapture | null>(null);
-  const [video, setVideo] = useState<VideoCapture | null>(null);
+  const [photos, setPhotos] = useState<PhotoCapture[]>([]);
+  const [videos, setVideos] = useState<VideoCapture[]>([]);
   const [mediaKey, setMediaKey] = useState(0);
   const [etc, setEtc] = useState("");
   const [nextStatus, setNextStatus] = useState("");
@@ -124,8 +124,8 @@ export function SnagComposeArea({
 
   function resetDraft() {
     setBody("");
-    setPhoto(null);
-    setVideo(null);
+    setPhotos([]);
+    setVideos([]);
     setEtc("");
     setNextStatus("");
     setMediaKey((k) => k + 1);
@@ -136,10 +136,10 @@ export function SnagComposeArea({
       setError(result.error);
       return;
     }
-    if (result.updateId && (photo || video)) {
-      const r = await attachDraftMedia({ warehouseId, snagId, updateId: result.updateId, currentUserId, photo, video });
+    if (result.updateId && (photos.length > 0 || videos.length > 0)) {
+      const r = await attachDraftMedia({ warehouseId, snagId, updateId: result.updateId, currentUserId, photos, videos });
       if (r.error) {
-        setError(`Posted, but the attachment failed to upload: ${r.error}`);
+        setError(`Posted, but an attachment failed to upload: ${r.error}`);
         return;
       }
     }
@@ -219,10 +219,10 @@ export function SnagComposeArea({
 
       <div key={mediaKey} className="mt-1.5 flex flex-col gap-1.5 sm:flex-row">
         <div className="flex-1">
-          <PhotoCaptureInput onChange={setPhoto} />
+          <MultiPhotoCaptureInput onChange={setPhotos} />
         </div>
         <div className="flex-1">
-          <VideoCaptureInput onChange={setVideo} />
+          <MultiVideoCaptureInput onChange={setVideos} />
         </div>
       </div>
 

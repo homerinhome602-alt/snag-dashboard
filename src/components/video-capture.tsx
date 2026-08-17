@@ -68,3 +68,59 @@ export function VideoCaptureInput({ onChange }: { onChange: (capture: VideoCaptu
     </div>
   );
 }
+
+// Wraps the single-shot picker above to build a list, mirroring
+// MultiPhotoCaptureInput's draft-then-commit pattern (see there for why —
+// video doesn't need it for the same reason since there's no re-editing
+// loop, but the two stay symmetric so multi-attach behaves the same way
+// for both media types).
+export function MultiVideoCaptureInput({ onChange }: { onChange: (captures: VideoCapture[]) => void }) {
+  const [captures, setCaptures] = useState<VideoCapture[]>([]);
+  const [draft, setDraft] = useState<VideoCapture | null>(null);
+  const [pickerKey, setPickerKey] = useState(0);
+
+  function addDraft() {
+    if (!draft) return;
+    const next = [...captures, draft];
+    setCaptures(next);
+    onChange(next);
+    setDraft(null);
+    setPickerKey((k) => k + 1);
+  }
+
+  function removeCapture(index: number) {
+    const next = captures.filter((_, i) => i !== index);
+    setCaptures(next);
+    onChange(next);
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      {captures.length > 0 && (
+        <div className="flex flex-col gap-1">
+          {captures.map((c, i) => (
+            <div
+              key={i}
+              className="flex items-center justify-between rounded-md border border-border px-2.5 py-1.5 text-[12px]"
+            >
+              <span className="text-foreground">{Math.round(c.durationSeconds)}s video</span>
+              <button type="button" className="text-destructive" onClick={() => removeCapture(i)}>
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <VideoCaptureInput key={pickerKey} onChange={setDraft} />
+      {draft && (
+        <button
+          type="button"
+          onClick={addDraft}
+          className="self-start text-[11.5px] font-medium text-primary hover:underline"
+        >
+          + Add this video
+        </button>
+      )}
+    </div>
+  );
+}

@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { PhotoCaptureInput } from "@/components/photo-capture";
+import { MultiPhotoCaptureInput } from "@/components/photo-capture";
 import { DuplicateCheckModal } from "@/components/duplicate-check-modal";
 import { createClient } from "@/lib/supabase/client";
 import { uploadAttachment, type PhotoCapture } from "@/lib/media";
@@ -70,7 +70,7 @@ export function AddSnagForm({
   const [location, setLocation] = useState("");
   const [scope, setScope] = useState("");
   const [severity, setSeverity] = useState("");
-  const [photo, setPhoto] = useState<PhotoCapture | null>(null);
+  const [photos, setPhotos] = useState<PhotoCapture[]>([]);
   const [duplicates, setDuplicates] = useState<DuplicateCandidate[] | null>(null);
 
   const isComplete = Boolean(
@@ -105,21 +105,23 @@ export function AddSnagForm({
       return;
     }
 
-    if (photo) {
+    if (photos.length > 0) {
       const supabase = createClient();
-      const uploadResult = await uploadAttachment(supabase, {
-        warehouseId,
-        snagId: result.snagId,
-        mediaType: "image",
-        file: photo.annotated,
-        original: photo.original,
-        thumbnail: photo.thumbnail,
-        fileName: "snag-photo.jpg",
-        uploaderId: currentUserId,
-      });
-      if (uploadResult.error) {
-        setError(`Snag raised, but the photo failed to upload: ${uploadResult.error}`);
-        return;
+      for (let i = 0; i < photos.length; i++) {
+        const uploadResult = await uploadAttachment(supabase, {
+          warehouseId,
+          snagId: result.snagId,
+          mediaType: "image",
+          file: photos[i].annotated,
+          original: photos[i].original,
+          thumbnail: photos[i].thumbnail,
+          fileName: `snag-photo-${i + 1}.jpg`,
+          uploaderId: currentUserId,
+        });
+        if (uploadResult.error) {
+          setError(`Snag raised, but a photo failed to upload: ${uploadResult.error}`);
+          return;
+        }
       }
     }
 
@@ -146,9 +148,7 @@ export function AddSnagForm({
           location,
           scope,
           severity,
-          photoAnnotated: photo?.annotated ?? null,
-          photoOriginal: photo?.original ?? null,
-          photoThumbnail: photo?.thumbnail ?? null,
+          photos: photos.map((p) => ({ annotated: p.annotated, original: p.original, thumbnail: p.thumbnail })),
           createdAt: Date.now(),
         });
         setQueued(true);
@@ -199,9 +199,9 @@ export function AddSnagForm({
 
         <div>
           <Label className="mb-1.5 text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
-            Photo (optional)
+            Photos (optional)
           </Label>
-          <PhotoCaptureInput onChange={setPhoto} />
+          <MultiPhotoCaptureInput onChange={setPhotos} />
         </div>
       </div>
 

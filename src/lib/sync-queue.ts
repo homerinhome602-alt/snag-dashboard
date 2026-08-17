@@ -52,15 +52,15 @@ async function syncOne(
 
   const snagId = (data as { id: string }).id;
 
-  if (item.photoAnnotated && item.photoOriginal && item.photoThumbnail) {
+  for (let i = 0; i < item.photos.length; i++) {
     const upload = await uploadAttachment(supabase, {
       warehouseId: item.warehouseId,
       snagId,
       mediaType: "image",
-      file: item.photoAnnotated,
-      original: item.photoOriginal,
-      thumbnail: item.photoThumbnail,
-      fileName: "snag-photo.jpg",
+      file: item.photos[i].annotated,
+      original: item.photos[i].original,
+      thumbnail: item.photos[i].thumbnail,
+      fileName: `snag-photo-${i + 1}.jpg`,
       uploaderId,
     });
     if (upload.error) return { error: upload.error };

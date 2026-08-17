@@ -149,3 +149,70 @@ export function PhotoCaptureInput({ onChange }: { onChange: (capture: PhotoCaptu
     </div>
   );
 }
+
+function PhotoChip({ thumbnail, onRemove }: { thumbnail: Blob; onRemove: () => void }) {
+  const [url] = useState(() => URL.createObjectURL(thumbnail));
+  useEffect(() => () => URL.revokeObjectURL(url), [url]);
+  return (
+    <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-md border border-border">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={url} alt="" className="h-full w-full object-cover" />
+      <button
+        type="button"
+        onClick={onRemove}
+        className="absolute right-0 top-0 flex h-4 w-4 items-center justify-center rounded-bl-md bg-destructive text-[10px] text-white"
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
+// Wraps the single-shot editor above to build a list. PhotoCaptureInput's
+// onChange fires repeatedly while one photo is being annotated (each drag
+// re-emits the updated blobs), so appending straight from onChange would
+// duplicate entries — this tracks the in-progress photo as a draft and only
+// commits it to the list on an explicit "Add" tap, then remounts a fresh
+// picker (via key) for the next one.
+export function MultiPhotoCaptureInput({ onChange }: { onChange: (captures: PhotoCapture[]) => void }) {
+  const [captures, setCaptures] = useState<PhotoCapture[]>([]);
+  const [draft, setDraft] = useState<PhotoCapture | null>(null);
+  const [pickerKey, setPickerKey] = useState(0);
+
+  function addDraft() {
+    if (!draft) return;
+    const next = [...captures, draft];
+    setCaptures(next);
+    onChange(next);
+    setDraft(null);
+    setPickerKey((k) => k + 1);
+  }
+
+  function removeCapture(index: number) {
+    const next = captures.filter((_, i) => i !== index);
+    setCaptures(next);
+    onChange(next);
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      {captures.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {captures.map((c, i) => (
+            <PhotoChip key={i} thumbnail={c.thumbnail} onRemove={() => removeCapture(i)} />
+          ))}
+        </div>
+      )}
+      <PhotoCaptureInput key={pickerKey} onChange={setDraft} />
+      {draft && (
+        <button
+          type="button"
+          onClick={addDraft}
+          className="self-start text-[11.5px] font-medium text-primary hover:underline"
+        >
+          + Add this photo
+        </button>
+      )}
+    </div>
+  );
+}
