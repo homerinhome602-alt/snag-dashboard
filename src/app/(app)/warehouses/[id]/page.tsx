@@ -46,7 +46,7 @@ export default async function WarehouseDetailPage({
   const { data: auth } = await supabase.auth.getClaims();
   const uid = auth?.claims?.sub;
 
-  const [{ data: w }, { data: membership }, { data: teamRows }, { data: snapshots }, { data: me }] =
+  const [{ data: w }, { data: membership }, { data: teamRows }, { data: snapshots }, { data: me }, { data: allProfiles }] =
     await Promise.all([
       supabase
         .from("warehouse_readiness")
@@ -64,6 +64,7 @@ export default async function WarehouseDetailPage({
         .eq("warehouse_id", id)
         .order("snapshot_date"),
       supabase.from("profiles").select("is_dashboard_admin").eq("id", uid ?? "").maybeSingle(),
+      supabase.from("profiles").select("id, is_dashboard_admin"),
     ]);
 
   if (!w) notFound();
@@ -94,6 +95,13 @@ export default async function WarehouseDetailPage({
   for (const t of teamRows ?? []) {
     (rolesByUserId[t.user_id] ??= []).push(roleLabel(t.role));
   }
+
+  // A message's role badge should say "Dashboard Admin" for someone who
+  // posted via the admin bypass with no real tag here — not the generic
+  // reporter/resolver bucket label, which isn't true of them. Needed
+  // separately from rolesByUserId since admin status is global, not scoped
+  // to this warehouse's membership rows.
+  const adminUserIds = (allProfiles ?? []).filter((p) => p.is_dashboard_admin).map((p) => p.id);
 
   let query = supabase
     .from("snags")
@@ -252,6 +260,7 @@ export default async function WarehouseDetailPage({
         hasResolverTag={hasResolverTag}
         isDashboardAdmin={isDashboardAdmin}
         rolesByUserId={rolesByUserId}
+        adminUserIds={adminUserIds}
         currentUserId={uid ?? ""}
       />
 

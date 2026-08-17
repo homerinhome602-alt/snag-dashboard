@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { TableCell, TableRow } from "@/components/ui/table";
 import {
   CATEGORY_LABELS,
@@ -119,12 +119,25 @@ const SIDE_LABEL: Record<string, string> = {
 };
 
 // A message shows the author's actual current operational role(s) on this
-// warehouse (e.g. "HVAC Engineer") rather than the generic reporter/
-// resolver bucket — falls back to the bucket label if they're no longer
-// tagged here (or for a pure Dashboard Admin, who was never tagged at all).
-function roleTextFor(side: "reporter" | "resolver" | "admin", authorId: string, rolesByUserId: Record<string, string[]>) {
+// warehouse (e.g. "HVAC Engineer") when they're tagged with one — real role
+// always wins over any bucket label, since the bucket is about which side
+// of the thread a message sits on, not a description of the person. Next,
+// "Dashboard Admin" if they hold no tag here but are a real admin (this
+// matters most for the raise bubble, which always sits on the reporter
+// side even when an admin bypassed to raise it — the badge should still
+// say what they actually are). The generic reporter/resolver bucket is
+// only a last resort, for someone with neither a current tag nor admin
+// status (e.g. fully removed from the org, message kept for the record).
+function roleTextFor(
+  side: "reporter" | "resolver" | "admin",
+  authorId: string,
+  rolesByUserId: Record<string, string[]>,
+  adminUserIds: string[]
+) {
   const roles = rolesByUserId[authorId];
-  return roles && roles.length > 0 ? roles.join(", ") : SIDE_LABEL[side];
+  if (roles && roles.length > 0) return roles.join(", ");
+  if (adminUserIds.includes(authorId)) return "Dashboard Admin";
+  return SIDE_LABEL[side];
 }
 
 // Reporters raise defects (the problem), resolvers drive them to close (the
@@ -233,7 +246,8 @@ function buildFeed(
   snagPhotos: AttachmentRow[],
   attachmentsByUpdate: Map<string, AttachmentRow[]>,
   activity: ActivityRow[],
-  rolesByUserId: Record<string, string[]>
+  rolesByUserId: Record<string, string[]>,
+  adminUserIds: string[]
 ): FeedItem[] {
   const items: FeedItem[] = [];
 
@@ -246,7 +260,7 @@ function buildFeed(
     id: `raise-${s.id}`,
     side: "reporter",
     authorName: s.raised_by_profile?.full_name ?? s.raised_by_profile?.email ?? "Someone",
-    roleText: roleTextFor("reporter", s.raised_by, rolesByUserId),
+    roleText: roleTextFor("reporter", s.raised_by, rolesByUserId, adminUserIds),
     body: s.description,
     attachments: snagPhotos,
     createdAt: raiseActivity?.created_at ?? `${s.date_raised}T00:00:00`,
@@ -258,7 +272,7 @@ function buildFeed(
       id: u.id,
       side: u.author_side,
       authorName: u.author?.full_name ?? u.author?.email ?? "Someone",
-      roleText: roleTextFor(u.author_side, u.author_id, rolesByUserId),
+      roleText: roleTextFor(u.author_side, u.author_id, rolesByUserId, adminUserIds),
       body: u.body,
       attachments: attachmentsByUpdate.get(u.id) ?? [],
       createdAt: u.created_at,
@@ -290,6 +304,7 @@ export function SnagRow({
   hasResolverTag,
   isDashboardAdmin,
   rolesByUserId,
+  adminUserIds,
   currentUserId,
 }: {
   snag: SnagRowData;
@@ -301,9 +316,15 @@ export function SnagRow({
   hasResolverTag: boolean;
   isDashboardAdmin: boolean;
   rolesByUserId: Record<string, string[]>;
+  adminUserIds: string[];
   currentUserId: string;
 }) {
   const [expanded, setExpanded] = useState(false);
+  // Measures the table's own scroll container so the panel below can match
+  // its exact visible width — confined to the screen and dynamic across
+  // breakpoints/sidebar-collapse, not a guessed fixed pixel cap.
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [panelWidth, setPanelWidth] = useState<number | null>(null);
   const snagPhotos = attachments.filter((a) => a.update_id === null);
   const attachmentsByUpdate = new Map<string, AttachmentRow[]>();
   for (const a of attachments) {
@@ -329,7 +350,23 @@ export function SnagRow({
     });
   }
 
-  const feed = buildFeed(s, updates, snagPhotos, attachmentsByUpdate, activity, rolesByUserId);
+  // container.clientWidth is the scroll container's *visible* width — it
+  // already accounts for the sidebar's current state, page padding, and the
+  // viewport size, so tracking it (via ResizeObserver, for window resizes
+  // and sidebar expand/collapse alike) gives the panel the exact width of
+  // the screen area actually available, not an approximation of it.
+  useEffect(() => {
+    if (!expanded) return;
+    const container = panelRef.current?.closest<HTMLElement>('[data-slot="table-container"]');
+    if (!container) return;
+    const update = () => setPanelWidth(container.clientWidth);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [expanded]);
+
+  const feed = buildFeed(s, updates, snagPhotos, attachmentsByUpdate, activity, rolesByUserId, adminUserIds);
 
   return (
     <>
@@ -385,18 +422,23 @@ export function SnagRow({
       </TableRow>
       {expanded && (
         <TableRow>
-          <TableCell colSpan={13} className="bg-card">
+          <TableCell colSpan={13} className="bg-background p-0">
             {/* Sticks to the left edge of the table's own scroll container
                 as it's scrolled horizontally — a colSpan cell can't itself
                 be sticky (position:sticky doesn't work on a cell spanning
                 the full row width), but a plain block inside a wide cell
-                can. Width is capped well under typical viewport width so it
-                reads as a normal panel rather than stretching to match the
-                (much wider) row it's nested in. */}
+                can. Width is measured off that same container (see the
+                ResizeObserver above) so the panel always matches the
+                actually-visible screen area instead of a guessed cap. */}
             <div
-              className="sticky left-0 z-10 flex w-[min(1000px,90vw)] flex-col gap-2.5 bg-card py-1"
+              ref={panelRef}
+              className="sticky left-0 z-10 flex w-[90vw] flex-col gap-2.5 border-x-2 border-border bg-background px-3 py-3 shadow-[inset_0_1px_0_0_var(--card)]"
+              style={panelWidth ? { width: panelWidth } : undefined}
               onClick={(e) => e.stopPropagation()}
             >
+              <p className="text-[9px] font-medium uppercase tracking-[0.07em] text-faint">
+                Snag #{s.serial_no} — updates
+              </p>
               {feed.map((item) =>
                 item.kind === "message" ? (
                   <ChatBubble

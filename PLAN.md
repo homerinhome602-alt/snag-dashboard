@@ -454,12 +454,18 @@ No real-time push: the other party sees a new message on their own next action o
 
 **Revised again (17 Aug 2026)**, after live feedback on the first version:
 
-- **The panel stays put while the table is scrolled horizontally.** It's nested inside a colSpan cell (which can't itself be sticky — a real `position:sticky` limitation on table cells spanning the full row width), but a plain block *inside* that wide cell can be, sticking to the left edge of the table's own scroll container. Width is capped well under typical viewport width so it reads as a normal panel rather than stretching to match the row.
+- **The panel stays put while the table is scrolled horizontally.** It's nested inside a colSpan cell (which can't itself be sticky — a real `position:sticky` limitation on table cells spanning the full row width), but a plain block *inside* that wide cell can be, sticking to the left edge of the table's own scroll container.
 - **A closed snag has no compose box at all** — not just the close/verify buttons hidden, the entire comment/photo/video section. There's nothing left to do once a snag is closed.
 - **Every message and system line now leads with time, then date, then the person** — `14:57 · 12 Aug · Vaibhav Sharma`, reading like a log entry — instead of the name-first layout the first version shipped with.
 - **The message body sits in a tinted box matching its side** — the reporter's warm blush, the resolver's cool frost, admin's neutral line-soft — not a plain white box with just a colored name badge.
-- **The badge shows the author's actual operational role** (e.g. "HVAC Engineer", "PMO") when they're currently tagged with one on this warehouse, looked up fresh at render time — not the generic Reporter/Resolver/Dashboard Admin bucket, which is now only the fallback for someone no longer tagged (or a pure Dashboard Admin, who was never tagged at all).
+- **The badge shows the author's actual operational role** (e.g. "HVAC Engineer", "PMO") when they're currently tagged with one on this warehouse, looked up fresh at render time — not the generic Reporter/Resolver/Dashboard Admin bucket.
 - **Photo and video sit side by side** in the compose box, not stacked, on screens wide enough for it (stacks again below `sm` — this section isn't part of the mobile-first raise flow in §5.8, but the compose box still renders on a phone-width browser if someone opens it there).
+
+**Revised a third time (17 Aug 2026)**, after a further round of live feedback on the panel's sizing, visual weight, and badge accuracy:
+
+- **Panel width is measured, not capped.** The earlier `w-[min(1000px,90vw)]` guess is gone — a `ResizeObserver` on the table's own scroll container (`[data-slot="table-container"]`) reads its live `clientWidth` and the panel matches it exactly, so it always fills the actually-visible screen area regardless of sidebar state or viewport size, and stays in sync across resizes rather than being set once.
+- **The panel now reads as a distinct screen, not more table.** It sits on `bg-background` (the page's warm `--ground` tone) inside a bordered block with its own padding and a small "SNAG #N — UPDATES" micro-label header, instead of sharing the table body's plain white `bg-card` — the two were visually indistinguishable before this pass.
+- **The badge's real-role-first rule got one more tier.** A message from someone with no current tag on this warehouse but real Dashboard Admin status now shows "Dashboard Admin" — not the generic bucket label. This mattered most for the raise bubble, which always sits on the reporter side for positioning regardless of who raised it; an admin bypassing to raise a snag was showing "Reporter" on their own message, which isn't true of them. Priority is now: real tagged role(s) on this warehouse > "Dashboard Admin" (untagged admin) > the generic side bucket, the last-resort case for someone with neither (e.g. removed from the org, message kept for the record). See `roleTextFor()` in `snag-row.tsx`.
 
 ---
 

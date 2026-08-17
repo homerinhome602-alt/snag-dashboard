@@ -42,6 +42,7 @@ export function SnagTable({
   hasResolverTag,
   isDashboardAdmin,
   rolesByUserId,
+  adminUserIds,
   currentUserId,
 }: {
   snags: SnagRow[];
@@ -53,6 +54,7 @@ export function SnagTable({
   hasResolverTag: boolean;
   isDashboardAdmin: boolean;
   rolesByUserId: Record<string, string[]>;
+  adminUserIds: string[];
   currentUserId: string;
 }) {
   if (snags.length === 0) {
@@ -100,6 +102,7 @@ export function SnagTable({
               hasResolverTag={hasResolverTag}
               isDashboardAdmin={isDashboardAdmin}
               rolesByUserId={rolesByUserId}
+              adminUserIds={adminUserIds}
               currentUserId={currentUserId}
             />
           ))}
