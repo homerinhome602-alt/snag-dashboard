@@ -42,7 +42,16 @@ export function MultiSelectFilter({
     if (!open || !triggerRef.current) return;
     function updatePosition() {
       const rect = triggerRef.current!.getBoundingClientRect();
-      setPosition({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+      // Flip above the trigger when there isn't room below (e.g. the last
+      // row in a table near the bottom of the page) but there's more room
+      // above — panelRef already has its real rendered height at this
+      // point since layout effects run after the portal's DOM is
+      // committed, so this doesn't need a guessed/max height.
+      const panelHeight = panelRef.current?.offsetHeight ?? 0;
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const openUpward = spaceBelow < panelHeight + 8 && rect.top > spaceBelow;
+      const top = openUpward ? rect.top - 4 - panelHeight : rect.bottom + 4;
+      setPosition({ top, left: rect.left, width: rect.width });
     }
     updatePosition();
     window.addEventListener("scroll", updatePosition, true);

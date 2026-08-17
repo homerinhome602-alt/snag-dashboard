@@ -47,7 +47,7 @@ export default async function UserManagementPage() {
         .order("created_at"),
       supabase.from("profiles").select("id, email, full_name, is_active, is_dashboard_admin"),
       supabase.from("warehouses").select("id, name, is_active").order("name"),
-      supabase.from("warehouse_members").select("user_id, role, warehouse:warehouses(name)"),
+      supabase.from("warehouse_members").select("user_id, warehouse_id, role, warehouse:warehouses(name)"),
     ]);
 
   const activeWarehouses = (warehouses ?? []).filter((w) => w.is_active);
@@ -55,6 +55,7 @@ export default async function UserManagementPage() {
   const profileByEmail = new Map((profiles ?? []).map((p) => [p.email, p]));
 
   const membershipsByUser = new Map<string, Set<string>>();
+  const warehouseIdsByUser = new Map<string, Set<string>>();
   const rolesByUser = new Map<string, Set<string>>();
   for (const m of memberships ?? []) {
     const warehouseName = (m.warehouse as unknown as { name: string } | null)?.name;
@@ -64,6 +65,8 @@ export default async function UserManagementPage() {
     // warehouse name itself should only ever appear once per person.
     if (!membershipsByUser.has(m.user_id)) membershipsByUser.set(m.user_id, new Set());
     membershipsByUser.get(m.user_id)!.add(warehouseName);
+    if (!warehouseIdsByUser.has(m.user_id)) warehouseIdsByUser.set(m.user_id, new Set());
+    warehouseIdsByUser.get(m.user_id)!.add(m.warehouse_id);
     if (!rolesByUser.has(m.user_id)) rolesByUser.set(m.user_id, new Set());
     rolesByUser.get(m.user_id)!.add(m.role);
   }
@@ -159,7 +162,12 @@ export default async function UserManagementPage() {
                     </div>
                   )}
                   {row.userId && !row.isDashboardAdmin && (
-                    <AddWarehouseControl userId={row.userId} warehouses={activeWarehouses} />
+                    <AddWarehouseControl
+                      userId={row.userId}
+                      warehouses={activeWarehouses.filter(
+                        (w) => !warehouseIdsByUser.get(row.userId!)?.has(w.id)
+                      )}
+                    />
                   )}
                 </TableCell>
                 <TableCell className="text-center">
