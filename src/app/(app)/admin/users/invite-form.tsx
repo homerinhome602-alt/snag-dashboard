@@ -17,11 +17,25 @@ import { createInvitation } from "./actions";
 type State = { error: string | null; success: boolean };
 type Warehouse = { id: string; name: string };
 
+// Not a real warehouse_id — picking it is shorthand for "every warehouse in
+// the list right now" and gets expanded to the real ids client-side before
+// anything is stored, so it never reaches the server as a literal value.
+const ALL_WAREHOUSES_VALUE = "__all_warehouses__";
+
 export function InviteForm({ warehouses }: { warehouses: Warehouse[] }) {
   const [formKey, setFormKey] = useState(0);
   const [warehouseIds, setWarehouseIds] = useState<string[]>([]);
   const [role, setRole] = useState<string | null>(null);
   const isAdminPick = role === DASHBOARD_ADMIN_VALUE;
+  // Picking "All" selects every warehouse in one go; use "Clear" in the
+  // dropdown (shown once anything's selected) to go back to none. Not
+  // tracked as its own checked state — it's a one-way shortcut, not a
+  // fifth warehouse — so the button's "(N)" count always reflects real
+  // warehouses only.
+  function handleWarehouseChange(next: string[]) {
+    setWarehouseIds(next.includes(ALL_WAREHOUSES_VALUE) ? warehouses.map((w) => w.id) : next);
+  }
+
   const [state, formAction, pending] = useActionState<State, FormData>(
     async (_prev, formData) => {
       const result = await createInvitation(formData);
@@ -63,9 +77,13 @@ export function InviteForm({ warehouses }: { warehouses: Warehouse[] }) {
           <>
             <MultiSelectFilter
               label="Warehouse"
-              options={warehouses.map((w) => ({ value: w.id, label: w.name }))}
+              emptySuffix=""
+              options={[
+                { value: ALL_WAREHOUSES_VALUE, label: "All" },
+                ...warehouses.map((w) => ({ value: w.id, label: w.name })),
+              ]}
               selected={warehouseIds}
-              onChange={setWarehouseIds}
+              onChange={handleWarehouseChange}
               className="w-56"
             />
             {warehouseIds.map((id) => (

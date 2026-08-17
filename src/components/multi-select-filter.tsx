@@ -8,12 +8,19 @@ export function MultiSelectFilter({
   selected,
   onChange,
   className,
+  emptySuffix = ": All",
 }: {
   label: string;
   options: { value: string; label: string }[];
   selected: string[];
   onChange: (next: string[]) => void;
   className?: string;
+  // Table filters read correctly as "Status: All" when nothing's picked —
+  // no filter means every row matches. That's not true everywhere this
+  // component is reused (e.g. an invite form, where nothing picked means
+  // no warehouse tag at all, not "all warehouses") — callers there should
+  // pass "" so the button just reads as a plain placeholder.
+  emptySuffix?: string;
 }) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -44,7 +51,7 @@ export function MultiSelectFilter({
         } ${className ?? ""}`}
       >
         {label}
-        {selected.length > 0 ? ` (${selected.length})` : ": All"}
+        {selected.length > 0 ? ` (${selected.length})` : emptySuffix}
       </button>
       {open && (
         <div className="absolute z-20 mt-1 max-h-56 w-44 overflow-y-auto rounded-md border border-border bg-card py-1 shadow-md">
