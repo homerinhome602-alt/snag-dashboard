@@ -403,7 +403,7 @@ export function SnagRow({
             {STATUS_LABELS[s.status] ?? s.status}
           </span>
         </TableCell>
-        <TableCell className="w-[190px] min-w-[190px] max-w-[190px] whitespace-normal break-words text-[11px]">
+        <TableCell className="w-[380px] min-w-[380px] max-w-[380px] whitespace-normal break-words text-[11px]">
           {latest ? (
             <>
               <div className="text-[11.5px] text-foreground">{latest.body}</div>

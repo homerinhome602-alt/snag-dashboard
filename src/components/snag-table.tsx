@@ -85,10 +85,9 @@ export function SnagTable({
                   // Wraps onto multiple lines in the body instead of
                   // truncating, so a fixed width here just bounds the
                   // column rather than clipping the update text.
-                  h === "Update" && "w-[190px] min-w-[190px] max-w-[190px]",
-                  // Caps long names/emails so one wide value doesn't push
-                  // the whole table past the viewport and force horizontal
-                  // scroll to see the rest of the columns.
+                  h === "Update" && "w-[380px] min-w-[380px] max-w-[380px]",
+                  // Caps long names/emails so one long value doesn't blow
+                  // out the column's width relative to the rest of the row.
                   h === "Raised by" && "max-w-[130px]"
                 )}
               >
