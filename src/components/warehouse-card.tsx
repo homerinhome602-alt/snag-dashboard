@@ -52,7 +52,7 @@ export function WarehouseCard({ w }: { w: WarehouseReadiness }) {
       <Thermometer color={color} position={position} />
       <div className="flex gap-4.5">
         <div>
-          <div className="font-mono text-[20px] leading-none" style={color === "red" ? { color: "#C75B4E" } : undefined}>
+          <div className={cn("font-mono text-[20px] leading-none", color === "red" && "text-red")}>
             {w.open_count}
           </div>
           <div className="text-[9px] text-faint">open</div>

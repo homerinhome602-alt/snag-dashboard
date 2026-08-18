@@ -4,7 +4,46 @@
 **Status:** **Built.** All ten phases shipped — see §14 for what landed and where the build diverged from this plan.
 **Stack (as built):** Next.js App Router + TypeScript + Tailwind + shadcn/ui · Supabase (Auth / Postgres / Storage)
 
-> This document is both the specification and the record. Sections marked **as built** were reconciled against the running code and database on 9 Aug 2026, most recently updated 11 Aug 2026 for the warehouse-scoped visibility, onboarding, and audit-history round. Where the build diverged from the original plan, the divergence is described rather than quietly overwritten — the reasoning matters more than the tidiness.
+> This document is both the specification and the record. Sections marked **as built** were reconciled against the running code and database on 9 Aug 2026, most recently a full line-by-line audit against the live schema, RLS policies, and every route/component on 18 Aug 2026 (the round that found and fixed the §5.4/5.5 warehouse-management staleness and the previously-undocumented `warehouse_activity` table). Where the build diverged from the original plan, the divergence is described rather than quietly overwritten — the reasoning matters more than the tidiness.
+
+---
+
+## 0. Setup — what a fresh environment needs
+
+Everything required to stand this app up from nothing, so a rebuild doesn't have to reverse-engineer it from the running instance.
+
+**Runtime dependencies** (`package.json`, versions as pinned — see there for the exact devDependency list too, mainly Tailwind 4 and the TypeScript/ESLint toolchain):
+
+| Package | Version | Role |
+|---|---|---|
+| `next` | 16.3.0 | App Router framework. **Not the Next.js in most training data** — breaking changes; middleware is renamed `proxy` (`src/proxy.ts`, matched by `AGENTS.md`'s standing instruction to read `node_modules/next/dist/docs/` before writing Next-specific code) |
+| `react` / `react-dom` | 19.2.8 | |
+| `@supabase/supabase-js` | ^2.112.2 | DB/Auth/Storage client |
+| `@supabase/ssr` | ^0.12.4 | Cookie-based session helpers for `lib/supabase/{client,server,proxy}.ts` |
+| `@base-ui/react` | ^1.7.0 | Headless primitives underlying `components/ui/*` (Select, etc.) |
+| `shadcn` | ^4.16.2 | CLI/registry the `ui/` primitives were generated from |
+| `tailwindcss` | ^4 (devDependency) | Utility CSS; v4's CSS-first config, no `tailwind.config.js` — tokens live in `globals.css`'s `@theme` block |
+| `tailwind-merge` / `clsx` | ^3.6.0 / ^2.1.1 | Back `lib/utils.ts`'s `cn()` |
+| `class-variance-authority` | ^0.7.1 | Variant styling for `ui/button.tsx` etc. |
+| `lucide-react` | ^1.30.0 | Icon set (sort arrows, chevrons, etc.) |
+| `exceljs` | ^4.4.0 | Import/export (§8) |
+| `tw-animate-css` | ^1.4.0 | Animation utility classes |
+
+**Environment variables** (`.env.local`, gitignored) — exactly two, both used identically in `lib/supabase/client.ts`, `server.ts`, and `proxy.ts`:
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+
+**`.mcp.json`** (committed, not secret) holds only the Supabase project ref, wiring up the `mcp__supabase__*` tools for whoever's developing — `{"mcpServers":{"supabase":{"type":"http","url":"https://mcp.supabase.com/mcp?project_ref=<ref>&features=..."}}}`.
+
+**Postgres extensions actually used** (the project has dozens of Supabase's default-available extensions listed as installable; these are the ones actually `installed_version`-active and load-bearing):
+- `pgcrypto` — `gen_random_uuid()`, every table's PK default
+- `pg_trgm` — `extensions.similarity()`, duplicate detection (§7)
+- `pg_cron` — the daily snapshot job (§12.1)
+- `uuid-ossp` — installed alongside `pgcrypto`, not directly called by any function in this schema (`gen_random_uuid()` from `pgcrypto` is what's actually used)
+
+**Supabase Storage:** one bucket, `attachments` — **private** (not public), 50MB (`52428800` bytes) file size limit, `allowed_mime_types` restricted to `image/jpeg`, `image/png`, `image/webp`, `video/mp4`, `video/webm`, `video/quicktime`. Objects are served via signed URL (§6), never a public bucket URL. Path convention: `{warehouse_id}/{snag_id}/{8-char-random-id}[.ext | -thumb.jpg | -original.jpg]` — the storage INSERT policy parses `warehouse_id` back out of the path's first folder segment to run the same reporter/resolver/admin check the `attachments` table's own INSERT policy runs (§4.1), so the two must stay in sync if the path convention ever changes.
+
+**Migrations are Supabase-project-only, not version-controlled** — see the CLAUDE.md gotcha. `mcp__supabase__list_migrations` (or `npx supabase migration list`) is the only reliable inventory; as of this audit there were 29, from `phase0_extensions_types_tables` through `move_warehouse_admin_to_reporter`.
 
 ---
 
@@ -80,24 +119,26 @@ Extends Supabase `auth.users`, created on first sign-in.
 |---|---|---|
 | `id` | uuid PK | FK → `auth.users.id` |
 | `email` | text unique | The join key to `invitations` |
-| `full_name` | text | From Google profile, or entered on password signup |
-| `is_dashboard_admin` | boolean | The only **global** role |
-| `default_role` | enum | Pre-selected in the Add Warehouse pickers; not authoritative |
-| `is_active` | boolean | Deactivate leavers without deleting history |
+| `full_name` | text | Entered on password signup (§5.1 — Google sign-in was attempted and reverted; password is the only auth method built) |
+| `is_dashboard_admin` | boolean default `false` | The only **global** role |
+| `default_role` | enum, nullable | Set once at invite time (§3.2), null for a Dashboard Admin invite. **As built**, this became load-bearing rather than a hint: `addWarehouseMembership` (§5.6) treats it as a person's one authoritative role when tagging them onto more warehouses post-signup — see §2.1's narrowing note and the CLAUDE.md gotcha |
+| `is_active` | boolean default `true` | Deactivate leavers without deleting history |
 | `created_at` | timestamptz | |
+
+**Read access is wide open** — `profiles_select_all` grants `SELECT` on this entire table to any authenticated user, `USING (true)`, no scoping at all. Unlike every warehouse-scoped table (§2.3), knowing someone's name/email/admin status isn't treated as sensitive per-warehouse information — every signed-in user can look up every other signed-in user's profile row, active or not.
 
 The admin still enters one email + one role on the User Management screen — that value lands in `default_role`. The **authoritative** role is per warehouse, in `warehouse_members`.
 
 ### 3.2 `invitations`
-Backs the admin User Management screen and gates Google sign-in.
+Backs the admin User Management screen and gates sign-in (password only — see §5.1, the plan's original "Sign in with Google" option was never built).
 
 | Column | Type |
 |---|---|
 | `id` | uuid PK |
 | `email` | text unique |
-| `default_role` | enum |
-| `grant_dashboard_admin` | boolean — **as built**, not in the original plan |
-| `warehouse_id` | uuid FK → warehouses, nullable — **as built**, not in the original plan |
+| `default_role` | enum, nullable |
+| `grant_dashboard_admin` | boolean default false — **as built**, not in the original plan |
+| `warehouse_ids` | uuid[] default `'{}'` — **as built**, not in the original plan. Migration `warehouse_code_redesign_and_multi_warehouse_invite` (11 Aug 2026) widened this from a single nullable `warehouse_id` to an array, alongside the warehouse-creation redesign in the same migration (§5.4/§5.5) — one invitation can tag someone onto several warehouses at once |
 | `invited_by` | uuid FK → profiles |
 | `created_at` / `accepted_at` | timestamptz |
 
@@ -117,9 +158,10 @@ Admin enters **email + role** (+ optionally warehouse), one-to-one. On first sig
 | `name` | text unique | |
 | `go_live_date` | date **nullable** | Set by resolvers from the warehouse screen, not at creation |
 | `snag_counter` | int default 0 | Backs per-warehouse serial numbers |
-| `site_location` | text | Optional. **As built** — dropped from both the create and rename forms after feedback; the column and RPC parameter still exist (always passed `null`) but nothing in the UI sets it |
+| `site_location` | text nullable | **As built** — the column and the `create_warehouse` RPC parameter still exist, but no path in the current UI sets it (§5.4/5.5's create form never had a field for it after the redesign — not "dropped after feedback" as originally noted, it simply wasn't part of the replacement form) |
 | `created_by` | uuid FK → profiles | |
 | `created_at` | timestamptz | |
+| `is_active` | boolean default `true` — **as built**, not in the original plan | Toggled by §5.5's Activate/Deactivate. Filters the sidebar and landing grid (both query `eq("is_active", true)` client-side) but is **not** checked by any RLS policy — `warehouses_select_scoped` has no `is_active` condition, so a deactivated warehouse's detail page, snags, and history all stay fully reachable by direct URL for anyone already tagged to it or a Dashboard Admin. `warehouse_readiness` (§ below) also doesn't filter on it — the view returns every warehouse regardless of active status, so any query against it needs to intersect with an explicit `is_active` fetch, the way both the sidebar and landing page do |
 
 The six tagged people are **not** columns here — they live in `warehouse_members`, which avoids six near-identical FK columns and lets the header block be rendered from one query.
 
@@ -128,9 +170,11 @@ Single source of truth for both tagging and the detail-screen header.
 
 | Column | Type |
 |---|---|
+| `id` | uuid PK |
 | `warehouse_id` | uuid FK |
 | `user_id` | uuid FK → profiles |
 | `role` | enum: `operations`, `hvac_engineer`, `program_manager_infra`, `pmc`, `pmo`, `warehouse_admin` |
+| `created_at` | timestamptz |
 
 `UNIQUE (warehouse_id, user_id, role)` — **many people may hold the same role** in one warehouse. Three HVAC engineers and two PMCs on a single warehouse is fine. The previous one-person-per-role constraint is removed.
 
@@ -138,7 +182,22 @@ Single source of truth for both tagging and the detail-screen header.
 
 **This table is the authority on permissions, and now on read access too (§2.3).** Every write check reads it: "does `auth.uid()` hold a reporter role in this warehouse?" A user with no row here for a given warehouse cannot read it or write to it — Dashboard Admins are the one exception, and only for reads (§2.2).
 
-Rows are populated two ways: directly, via Manage warehouse (§5.5) adding or removing people from an existing warehouse's team; or automatically, when someone with an invitation carrying a `warehouse_id` (§3.2) signs in for the first time.
+Rows are populated two ways, **neither of which is Manage warehouse (§5.4/5.5) — that screen has no member-tagging UI at all**: automatically, when someone with an invitation carrying `warehouse_ids` (§3.2) signs in for the first time; or directly via the "+ Add warehouse" control on the People screen (§5.6) for someone already signed in. There is no UI path to remove a row from this table (delete it) — only to add to it or overwrite `role` for warehouses already held.
+
+### 3.4a `warehouse_activity` — **undocumented table, not in the original plan**
+
+Append-only audit log for **warehouse-level** administrative actions, structurally identical to `snag_activity` (§3.13) but scoped to `warehouses` rather than `snags`. Added in the same migration that redesigned warehouse creation (`warehouse_activity_grants`, 11 Aug 2026), backing the "status history" expand-row on the Manage warehouse screen (§5.4/5.5).
+
+| Column | Type |
+|---|---|
+| `id` | uuid PK |
+| `warehouse_id` | uuid FK |
+| `actor_id` | uuid FK → profiles, nullable |
+| `action` | text — currently `create`, `activate`, `deactivate` |
+| `field` / `old_value` / `new_value` | text, nullable — only populated for `activate`/`deactivate` (`field = "is_active"`); `create` rows leave all three null |
+| `created_at` | timestamptz |
+
+Both RLS policies (`SELECT`, `INSERT`) are `private.is_dashboard_admin()` only — nobody else can read or write this table, matching the fact that only admins can reach the screen that shows it.
 
 ### 3.5 `snags`
 
@@ -162,9 +221,9 @@ Rows are populated two ways: directly, via Manage warehouse (§5.5) adding or re
 | `closed_at` | timestamptz | system |
 | `created_at` / `updated_at` | timestamptz | system |
 
-**Derived, not stored** (computed in a view so they're never stale):
+**Derived, not stored** — computed in the `snags_with_derived` view (`security_invoker = true`, per §2.3's rule on views over RLS-protected tables) so they're never stale. Not currently queried anywhere in the frontend — every screen that needs ageing/overdue computes it client-side instead, in `lib/snags.ts`'s `ageingDays()`/`isOverdue()`, from the same two source columns. The view exists as the schema's own record of the derivation and is the one to extend if a future screen needs it server-side (e.g. sorting/filtering by ageing at the database level):
 - `ageing_days` = `coalesce(closed_at::date, current_date) − date_raised`
-- `is_overdue` = `etc_date < current_date AND status <> 'closed'`
+- `is_overdue` = `etc_date is not null AND etc_date < current_date AND status <> 'closed'`
 
 ### 3.6 Severity
 
@@ -267,20 +326,22 @@ Append-only audit log: actor, action, field, old value, new value, timestamp. Ev
 
 ## 4. Column-level permissions
 
-Reporters and resolvers write different columns of the same row, and Postgres RLS is row-level only. All writes therefore go through RPC functions, each accepting only its role's fields and checking `auth.uid()` membership internally:
+Reporters and resolvers write different columns of the same row, and Postgres RLS is row-level only. All writes therefore go through `SECURITY DEFINER` RPC functions in `public` (all with `SET search_path TO ''`, so every reference inside them is schema-qualified), each accepting only its role's fields and checking `auth.uid()` membership internally. Exact signatures, as built:
 
-- `raise_snag(...)` — any reporter tagged to the warehouse; allocates serial number, stamps `date_raised` and `raised_by`, records suppressed duplicate ids
-- `post_snag_update(snag_id, body, etc_date, status, acting_as)` — **as built (14 Aug 2026)**: open to both reporters and resolvers, not resolver-only as originally planned — `acting_as` states which hat the caller is posting under, verified server-side against their real membership (or Dashboard Admin bypass), never trusted from the client. `etc_date`/`status` are rejected outright unless `acting_as = 'resolver'` (§5.7.1)
-- `verify_snag_closure(snag_id, approved, body?)` — any tagged reporter; requires `ready_to_close`. `body` is optional (**as built**, 14 Aug 2026) — if supplied, posts as a real chat message on the reporter's side alongside the status change instead of just a system line
-- `close_snag_directly(snag_id, body?)` — **as built**; any tagged reporter, from any status (§3.9). Same optional `body` treatment as `verify_snag_closure`
-- `set_go_live_date(warehouse_id, date)` — any resolver tagged to the warehouse
-- `correct_date_raised(snag_id, new_date)` — **Dashboard Admin only**; writes to `snag_activity`
-- `find_similar_snags(...)` — duplicate detection (§7)
-- `create_warehouse(name, site_location, members)` — admin; warehouse + member rows in one transaction
-- `set_user_active(user_id, is_active)` · `set_dashboard_admin(user_id, is_admin)` — admin
-- `refresh_snag_daily_snapshot()` — called by the `pg_cron` job
+- `raise_snag(p_warehouse_id uuid, p_description text, p_category snag_category, p_sub_category snag_sub_category, p_location snag_location, p_scope snag_scope, p_severity snag_severity, p_sub_category_other text, p_id uuid, p_suppressed_duplicate_ids uuid[]) returns snags` — any reporter tagged to the warehouse, or Dashboard Admin; allocates serial number, stamps `date_raised` and `raised_by`, records suppressed duplicate ids. `p_id` lets the caller supply the row's own uuid — the offline-raise path (§5.8) generates it client-side so a locally-queued snag has a stable identity before it's ever synced
+- `post_snag_update(p_snag_id uuid, p_body text, p_etc_date date, p_status snag_status, p_acting_as text) returns snag_updates` — **as built (14 Aug 2026)**: open to both reporters and resolvers, not resolver-only as originally planned — `p_acting_as` (`'reporter'` or `'resolver'`) states which hat the caller is posting under, verified server-side against their real membership (or Dashboard Admin bypass), never trusted from the client. `p_etc_date`/`p_status` are rejected outright unless `p_acting_as = 'resolver'`; `p_status` may only move to `wip` or `ready_to_close` (§5.7.1)
+- `verify_snag_closure(p_snag_id uuid, p_approved boolean, p_body text) returns snag_action_result` — any tagged reporter, or Dashboard Admin; requires `ready_to_close`. `p_body` is optional (**as built**, 14 Aug 2026) — if supplied and non-empty, posts as a real chat message on the reporter's side alongside the status change instead of just a system line
+- `close_snag_directly(p_snag_id uuid, p_body text) returns snag_action_result` — **as built**; any tagged reporter, or Dashboard Admin, from any status (§3.9). Same optional `p_body` treatment as `verify_snag_closure`
+- `set_go_live_date(p_warehouse_id uuid, p_date date) returns warehouses` — any resolver tagged to the warehouse, or Dashboard Admin
+- `correct_date_raised(p_snag_id uuid, p_new_date date) returns snags` — **Dashboard Admin only**, no bypass-of-a-tag needed since this power was never tag-gated to begin with; writes to `snag_activity`
+- `find_similar_snags(p_warehouse_id uuid, p_location snag_location, p_sub_category snag_sub_category, p_description text, p_threshold real default 0.3) returns table(id uuid, serial_no integer, description text, status snag_status, raised_by_name text, similarity real)` — duplicate detection (§7); `extensions.similarity()` from `pg_trgm`, ranked descending, `limit 10`, callable by anyone who can read the warehouse (no reporter/resolver gate — checking for duplicates isn't a write)
+- `create_warehouse(p_name text, p_site_location text, p_members jsonb) returns warehouses` — admin; warehouse + member rows (from a `{user_id, role}[]` JSON array) in one transaction. **Still deployed, no longer called by anything in the frontend** — see §5.4/5.5's dead-code note; the live create path is `createWarehouseCode`, a plain insert, not this RPC
+- `set_user_active(p_user_id uuid, p_is_active boolean) returns profiles` · `set_dashboard_admin(p_user_id uuid, p_is_admin boolean) returns profiles` — admin. `set_dashboard_admin` has no caller in the current frontend either (admin status can only be *granted* today, at invite time via `invitations.grant_dashboard_admin` — §3.2 — never toggled after signup; see the CLAUDE.md gotcha on editing existing members)
+- `refresh_snag_daily_snapshot() returns void` — no permission check of its own; not exposed to `authenticated`/`anon` (see §12.1's grant note), called only by the `pg_cron` job
 
-Note that none of these accept a Dashboard Admin bypass except `correct_date_raised`. An admin who has not tagged themselves into a warehouse is rejected by the same check as anyone else.
+Dashboard Admin bypasses the reporter/resolver tag check (`private.is_dashboard_admin()` OR'd into the check) on every one of the above **except** `correct_date_raised`, which was already admin-only before the bypass existed and needs no OR, and `find_similar_snags`/`refresh_snag_daily_snapshot`, which aren't tag-gated in the first place (§2.2).
+
+Two non-RPC `SECURITY DEFINER` functions complete the picture: `handle_new_user()` (no args, `returns trigger`, fires `AFTER INSERT ON auth.users` as `on_auth_user_created` — §3.2/§5.1) and `set_updated_at()` (no args, `returns trigger`, `SECURITY INVOKER` not DEFINER, fires `BEFORE UPDATE ON snags` as `snags_set_updated_at` — the generic "stamp `updated_at = now()`" trigger, not itself a permission boundary).
 
 ### 4.1 As built — the rule applies to snags, not to everything
 
@@ -289,12 +350,12 @@ The "never a raw `UPDATE`" rule turned out to be the right constraint for **snag
 | Tables | Write path | Enforced by |
 |---|---|---|
 | `snags`, `snag_updates` | **RPC only** | No `UPDATE` or `DELETE` policy exists at all — direct writes are impossible, not merely discouraged |
-| `warehouses`, `warehouse_members`, `invitations` | Direct table access | Admin-only RLS policies on insert / update / delete |
-| `attachments` | Direct insert | Member-scoped insert policy; select open to all |
+| `warehouses`, `warehouse_members`, `invitations`, `warehouse_activity` | Direct table access | Admin-only RLS policies on insert / update / delete (`warehouse_activity`: insert + select only, no update/delete policy at all — it's append-only by omission, not by an explicit block) |
+| `attachments` | Direct insert | Member-scoped insert policy (reporter or resolver on that snag's warehouse, or Dashboard Admin); select scoped to warehouse membership |
 
 The reasoning: the RPCs exist to stop one role overwriting another role's columns on a shared row. Warehouse and user administration has no such problem — it is admin-only end to end, so a policy expresses the rule more simply than a function would.
 
-Worth knowing when reading the code: warehouse rename, delete, and member add/remove are plain PostgREST calls in `warehouses/manage/actions.ts`, not RPCs. That is intentional, not an oversight.
+Worth knowing when reading the code: warehouse creation and activate/deactivate are plain PostgREST calls in `warehouses/manage/actions.ts` (`createWarehouseCode`, `setWarehouseActive`), not RPCs — despite `create_warehouse` existing as an RPC (above), it isn't the one actually called. There is currently no rename or member add/remove capability anywhere, RPC or direct, reachable from the UI (§5.4/5.5).
 
 Keep these in a non-exposed schema with explicit `auth.uid()` checks in the body.
 
@@ -302,11 +363,14 @@ Keep these in a non-exposed schema with explicit `auth.uid()` checks in the body
 
 ## 5. Screens
 
-### 5.1 Login
-- **Sign in with Google** — primary
-- **Email + password** — equal fallback, for third-party HVAC engineers and OEM contractors who have no Google account
-- Both routes are gated by `invitations`. An uninvited email is rejected with "Your account has not been set up — contact your administrator."
-- Password route needs: invite email with a set-password link, plus forgot-password
+### 5.1 Login — **as built, password-only**
+
+The original plan specified Google sign-in as primary with password as a fallback for contractors without a Google account. **Google sign-in was built, then tried live and reverted** — password is the only auth method in the app today. Two distinct pages cover the two cases, both gated by `invitations`:
+
+- **`/set-password`** (first-time signup) — full name + email + password + confirm password → `supabase.auth.signUp()`. This fires `handle_new_user()` (§3.2, §4), the trigger that checks `invitations` for a matching email and creates the `profiles` row — **no matching invitation → the signup itself fails**, surfaced by `setPassword()` (`app/set-password/actions.ts`) as an inferred `not_invited` error (Supabase doesn't return a distinct error code for a trigger exception, so the action rules out weak-password and already-exists first, then assumes not-invited by elimination).
+- **`/login`** (returning users) — email + password → `signInWithPassword()`. Failure redirects to `/login?error=invalid_credentials`.
+- **`/forgot-password`** → `/auth/update-password`, via `/auth/confirm` (a `route.ts` handler that calls `verifyOtp()` on the emailed token, then redirects). Always shows the same "check your email" message regardless of whether the address exists — Supabase never reveals that. **Known gap:** the Supabase-side "Reset Password" email template still uses the default `{{ .ConfirmationURL }}` rather than being repointed at `/auth/confirm`, so the emailed link doesn't actually work yet — a one-time dashboard edit outside this codebase's reach (see the CLAUDE.md gotcha for the exact template string needed).
+- Session state: `@supabase/ssr` cookies, refreshed on every request by `src/proxy.ts` (Next.js 16 renamed middleware to "proxy" — `AGENTS.md`) calling `updateSession()` (`lib/supabase/proxy.ts`), which gates every route except `/login`, `/auth/*`, `/forgot-password`, `/set-password` by requiring `getClaims()` to return a user — redirecting to `/login` otherwise. `getClaims()`, not `getSession()`, is deliberate: it's the call that actually verifies the JWT signature server-side.
 
 Because the gate is the email address, a user invited as `x@company.com` must sign in with exactly that address — a personal Gmail will not match. The User Management screen should say so.
 
@@ -354,29 +418,23 @@ A warehouse with no date cannot be assessed for readiness, so it drops below eve
 - **Warehouse management** — Dashboard Admin only. Renamed from "+ Add Warehouse" once the screen grew Manage-existing capability (§5.5)
 - **User Management** — Dashboard Admin only, lives here per your instruction
 
-### 5.4 Add Warehouse (Admin only)
+### 5.4 – 5.5 Warehouse management (Admin only) — **rebuilt (11 Aug 2026), the plan below no longer describes what's built**
 
-**As built** — this is the "Add new" tab of **Warehouse management** (renamed from a standalone "Add Warehouse" screen once Manage-existing, §5.5, was added alongside it).
+The original plan (preserved as a footnote at the end of this section) specified a rich "Add Warehouse" onboarding form — name + site location + six searchable multi-select role pickers, tagging the whole team at creation — plus a separate "Manage warehouse" screen for rename / add-remove members / two-step-confirm delete. **None of that shipped as described.** Migration `warehouse_code_redesign_and_multi_warehouse_invite` (11 Aug 2026) replaced it with something much simpler, and the plan text was never reconciled against the change until this pass (18 Aug 2026). What's actually live, at `/warehouses/manage` (`warehouse-code-manager.tsx`):
 
-Name (no site location — see §3.3) + six **searchable multi-select** pickers: Operations, HVAC Engineer, Program Manager (Infra), PMC, PMO, Warehouse Admin. Each accepts **any number of people** — three HVAC engineers on one warehouse is normal. Selected people render as role-coloured chips, matching the six fixed role colours used everywhere else in the product (team block, table, pickers).
+- **Create** — one field, a free-text "warehouse code" (stored in `warehouses.name`; despite the label there's no distinct code/name split, no uniqueness check client-side beyond the DB's `name unique` constraint, no `site_location` field at all). No member tagging happens here — a new warehouse starts with zero rows in `warehouse_members`. People are tagged onto it afterwards, either by inviting them with that warehouse in `invitations.warehouse_ids` (§3.2, §5.6) or via the "+ Add warehouse" control on an existing member (§5.6).
+- **Activate / Deactivate** — toggles `warehouses.is_active` (§3.3). A deactivated warehouse disappears from the sidebar and landing grid for everyone (both queries filter `is_active = true` — `app-shell.tsx`'s layout query and `page.tsx`'s landing query) but its detail page, snags and history are all still directly reachable by URL for anyone who was already tagged to it or is a Dashboard Admin — deactivating does not touch RLS, only visibility in these two listings.
+- **Status history** — clicking a row expands an inline log of every `create`/`activate`/`deactivate` event on that warehouse, from `warehouse_activity` (§3.4a), each line "`{time} · {actor} {action}`".
+- **No rename, no delete, no member management** anywhere in this UI. `StatusFilter` (`status-filter.tsx`) lets the admin filter the list to All / Active / Deactivated.
 
-Each picker lists all active users, sorted so that people whose `default_role` matches the slot appear first — a hint, not a restriction. Each has an inline "invite" escape hatch. **No go-live date field** — resolvers set it later from the detail screen.
+**What still exists in the database but is unreachable from the UI** — worth knowing if you're extending this screen, since a rebuild that only reads the frontend would miss all three:
+- The `create_warehouse(name, site_location, members jsonb)` RPC from the original plan is still deployed, unchanged, and still fully functional (admin-only, inserts the warehouse and every member row in one transaction) — nothing in the current frontend calls it. `createWarehouseCode` (`manage/actions.ts`) does a plain two-column insert instead.
+- `components/role-people-picker.tsx` (the searchable multi-select role picker described below) is not imported by anything — dead code left over from the original onboarding form.
+- The `warehouses_delete_admin` RLS policy (`DELETE`, admin-only) is still live in Postgres — see the ⚠️ below. There is no UI path to it, but it is one authenticated PostgREST/SQL call away for any Dashboard Admin.
 
-**"Add me" affordance:** because Dashboard Admin grants no operational rights (§2.2), the form needs a prominent one-click way for the admin to tag themselves into a role on the warehouse they are creating. Without it, an admin creates a warehouse they cannot then participate in — and the failure would only become obvious later, from the detail screen, which is a bad time to discover it.
+#### ⚠️ Warehouse deletion is still possible at the database layer, and is destructive and irreversible
 
-### 5.5 Manage warehouse — **as built**, not in the original plan
-
-The original plan covered creation only. Three management capabilities were added during the build, all Dashboard Admin only, all on the manage screen:
-
-| Action | Notes |
-|---|---|
-| **Rename** | Plain update on `warehouses.name`. Empty names rejected client-side |
-| **Add / remove members** | Insert and delete on `warehouse_members`, so a team can change after creation. Existing member chips show a × to remove; add-only was the original scope, remove was added on feedback |
-| **Delete warehouse** | Two-step confirm ("Delete warehouse" → "Delete \"X\"? This can't be undone." + Cancel / Yes, delete). ⚠️ See the warning below |
-
-#### ⚠️ Deleting a warehouse is destructive and irreversible
-
-`snags.warehouse_id` carries `ON DELETE CASCADE`, and every snag child table cascades in turn. Deleting one warehouse silently destroys:
+`snags.warehouse_id` carries `ON DELETE CASCADE`, and every snag child table cascades in turn. Deleting one warehouse would silently destroy:
 
 ```
 warehouses
@@ -384,14 +442,26 @@ warehouses
                           → snag_activity     (the audit trail)
                           → attachments
  └── warehouse_members
+ └── warehouse_activity   (this warehouse's own status-history log)
  └── snag_daily_snapshot  (all burn-up history)
 ```
 
-There is no soft delete and no archive — only the two-step confirm above stands between a click and permanent loss. **The audit trail goes with it** — which is precisely the record you would want if a deletion were ever disputed.
+There is no soft delete and no archive. The only thing standing between a delete and permanent loss is that no button in the current UI issues one — the underlying capability (RLS policy + cascade) was never removed when the button was. **The audit trail goes with it** — precisely the record you would want if a deletion were ever disputed.
 
-This sits awkwardly against the deliberate "deactivate, never delete" rule for users in §5.6, where preserving history was the stated reason. The same argument applies at least as strongly to a warehouse carrying months of snags.
+This sits awkwardly against the deliberate "deactivate, never delete" rule for users in §5.6, where preserving history was the stated reason. The same argument applies at least as strongly to a warehouse carrying months of snags — deactivation, not deletion, is the only offered path today, which is consistent with that reasoning even though it wasn't stated as the rationale at the time.
 
-**Recommended follow-up:** add `warehouses.archived_at` and filter archived sites out of the sidebar and landing grid, reserving hard delete for genuine mistakes made minutes after creation. Deliberately recorded here rather than silently fixed, because it is a product decision, not a bug.
+<details>
+<summary>Original plan text for this section (superseded — kept for historical reference only, do not build against it)</summary>
+
+**Add Warehouse (Admin only).** Name + site location + six **searchable multi-select** pickers: Operations, HVAC Engineer, Program Manager (Infra), PMC, PMO, Warehouse Admin. Each accepts **any number of people** — three HVAC engineers on one warehouse is normal. Selected people render as role-coloured chips. Each picker lists all active users, sorted so that people whose `default_role` matches the slot appear first — a hint, not a restriction. Each has an inline "invite" escape hatch. No go-live date field — resolvers set it later. **"Add me" affordance:** because Dashboard Admin grants no operational rights, the form needs a one-click way for the admin to tag themselves into a role on the warehouse they're creating.
+
+**Manage warehouse.** Rename (plain update on `warehouses.name`), add/remove members (insert/delete on `warehouse_members`), and a two-step-confirm delete.
+
+</details>
+
+### 5.4a `components/role-people-picker.tsx` — dead code, documented for completeness
+
+Since a rebuild working only from a component inventory might otherwise wire this back in and assume it's load-bearing: this is the searchable multi-select "pick people for a role" control the original onboarding form (above) would have used. It renders, has no compile errors, and isn't broken — it's simply not imported anywhere in the current app. Leave it alone unless the onboarding-at-creation flow is deliberately being rebuilt.
 
 ### 5.6 User Management (Admin only)
 Table of invitations: email, default role, **warehouse** (§3.2), status (invited / active / deactivated), and Dashboard Admin status. Add a row = email + role + optional warehouse, one-to-one.
@@ -529,6 +599,8 @@ On submit, before the snag is written:
 
 Requires the `pg_trgm` extension and a GIN index on `description`.
 
+**As built:** `find_similar_snags(p_warehouse_id, p_location, p_sub_category, p_description, p_threshold real DEFAULT 0.3)`, called from `snags/new/actions.ts`'s `findSimilarSnags()` without passing `p_threshold` — always the RPC's own default. Ranks by `extensions.similarity()` against `description`, capped at `limit 10` candidates. See §4 for the full signature.
+
 ---
 
 ## 8. Excel import / export
@@ -543,8 +615,8 @@ Requires the `pg_trgm` extension and a GIN index on `description`.
 | Phase | Scope |
 |---|---|
 | **0** | Schema, enums, RLS, RPC functions, `pg_trgm`, **`snag_daily_snapshot` + `pg_cron` job**, seed first admin |
-| **1** | Google + password auth, invitation gate, profiles, User Management |
-| **2** | Warehouse CRUD with multi-select pickers, sidebar, landing cards + readiness gate |
+| **1** | Google + password auth *(as planned; Google was later reverted — password only, §5.1)*, invitation gate, profiles, User Management |
+| **2** | Warehouse CRUD with multi-select pickers *(as planned; the shipped create flow is code-only, §5.4–5.5)*, sidebar, landing cards + readiness gate |
 | **3** | Snag table, Add Snag, severity/sub-category/location, ageing + overdue |
 | **4** | Warehouse detail header: team, metrics, **burn-up chart** |
 | **5** | Update log with timestamps, resolver inline editing |
@@ -562,13 +634,13 @@ The snapshot job moves to Phase 0 deliberately — see §12.1. Everything else c
 | Question | Decision |
 |---|---|
 | Role model | **Per warehouse.** `default_role` on the invitation is a hint; `warehouse_members.role` is authoritative. Dashboard Admin is the only global role |
-| Login | **Google + email/password**, both gated by the invitation list |
+| Login | **Password only** (§5.1) — gated by the invitation list. Google sign-in was built, tried live, then reverted |
 | Sub-category | **No filtering** — all eleven always available under both categories |
 | Media storage | **Supabase Storage**, private buckets, signed URLs, client-side compression |
 | Serial number | Auto, per warehouse, atomic counter |
 | Status | Resolvers drive to `ready_to_close`; **any tagged reporter** verifies closure — or closes directly from any status (§3.9) |
 | Visibility | Scoped to warehouse membership; Dashboard Admin reads everything (§2.3) |
-| Dashboard Admin scope | User management + create/rename/delete warehouse + correct `date_raised` + read everywhere. Must self-tag for any write |
+| Dashboard Admin scope | User management + create/deactivate warehouse (no rename or delete in the UI, §5.4–5.5) + correct `date_raised` + read everywhere + bypass reporter/resolver on every snag-adjacent write (§2.2). Must self-tag for any write the bypass doesn't cover |
 | Date raised | Auto on raise; **Dashboard Admin only** may correct it, audited |
 | People per role | **Many** per role per warehouse — multi-select pickers |
 | Launch-readiness gate | On landing cards: total open · open High · go-live date, RAG coloured |
@@ -610,7 +682,7 @@ The snapshot job moves to Phase 0 deliberately — see §12.1. Everything else c
 
 ### 12.1 Data required
 
-A daily snapshot per warehouse, written by a `pg_cron` job:
+A daily snapshot per warehouse, written by a `pg_cron` job (jobname `snag-daily-snapshot`, schedule `5 0 * * *` — 00:05 UTC daily, `select public.refresh_snag_daily_snapshot();`). The function has no `authenticated`/`anon` grant — only `postgres`/`service_role` can call it, so it's unreachable from the app itself even in principle; the cron job is the only caller.
 
 | Column | Purpose |
 |---|---|
@@ -639,7 +711,7 @@ The chart derives entirely from this table, which keeps it a cheap indexed read 
 
 ## 14. Implementation status — as built
 
-All ten phases shipped, then eight further rounds of live feedback and fixes (2ce86fb → 900ee51 at last count). 17 migrations applied — `supabase migration list`, or `mcp__supabase__list_migrations`, is the source of truth; this document does not try to enumerate them.
+All ten phases shipped, then many further rounds of live feedback and fixes. Migration count keeps climbing — `mcp__supabase__list_migrations` (or `supabase migration list` against a pulled-down copy) is the source of truth; this document does not try to enumerate them or keep a running count.
 
 | Phase | Commit | State |
 |---|---|---|
@@ -670,6 +742,13 @@ Each is documented in place above; collected here so nothing is missed on a skim
 | `snag_activity` gained a viewer ("View history"), later folded into the chat feed and the toggle removed | §3.13, §5.7.1 |
 | Dashboard Admin gained a fourth power: bypass reporter/resolver on all snag RPCs | §2.2 |
 | Update thread rebuilt from a resolver-only dot timeline into a two-sided reporter/resolver chat | §5.7.1 |
+| Google sign-in was built, then reverted — password is the only auth method | §5.1 |
+| Warehouse onboarding rebuilt from a rich multi-role form into a code-only create; rename/delete/member-management dropped from the UI (though `create_warehouse`, the delete RLS policy, and `role-people-picker.tsx` all still exist unreachably) | §5.4 – 5.5, §5.4a |
+| `warehouse_admin` moved from the resolver group to the reporter group | §2.1 |
+| `warehouse_activity` — an audit-log table for warehouse create/activate/deactivate, structurally parallel to `snag_activity` but never in the original plan | §3.4a |
+| `profiles` gained a fully-open, unscoped `SELECT` policy (`profiles_select_all`) — anyone authenticated can read any profile, unlike every other table's per-warehouse scoping | §3.1 |
+
+**Dead code, deployed but unreachable from the UI** — not a divergence in behaviour, but worth knowing before assuming any of these are load-bearing: the `create_warehouse` RPC (§5.4 – 5.5), `components/role-people-picker.tsx` (§5.4a), and the `warehouses_delete_admin` RLS policy (§5.4 – 5.5 ⚠️).
 
 ### 14.2 UI behaviour added after the plan was written
 

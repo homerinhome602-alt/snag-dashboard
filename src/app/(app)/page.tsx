@@ -46,7 +46,7 @@ export default async function Home() {
               <div className="text-[9px] uppercase tracking-[0.07em] text-faint">Open</div>
             </div>
             <div>
-              <div className="font-mono text-[22px] leading-none" style={{ color: "#C75B4E" }}>
+              <div className="font-mono text-[22px] leading-none text-red">
                 {totals.openHigh}
               </div>
               <div className="text-[9px] uppercase tracking-[0.07em] text-faint">Open high</div>

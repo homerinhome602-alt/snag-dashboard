@@ -2,7 +2,7 @@
 
 **Direction:** Thermal gradient (A), with the snag table adopting the denser mono treatment from Panel & seam (B).
 
-**Status:** Built and verified against the running code on 9 Aug 2026, most recently re-checked 11 Aug 2026. The palette and all three typefaces shipped as specified — see §Implementation for how they are wired, and for the layout and motion behaviour added during live testing.
+**Status:** Built and verified against the running code on 9 Aug 2026, most recently re-checked 18 Aug 2026 as part of a full plan/design/CLAUDE.md audit. The palette and all three typefaces shipped as specified — see §Implementation for how they are wired, and for the layout and motion behaviour added during live testing.
 
 ---
 
@@ -41,6 +41,8 @@ Consequence: saturated warm tones are reserved for attention states. A screen wi
 Severity: high `--red` · medium `--amber` · low `--frost`
 Status: open `--blush` · in progress `--sky` · ready to close `--mint` · closed neutral
 
+**Known exception to "never hardcode a hex" — `#EFC6BC`.** `warehouse-card.tsx`'s red-state card border (`style={color === "red" ? { borderColor: "#EFC6BC" } : undefined}`) doesn't match any token above — closest is `--blush` (`#FBE4DE`) but it's visibly not the same value. Found during the 18 Aug 2026 audit; left as an inline style rather than silently swapped to the nearest token, since that would be an unreviewed visual change. Two other inline-hex instances in the same audit (`page.tsx`'s and this file's `#C75B4E` numerals) were fixed to `text-red`, since that token already resolves to the identical hex — this one wasn't, because no token matches it.
+
 ---
 
 ## Type
@@ -77,6 +79,21 @@ Sentence case everywhere except mono table headers, which are uppercase to separ
 ## Signature: the readiness thermometer
 
 Ten fixed bands running `--frost` → `--coral` → `--red`, with a triangular marker showing where a warehouse sits.
+
+**As built**, `components/thermometer.tsx` hardcodes the ten band hexes as a literal array rather than deriving them from the token table above — a deliberate exception, since a smooth 10-step gradient interpolated between just `--frost`/`--coral`/`--red` needs intermediate stops no single named token provides:
+
+```
+["#DCEAEE", "#E1EBEC", "#E8ECEA", "#EFEBE6", "#F5E9E2",
+ "#FBE4DE", "#F6D4CB", "#F0BFB2", "#E89484", "#D9756A"]
+```
+
+The triangular marker's fill is a separate small map, keyed by the same RAG colour name used everywhere else (`lib/readiness.ts`):
+
+```
+{ red: "#C75B4E", amber: "#B98A5E", green: "#6E9CA6", grey: "#A8938D" }
+```
+
+`grey`'s hex here is stale relative to the current `--faint` (`#876E67`, darkened 12 Aug 2026) — but it's unreachable in practice, since the grey/no-go-live-date case returns before a marker ever renders, so it's noted here rather than fixed.
 
 It is a **gauge, not a progress bar** — the scale is fixed and identical on every card, so warehouses can be compared against each other at a glance rather than each against itself. Marker position derives from the readiness formula in `PLAN.md` §5.2.1.
 
@@ -133,10 +150,12 @@ Self-hosted by `next/font`, so there is no external request and no flash of fall
 --foreground → --ink        --accent     → --blush
 --card       → --surface    --border     → --line
 --muted      → --line-soft  --ring       → --red
---destructive → --red
+--destructive → --red       --input      → --line
 ```
 
 Consequence: **change a token in one place and every shadcn component follows.** Never hardcode a hex in a component — the mapping is the whole point.
+
+**As built**, the same `@theme inline` block in `globals.css` also carries shadcn's full expected token set beyond the core mapping above — `--chart-1` through `--chart-5` (unused: the burn-up chart draws its two lines directly from `--red`/`--teal`, not the chart tokens) and the `--sidebar-*` family (`--sidebar`, `--sidebar-foreground`, `--sidebar-primary`, `--sidebar-accent`, `--sidebar-border`, `--sidebar-ring`), plus the radius scale: `--radius-card: 0.875rem` (14px, matching "Radii — cards 14" above), `--radius-pill: 1.25rem` (20px), `--radius-chip: 0.25rem` (4px, matching "table chips 4"). These exist so shadcn primitives (`Sidebar`, chart components) resolve to the palette automatically if ever used, even though the app's own components mostly reach for the token classes directly rather than the shadcn primitives.
 
 ### Sticky columns
 
@@ -158,6 +177,8 @@ Total 420px pinned.
 
 Collapses to an icon rail. Content is **fully hidden when collapsed**, not clipped or overflowing — a partially-visible label reads as a rendering fault. The Home link lives inside that same hidden content, so it only appears once the rail is open, with a divider separating it from the warehouse list. Sticky-positioned so it (and the top header) stay in place while the page scrolls. Reveals Warehouse management and User management only to Dashboard Admins, and the warehouse list itself only shows warehouses the current user can read (`PLAN.md` §2.3).
 
+**As built, the open/collapse trigger is hover, not click.** `app-shell.tsx`'s outer `<nav>` sets `open` state directly from `onMouseEnter`/`onMouseLeave` — entering the rail always forces it open, leaving always forces it closed. A hamburger button nested inside also carries its own `onClick` toggle, but since the hover handlers re-decide `open` on every enter/leave regardless of the button's own state, the click toggle is functionally superseded rather than an equal second way to operate it. `SIDEBAR_WIDTH = "11.5rem"`, `SIDEBAR_COLLAPSED = "3rem"`.
+
 ### Component map
 
 Where each design element lives:
@@ -177,10 +198,13 @@ Where each design element lives:
 | Duplicate warning modal | `components/duplicate-check-modal.tsx` |
 | Offline queue and sync banner | `lib/offline-queue.ts`, `lib/sync-queue.ts`, `components/pending-sync-banner.tsx` |
 | Excel import/export | `lib/excel.ts`, `components/export-button.tsx` |
-| Searchable role/warehouse picker | `components/role-people-picker.tsx` |
+| Searchable role/warehouse picker — **unused, dead code** (`PLAN.md` §5.4a) | `components/role-people-picker.tsx` |
 | Multi-select table filter | `components/multi-select-filter.tsx` |
 | Snag-raised banner | `app/(app)/warehouses/[id]/raised-banner.tsx` |
 | Fixed role colours | `lib/roles.ts` |
+| Warehouse management (create, activate/deactivate, status history) | `app/(app)/warehouses/manage/warehouse-code-manager.tsx`, `warehouse-row.tsx`, `status-filter.tsx` |
+| Go-live date inline editor | `components/go-live-editor.tsx` |
+| Snag table search | `components/search-box.tsx` |
 
 ### Readiness thresholds
 

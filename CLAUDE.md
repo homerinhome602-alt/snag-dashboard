@@ -8,7 +8,7 @@ Next.js 16 App Router · TypeScript · Tailwind · shadcn/ui (`@base-ui/react`) 
 
 ## Where truth lives
 
-- **`PLAN.md`** — behaviour, schema, permissions, roles, screens. Reconciled with the running code; §14 lists as-built divergences and known gaps.
+- **`PLAN.md`** — behaviour, schema, permissions, roles, screens. Reconciled with the running code; §14 lists as-built divergences and known gaps. §0 has everything a from-scratch environment needs (dependency versions, env vars, storage bucket config, extensions).
 - **`DESIGN.md`** — palette, type, layout rules, component map.
 
 Read the relevant section before changing behaviour or visuals. Don't restate their contents here or in code comments.
@@ -36,7 +36,14 @@ Roles are per warehouse — the same person can be a reporter on one and a resol
 
 **Dashboard Admin is a role-picker option, not a `member_role` enum value.** The invite form (`admin/users/invite-form.tsx`) offers "Dashboard Admin" in the same dropdown as the 6 operational roles via `lib/roles.ts`'s `INVITE_ROLE_OPTIONS` / `DASHBOARD_ADMIN_VALUE` — a client-side sentinel string, mutually exclusive with an operational role, never written to `warehouse_members.role` or `default_role`. Picking it sets `grant_dashboard_admin = true` and `default_role = null` instead (the column is nullable now for exactly this reason) and skips warehouse tagging, since admin's powers are global. Don't add `"dashboard_admin"` to the `member_role` Postgres enum — it would leak into `REPORTER_ROLES`/`RESOLVER_ROLES` classification and the team-block/role-picker UI, which all assume every `member_role` is a real per-warehouse operational role.
 
-**Never hardcode a hex.** `globals.css` maps shadcn's token names onto the design tokens, so changing one token updates every component. Role colours live in `lib/roles.ts`.
+**Never hardcode a hex.** `globals.css` maps shadcn's token names onto the design tokens, so changing one token updates every component. Role colours live in `lib/roles.ts`. One known exception is currently unfixed: `warehouse-card.tsx`'s red-state border (`#EFC6BC`) doesn't match any token — see `DESIGN.md`'s colour table for why it was left alone rather than silently swapped to the nearest one.
+
+**Three things still exist in the database/repo but nothing calls them — don't assume they're wired up.** Found during the 18 Aug 2026 documentation audit, when `PLAN.md`'s description of warehouse onboarding turned out to describe a screen that no longer exists (superseded 11 Aug 2026 by the much simpler code-only create at `warehouses/manage/`, see `PLAN.md` §5.4–5.5):
+- `create_warehouse(name, site_location, members jsonb)` RPC — still deployed, still fully functional, but no frontend code calls it (`createWarehouseCode` in `warehouses/manage/actions.ts` does a plain two-column insert instead).
+- `components/role-people-picker.tsx` — the searchable multi-select role picker the old onboarding form used. Compiles fine, imported by nothing.
+- `warehouses_delete_admin` RLS policy — still live (admin-only `DELETE` on `warehouses`), reachable via direct PostgREST/SQL even though no UI button issues one. See the existing "deleting a warehouse cascades destructively" gotcha below — this is how that would actually get triggered today.
+
+If you're asked to rebuild warehouse onboarding or add a delete button, these three are exactly what you'd be wiring back in — check they still match reality before assuming so, since this list itself can go stale.
 
 **`lib/table-sticky.ts` uses pixel widths on purpose.** Percentages compute correctly but the rendered box ignores them under `table-layout: auto`, which drifts the sticky offsets. Read the comment there before touching it.
 
