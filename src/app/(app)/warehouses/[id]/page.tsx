@@ -250,6 +250,10 @@ export default async function WarehouseDetailPage({
         </div>
       </div>
 
+      <p className="mb-1.5 text-[12.5px] text-muted-foreground">
+        Click a row to expand its update log and see attached photos/videos.
+      </p>
+
       <SnagTable
         snags={(snags ?? []) as unknown as SnagRow[]}
         updatesBySnag={updatesBySnag}
@@ -263,10 +267,6 @@ export default async function WarehouseDetailPage({
         adminUserIds={adminUserIds}
         currentUserId={uid ?? ""}
       />
-
-      <p className="mt-3 text-[12.5px] text-muted-foreground">
-        Click a row to expand its update log and see attached photos/videos.
-      </p>
     </div>
   );
 }
