@@ -136,6 +136,8 @@ export default async function UserManagementPage() {
 
       <InviteForm warehouses={activeWarehouses} />
 
+      <p className="mb-1.5 text-[12.5px] text-muted-foreground">Click a row to see its change history.</p>
+
       <div className="overflow-hidden rounded-card border border-border bg-card">
         <Table>
           <TableHeader>
