@@ -439,6 +439,7 @@ S.No, Date and Description are reordered to the front and pinned (§ sticky colu
 - **Ageing** shown in days, colour-banded
 - **Overdue ETC flagged** — red badge when `etc_date` has passed and the snag is not closed
 - Filter, sort, search across every column — filters are multi-select (§14.2)
+- **Sort — as built (18 Aug 2026).** A small icon beside every header (`snag-table.tsx`) cycles ascending → descending → back to the table's normal order (`serial_no` descending, as fetched) on each click; only one column sorts at a time. Client-side over the already-fetched page of snags, not a server round trip. Severity and Status sort by their real lifecycle/severity rank (`SEVERITY_LABELS`/`STATUS_LABELS`' key order, high→low and open→closed) rather than alphabetically; Update sorts by the latest message's timestamp, not its text; rows with no value for a column (no ETC, no updates yet) always sort last regardless of direction.
 - `Add Snag` / `Add Update` shown only if you are tagged here
 - Expanding a row shows the update thread (§5.7.1)
 
