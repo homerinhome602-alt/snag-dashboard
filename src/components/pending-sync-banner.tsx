@@ -27,6 +27,7 @@ export function PendingSyncBanner() {
   }, [refreshCount, router]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     refreshCount();
     trySync();
     window.addEventListener("online", trySync);
