@@ -186,7 +186,7 @@ ODU · IDU · Puff panel · PLC · Door · Floor · Piping · Racks · Electrica
 **All eleven are always available**, regardless of whether Category is HVAC or Ops — no filtering. Accepted trade-off: reporting will contain combinations like `category = ops, sub_category = ODU`. If that becomes noisy, the fix is a soft warning at raise time rather than a hard restriction, so nothing is ever blocked.
 
 ### 3.8 Location
-Frozen chamber · Ante room · ODU area · Ambient area
+Frozen chamber · Ante room · ODU area · WH ambient area
 
 ### 3.9 Status lifecycle
 

@@ -21,7 +21,7 @@ export const LOCATION_LABELS: Record<string, string> = {
   frozen_chamber: "Frozen chamber",
   ante_room: "Ante room",
   odu_area: "ODU area",
-  ambient_area: "Ambient area",
+  ambient_area: "WH ambient area",
 };
 
 export const SCOPE_LABELS: Record<string, string> = {
