@@ -511,11 +511,9 @@ Table of invitations: email, default role, **warehouse** (§3.2), status (invite
 ### 5.7 Warehouse detail
 Opens from a card or the sidebar.
 
-The screen opens with a **header block above the snag table**, laid out in three parts:
+The screen opens with a **header block above the snag table**, laid out in two parts (originally three — see below):
 
-**1. Team** — everyone tagged to this warehouse, grouped by role. Because a role can hold several people (§3.4), this collapses to a summary with a expand control rather than listing every name inline.
-
-**2. Metrics** — a compact row of figures:
+**1. Metrics** — a compact row of figures:
 
 | Metric | Note |
 |---|---|
@@ -528,13 +526,16 @@ The screen opens with a **header block above the snag table**, laid out in three
 
 **As built (18 Aug 2026) — a small hover info icon sits next to the go-live date** (both the editable and read-only header variants), showing its change history (`GoLiveHistoryInfo`, reading `warehouse_activity`'s `go_live_date_change` rows, §3.4a) — timestamp, actor, old date → new date. Built as two nested CSS boxes rather than one: the outer box carries an invisible padding bridge (not a margin gap) between the icon and the visible tooltip, and drops `pointer-events-none`, so moving the mouse from the icon down into the tooltip doesn't cross a dead zone that would drop the hover state — a first version got this wrong and the tooltip closed before you could read a long list. The list itself is height-capped and scrolls under a fixed heading.
 
-**3. Burn-up chart** — the only chart in the product, rendered here and nowhere else.
+**2. Burn-up chart** — the only chart in the product, rendered here and nowhere else.
 
 - Two cumulative lines: **total raised** and **total closed**; the shaded gap between them is the open count
 - Runs from the warehouse's first snag to its go-live date, with the trend projected forward past today
 - Answers whether the gap will reach zero by go-live, and — critically — whether a miss is caused by slow closure or by growing scope
 - Reads from `snag_daily_snapshot` (§12.1), so it is a cheap query rather than an aggregation over `snags`
 - Degrades gracefully: with under ~7 days of snapshots it shows "collecting data" rather than a misleading two-point line. With no go-live date set, it plots history without a target line
+- The "Hover for daily figures" hint (top-right of the chart) originally read "weekly" — a leftover from an early draft; the tooltip has only ever shown one day's totals at a time, so the label was corrected 18 Aug 2026 to match
+
+**Team** — everyone tagged to this warehouse, grouped by role, own block **below the snag table** rather than in the header. Because a role can hold several people (§3.4), this collapses to a summary with an expand control rather than listing every name inline. **Moved out of the header block 18 Aug 2026** — was originally the header's first part, above Metrics; the header is genuinely two parts now, not three.
 
 **Burn-down is deliberately not built.** A single-line burn-down cannot distinguish slow closure from scope growth, and in a cold-store commissioning — where snags arrive continuously as chambers are pulled to temperature — that distinction is the whole point. The burn-up shows everything a burn-down would, plus the cause.
 
@@ -803,6 +804,7 @@ None of this changes the data model (except where noted in §14.1); it came out 
 - Dashboard card split (all-warehouses totals vs. next-to-launch), hover-pop on cards, standardised laptop-viewport padding (50px), description tag in the table, Add Snag form starts with no field pre-selected.
 - **People Management rows are now expandable** ("Click a row to see its change history." hint above the table), showing `people_activity` history per person — see §5.6.
 - **Go-live date gained a hover history icon** next to it, on both the editable and read-only header — see §5.7.
+- **Team block moved from the top of the warehouse detail header to its own block below the snag table** — see §5.7.
 
 ### 14.3 Known gaps
 
