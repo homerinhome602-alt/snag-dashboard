@@ -159,7 +159,7 @@ export function BurnUpChart({
     <div className="relative rounded-card border border-border bg-card p-3">
       <div className="mb-1 flex items-baseline justify-between">
         <span className="text-[9px] uppercase tracking-[0.07em] text-faint">Burn-up</span>
-        <span className="text-[10px] text-muted-foreground">Hover for weekly figures</span>
+        <span className="text-[10px] text-muted-foreground">Hover for daily figures</span>
       </div>
       <svg
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
