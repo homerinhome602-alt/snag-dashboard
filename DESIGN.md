@@ -35,8 +35,8 @@ Consequence: saturated warm tones are reserved for attention states. A screen wi
 | `--amber` | `#F7EAD8` | Medium severity |
 | `--amber-deep` | `#7A4A12` | Text on amber |
 | `--ink` | `#2E2422` | Primary text — warm near-black, never neutral grey |
-| `--muted` | `#736662` | Secondary text. **As built**, darkened from `#8A7A75` (12 Aug 2026) — the original was 3.9-4.1:1 against white/ground, below WCAG AA's 4.5:1 for normal text. Now 5.3-5.5:1. |
-| `--faint` | `#876E67` | Labels, placeholders, empty states. **As built**, darkened from `#A8938D` (12 Aug 2026) — the original was 2.8-2.9:1, well below even the 3:1 large-text minimum, and this token is used at the smallest sizes in the app (9-10.5px micro-labels, mono captions). Now 4.5-4.7:1. |
+| `--muted` | `#5C4F4B` | Secondary text — table cell values (dates, category, sub-category, location, scope), metric captions. **As built**, darkened twice: `#8A7A75` → `#736662` (12 Aug 2026, fixing a 3.9-4.1:1 ratio below WCAG AA) → `#5C4F4B` (18 Aug 2026, after live feedback that even the AA-passing `#736662` still read as too light against the rest of the palette). Now ~7.8:1 against white/ground. |
+| `--faint` | `#6B5A54` | Labels, placeholders, empty states. **As built**, darkened twice: `#A8938D` → `#876E67` (12 Aug 2026, fixing a 2.8-2.9:1 ratio) → `#6B5A54` (18 Aug 2026, same pass as `--muted-foreground` above). Now ~6.5:1. |
 
 Severity: high `--red` · medium `--amber` · low `--frost`
 Status: open `--blush` · in progress `--sky` · ready to close `--mint` · closed neutral
@@ -93,7 +93,7 @@ The triangular marker's fill is a separate small map, keyed by the same RAG colo
 { red: "#C75B4E", amber: "#B98A5E", green: "#6E9CA6", grey: "#A8938D" }
 ```
 
-`grey`'s hex here is stale relative to the current `--faint` (`#876E67`, darkened 12 Aug 2026) — but it's unreachable in practice, since the grey/no-go-live-date case returns before a marker ever renders, so it's noted here rather than fixed.
+`grey`'s hex here is stale relative to the current `--faint` (`#6B5A54`, darkened twice — 12 Aug and 18 Aug 2026) — but it's unreachable in practice, since the grey/no-go-live-date case returns before a marker ever renders, so it's noted here rather than fixed.
 
 It is a **gauge, not a progress bar** — the scale is fixed and identical on every card, so warehouses can be compared against each other at a glance rather than each against itself. Marker position derives from the readiness formula in `PLAN.md` §5.2.1.
 
