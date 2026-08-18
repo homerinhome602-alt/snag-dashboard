@@ -59,17 +59,19 @@ export function BurnUpChart({
   // Cumulative totals should never decrease day over day — refresh_snag_daily_snapshot()
   // recomputes from the live snags table rather than keeping a true ever-incrementing
   // ledger, so a direct DB deletion (test-data cleanup; no such path exists in the UI)
-  // can otherwise show up here as a visual dip that contradicts the "cumulative" premise
-  // the two lines and their shaded gap depend on.
-  const sorted: Snapshot[] = [];
-  for (const s of sortedRaw) {
-    const prev = sorted[sorted.length - 1];
-    sorted.push({
-      snapshot_date: s.snapshot_date,
-      total_raised: prev ? Math.max(prev.total_raised, s.total_raised) : s.total_raised,
-      total_closed: prev ? Math.max(prev.total_closed, s.total_closed) : s.total_closed,
-    });
+  // can otherwise show up here as a drop that contradicts the "cumulative" premise the
+  // two lines and their shaded gap depend on. Clamping the display to never decrease
+  // was tried first and was wrong: today's true count sits *below* the stale pre-drop
+  // peak, so a clamp freezes the chart at that fictional peak forever instead of ever
+  // showing it. Truncating to start from the most recent drop is honest instead — it
+  // shows the currently-valid run of history, not a doctored version of the discarded one.
+  let resetAt = 0;
+  for (let i = 1; i < sortedRaw.length; i++) {
+    if (sortedRaw[i].total_raised < sortedRaw[i - 1].total_raised || sortedRaw[i].total_closed < sortedRaw[i - 1].total_closed) {
+      resetAt = i;
+    }
   }
+  const sorted = sortedRaw.slice(resetAt);
 
   if (sorted.length === 0 || sorted[sorted.length - 1].total_raised === 0) {
     return (
