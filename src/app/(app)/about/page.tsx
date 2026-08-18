@@ -58,8 +58,7 @@ export default function AboutPage() {
       </div>
 
       <p className="mt-6 text-[11.5px] text-faint">
-        A person&apos;s role applies everywhere they&apos;re tagged to a warehouse — the same person can raise snags
-        on one warehouse and resolve them on another.
+        A person holds one role — Reporter or Resolver — the same on every warehouse they&apos;re tagged to.
       </p>
     </div>
   );
