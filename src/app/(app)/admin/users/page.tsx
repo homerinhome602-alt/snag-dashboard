@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -11,8 +10,7 @@ import {
 } from "@/components/ui/table";
 import { roleLabel } from "@/lib/roles";
 import { InviteForm } from "./invite-form";
-import { StatusToggle } from "./status-toggle";
-import { AddWarehouseControl } from "./add-warehouse-control";
+import { PersonRow, type PersonActivityRow } from "./person-row";
 
 type Row = {
   key: string;
@@ -39,7 +37,7 @@ export default async function UserManagementPage() {
     redirect("/");
   }
 
-  const [{ data: invitations }, { data: profiles }, { data: warehouses }, { data: memberships }] =
+  const [{ data: invitations }, { data: profiles }, { data: warehouses }, { data: memberships }, { data: activity }] =
     await Promise.all([
       supabase
         .from("invitations")
@@ -48,7 +46,17 @@ export default async function UserManagementPage() {
       supabase.from("profiles").select("id, email, full_name, is_active, is_dashboard_admin"),
       supabase.from("warehouses").select("id, name, is_active").order("name"),
       supabase.from("warehouse_members").select("user_id, warehouse_id, role, warehouse:warehouses(name)"),
+      supabase
+        .from("people_activity")
+        .select("id, email, action, detail, created_at, actor:profiles(full_name, email)")
+        .order("created_at", { ascending: false }),
     ]);
+
+  const activityByEmail: Record<string, PersonActivityRow[]> = {};
+  for (const a of activity ?? []) {
+    const key = (a as { email: string }).email;
+    (activityByEmail[key] ??= []).push(a as unknown as PersonActivityRow);
+  }
 
   const activeWarehouses = (warehouses ?? []).filter((w) => w.is_active);
   const warehouseNameById = new Map((warehouses ?? []).map((w) => [w.id, w.name]));
@@ -148,50 +156,14 @@ export default async function UserManagementPage() {
               </TableRow>
             )}
             {rows.map((row) => (
-              <TableRow key={row.key}>
-                <TableCell className="text-[13px] text-foreground">{row.name}</TableCell>
-                <TableCell className="text-[13px]">{row.role}</TableCell>
-                <TableCell className="whitespace-normal text-[12.5px] text-muted-foreground">
-                  {row.warehouseNames.length === 0 ? (
-                    <span className="block">—</span>
-                  ) : (
-                    <div className="flex flex-col gap-0.5">
-                      {row.warehouseNames.map((n) => (
-                        <span key={n}>{n}</span>
-                      ))}
-                    </div>
-                  )}
-                  {row.userId && !row.isDashboardAdmin && (
-                    <AddWarehouseControl
-                      userId={row.userId}
-                      warehouses={activeWarehouses.filter(
-                        (w) => !warehouseIdsByUser.get(row.userId!)?.has(w.id)
-                      )}
-                    />
-                  )}
-                </TableCell>
-                <TableCell className="text-center">
-                  <Badge
-                    variant="outline"
-                    className={
-                      row.status === "active"
-                        ? "border-mint bg-mint text-mint-deep"
-                        : row.status === "invited"
-                          ? "border-blush bg-blush text-red-deep"
-                          : "border-line-soft bg-line-soft text-muted-foreground"
-                    }
-                  >
-                    {row.status === "active"
-                      ? "Active"
-                      : row.status === "invited"
-                        ? "Invited"
-                        : "Deactivated"}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-right">
-                  {row.userId && <StatusToggle userId={row.userId} isActive={row.status === "active"} />}
-                </TableCell>
-              </TableRow>
+              <PersonRow
+                key={row.key}
+                row={row}
+                activity={activityByEmail[row.key] ?? []}
+                addableWarehouses={activeWarehouses.filter(
+                  (w) => !warehouseIdsByUser.get(row.userId ?? "")?.has(w.id)
+                )}
+              />
             ))}
           </TableBody>
         </Table>

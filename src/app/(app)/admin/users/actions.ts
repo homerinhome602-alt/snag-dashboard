@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import type { MemberRole } from "@/lib/roles";
-import { DASHBOARD_ADMIN_VALUE } from "@/lib/roles";
+import { DASHBOARD_ADMIN_VALUE, roleLabel } from "@/lib/roles";
 
 export async function createInvitation(formData: FormData) {
   const email = (formData.get("email") as string)?.trim().toLowerCase();
@@ -58,6 +58,14 @@ export async function createInvitation(formData: FormData) {
     return { error: error.message };
   }
 
+  let detail = isAdminPick ? "Invited as Dashboard Admin" : `Invited as ${roleLabel(defaultRole)}`;
+  if (warehouseIds.length > 0) {
+    const { data: whs } = await supabase.from("warehouses").select("name").in("id", warehouseIds);
+    const names = (whs ?? []).map((w) => w.name);
+    if (names.length > 0) detail += `, tagged to ${names.join(", ")}`;
+  }
+  await supabase.from("people_activity").insert({ email, actor_id: invitedBy, action: "invited", detail });
+
   revalidatePath("/admin/users");
   return { error: null };
 }
@@ -83,7 +91,7 @@ export async function addWarehouseMembership(userId: string, newWarehouseIds: st
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("default_role")
+    .select("default_role, email")
     .eq("id", userId)
     .maybeSingle();
   const role = profile?.default_role as MemberRole | null;
@@ -119,6 +127,18 @@ export async function addWarehouseMembership(userId: string, newWarehouseIds: st
 
   if (error) {
     return { error: error.message };
+  }
+
+  if (profile?.email) {
+    const { data: auth } = await supabase.auth.getClaims();
+    const { data: newWhs } = await supabase.from("warehouses").select("name").in("id", newWarehouseIds);
+    const names = (newWhs ?? []).map((w) => w.name).join(", ");
+    await supabase.from("people_activity").insert({
+      email: profile.email,
+      actor_id: auth?.claims?.sub,
+      action: "warehouse_added",
+      detail: `Tagged to ${names}`,
+    });
   }
 
   revalidatePath("/admin/users");
