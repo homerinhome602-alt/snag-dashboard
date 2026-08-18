@@ -414,9 +414,19 @@ Cards sort by **launch proximity**, not alphabetically:
 A warehouse with no date cannot be assessed for readiness, so it drops below every dated one — but the busiest of them still surfaces first, because an undated warehouse carrying 40 open snags needs a date more urgently than one carrying two.
 
 ### 5.3 Collapsible sidebar
+- **About the page** — every signed-in user, directly below Home (added 18 Aug 2026, §5.3a)
 - Heading **Warehouses**, then every warehouse the current user can read (§2.3) — all of them for a Dashboard Admin, only tagged ones otherwise
 - **Warehouse management** — Dashboard Admin only. Renamed from "+ Add Warehouse" once the screen grew Manage-existing capability (§5.5)
 - **User Management** — Dashboard Admin only, lives here per your instruction
+
+### 5.3a About the page — **new screen (18 Aug 2026)**
+
+`/about`, linked from the sidebar right below Home, visible to everyone signed in. A static explainer: what the product is for (cold-storage warehouse launch readiness — surfacing snags so nothing blocks opening day by surprise), then the two operational role categories side by side —
+
+- **Reporters** (HVAC Engineer, Operations, Warehouse Admin) — raise a snag, comment on any snag on a warehouse they're tagged to, close a ticket directly, confirm/reject once a resolver marks it ready to close
+- **Resolvers** (Program Manager (Infra), PMC, PMO) — comment with photos/video, set ETC, move status to WIP or ready-to-close, set the warehouse's go-live date
+
+**Deliberately omits Dashboard Admin** — by request, not oversight. Don't add it back without checking; see the `CLAUDE.md` gotcha on this page. Also states plainly that a person holds one role across every warehouse they're tagged to (§2.1's 17 Aug narrowing), not a different one per warehouse.
 
 ### 5.4 – 5.5 Warehouse management (Admin only) — **rebuilt (11 Aug 2026), the plan below no longer describes what's built**
 

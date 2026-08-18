@@ -208,6 +208,7 @@ Where each design element lives:
 | Fixed role colours | `lib/roles.ts` |
 | Warehouse management (create, activate/deactivate, status history) | `app/(app)/warehouses/manage/warehouse-code-manager.tsx`, `warehouse-row.tsx`, `status-filter.tsx` |
 | Go-live date inline editor | `components/go-live-editor.tsx` |
+| About the page (roles explainer) | `app/(app)/about/page.tsx` |
 | Snag table search | `components/search-box.tsx` |
 
 ### Readiness thresholds
