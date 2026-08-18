@@ -159,7 +159,7 @@ Consequence: **change a token in one place and every shadcn component follows.**
 
 ### Sticky columns
 
-S.No, Date and Description pin to the left edge while the remaining columns scroll underneath. Classes live in `src/lib/table-sticky.ts` and are applied by both `snag-table.tsx` (header) and `snag-row.tsx` (body) so the offsets stay in sync.
+S.No, Date and Description pin to the left edge while the remaining columns scroll underneath — **desktop only**, per below. Classes live in `src/lib/table-sticky.ts` and are applied by both `snag-table.tsx` (header) and `snag-row.tsx` (body) so the offsets stay in sync.
 
 | Column | Width | Left offset |
 |---|---|---|
@@ -170,6 +170,10 @@ S.No, Date and Description pin to the left edge while the remaining columns scro
 Total 420px pinned.
 
 **Widths are fixed pixels, not percentages, and this is deliberate.** With `table-layout: auto`, percentage widths on cells are treated as loose hints — they compute correctly but the rendered box ignores them, which drifts the left offsets out of alignment with the actual columns. Pixels do not have that failure. If you are tempted to convert these to percentages to hit a proportional target, read the comment at the top of that file first; it was written after the bug.
+
+**Freeze only applies at 832px and up — as built (18 Aug 2026).** Below that, the three columns scroll with the rest of the row instead of pinning; pinning 420px against a narrow screen left too little room for everything else. The `sticky`/`left-*`/`z-10` classes carry an arbitrary `min-[832px]:` variant rather than Tailwind's `sm:` token directly — 832 is `sm`'s 640px stretched 30% on request, applied only to this table so no other `sm:` breakpoint elsewhere in the app shifts with it.
+
+**The table's own horizontal scrollbar gets a little breathing room below the last row (18 Aug 2026).** The scroll container carries `pb-2` — on macOS's overlay-scrollbar style, the bar was rendering flush against the last row's bottom edge, covering part of it while actively scrolling.
 
 **The expanded row's chat panel uses the same trick one level down — as built (17 Aug 2026), width fix and visual treatment revised the same day.** The `<td colSpan={13}>` it lives in can't itself be sticky (position:sticky doesn't work on a cell spanning the full row width), but a plain `<div>` nested inside that wide cell can be — it sticks to the left edge of the table's own scroll container regardless of how far the table is scrolled. Width was originally a guessed `w-[min(1000px,90vw)]` cap; that's gone, replaced by a `ResizeObserver` reading the scroll container's own `clientWidth` so the panel always matches the true visible screen area (accounts for sidebar state and viewport size without hardcoding either). The panel also sits on `bg-background` with a border, padding, and a small uppercase "SNAG #N — UPDATES" label — the earlier version shared the table body's plain `bg-card` and read as more table rather than a distinct panel.
 
