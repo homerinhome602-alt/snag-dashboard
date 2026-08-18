@@ -17,6 +17,10 @@ export type WarehouseActivityRow = {
   actor: { full_name: string | null; email: string } | null;
 };
 
+function fmtDate(dateStr: string) {
+  return new Date(dateStr + "T00:00:00").toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+}
+
 function describeActivity(a: WarehouseActivityRow): string {
   switch (a.action) {
     case "create":
@@ -25,6 +29,10 @@ function describeActivity(a: WarehouseActivityRow): string {
       return "activated this warehouse";
     case "deactivate":
       return "deactivated this warehouse";
+    case "go_live_date_change":
+      return a.old_value
+        ? `changed the go-live date from ${fmtDate(a.old_value)} to ${a.new_value ? fmtDate(a.new_value) : "not set"}`
+        : `set the go-live date to ${a.new_value ? fmtDate(a.new_value) : "not set"}`;
     default:
       return a.action.replaceAll("_", " ");
   }
