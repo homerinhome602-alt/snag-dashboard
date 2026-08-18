@@ -35,6 +35,15 @@ function HomeIcon() {
   );
 }
 
+function InfoIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M8 7.25v4M8 5.25v.01" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 const SIDEBAR_WIDTH = "11.5rem"; // w-46 equivalent
 const SIDEBAR_COLLAPSED = "3rem";
 
@@ -86,6 +95,14 @@ export function AppShell({
           >
             <HomeIcon />
             <span className="text-[12px] whitespace-nowrap">Home</span>
+          </Link>
+          <Link
+            href="/about"
+            aria-label="About the page"
+            className={cn(SIDEBAR_LINK_HOVER, "flex h-8 items-center gap-2 px-4 text-foreground hover:bg-muted")}
+          >
+            <InfoIcon />
+            <span className="text-[12px] whitespace-nowrap">About the page</span>
           </Link>
           <div className="mx-4 my-2.5 h-px bg-border" />
           <div className="px-4 pb-2 text-[9px] uppercase tracking-[0.07em] text-faint">Warehouses</div>
