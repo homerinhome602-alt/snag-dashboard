@@ -43,7 +43,7 @@ Everything required to stand this app up from nothing, so a rebuild doesn't have
 
 **Supabase Storage:** one bucket, `attachments` — **private** (not public), 50MB (`52428800` bytes) file size limit, `allowed_mime_types` restricted to `image/jpeg`, `image/png`, `image/webp`, `video/mp4`, `video/webm`, `video/quicktime`. Objects are served via signed URL (§6), never a public bucket URL. Path convention: `{warehouse_id}/{snag_id}/{8-char-random-id}[.ext | -thumb.jpg | -original.jpg]` — the storage INSERT policy parses `warehouse_id` back out of the path's first folder segment to run the same reporter/resolver/admin check the `attachments` table's own INSERT policy runs (§4.1), so the two must stay in sync if the path convention ever changes.
 
-**Migrations are Supabase-project-only, not version-controlled** — see the CLAUDE.md gotcha. `mcp__supabase__list_migrations` (or `npx supabase migration list`) is the only reliable inventory; as of this audit there were 29, from `phase0_extensions_types_tables` through `move_warehouse_admin_to_reporter`.
+**Migrations are Supabase-project-only, not version-controlled** — see the CLAUDE.md gotcha. `mcp__supabase__list_migrations` (or `npx supabase migration list`) is the only reliable inventory; the count keeps climbing, so this document doesn't try to track it. **§15 is the fallback if that tool isn't available** — a literal, verified snapshot of every table, function, view, trigger, and RLS policy as deployed, enough to reproduce the schema from nothing without needing to inspect the live project at all.
 
 ---
 
@@ -815,3 +815,644 @@ None of this changes the data model (except where noted in §14.1); it came out 
 - **Password-reset email deliverability depends on a one-time Supabase dashboard step.** The "Reset Password" email template still needs its link changed to `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery&next=/auth/update-password`, since the default template points at Supabase's hosted verify page, which can't set a session cookie on this app's own domain. Supabase's built-in email sending is also heavily rate-limited — fine for testing, not for production volume.
 - **"Deactivate" in User Management does not currently revoke access — found 18 Aug 2026, not yet applied.** `set_user_active()` writes `profiles.is_active`, but nothing reads it: not `private.is_dashboard_admin()`, not `private.is_warehouse_member()`, not `private.has_warehouse_role()` (which `is_reporter`/`is_resolver` both call), no RLS policy anywhere, no auth/proxy gate. Confirmed by searching every function body and every policy in the schema for `is_active` — `set_user_active` is the only hit. A deactivated person can still sign in and use every capability they had before; only the status badge changes. A fix was drafted — gate those three primitive functions on `is_active` (they're what every RLS policy and RPC route through, so this cascades everywhere at once) and add a self-deactivation guard to `set_user_active` (there's exactly one active Dashboard Admin today; without the guard they could lock themselves out with no one left to undo it) — but applying it was declined for this pass. The SQL is in this session's transcript if picked back up later.
 - **Not everything about a person is tracked, even after `people_activity` (§3.4b) closed two of the gaps — found 18 Aug 2026.** Still nothing logs deactivating/reactivating a person (`set_user_active`, same function as the gap above), and there's no action at all yet — so nothing to log — for removing a warehouse tag or for changing an already-signed-in person's Dashboard Admin status.
+
+---
+
+## 15. Full SQL reference — every table, function, view, trigger, and RLS policy, as deployed
+
+**Why this section exists.** §3 and §4 describe the schema and permission model in prose — enough to understand and extend it, but not enough to reproduce it byte-for-byte from a from-scratch environment with no live database to inspect. This section is the literal, verified `pg_get_functiondef`/`pg_get_constraintdef`/`pg_policies` output pulled directly from the running project on 18 Aug 2026, so a rebuild doesn't have to re-derive exact exception messages, exact check ordering, or exact predicate text from behavioral descriptions. Apply in this order: extensions (§0) → enum types → tables → views → functions → triggers → RLS policies. If this section and the prose above it ever disagree after a future change, **this section is stale, not wrong-by-design** — update it from the live project the same way it was built.
+
+### 15.1 Enum types
+
+```sql
+create type public.member_role as enum ('operations','hvac_engineer','program_manager_infra','pmc','pmo','warehouse_admin');
+create type public.snag_category as enum ('hvac','ops');
+create type public.snag_sub_category as enum ('odu','idu','puff_panel','plc','door','floor','piping','racks','electrical','iot_sensors','others');
+create type public.snag_location as enum ('frozen_chamber','ante_room','odu_area','ambient_area');
+create type public.snag_scope as enum ('oem','infra','admin');
+create type public.snag_severity as enum ('high','medium','low');
+create type public.snag_status as enum ('open','wip','ready_to_close','closed');
+create type public.snag_update_side as enum ('reporter','resolver','admin');
+create type public.attachment_media_type as enum ('image','video');
+create type public.snag_action_result as (snag public.snags, update_id uuid);
+```
+
+`snag_location`'s `ambient_area` enum value is the stored value — the UI label is "WH ambient area" (§3.8), the rename was label-only, never a migration.
+
+### 15.2 Tables
+
+```sql
+create table public.profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  email text not null unique,
+  full_name text,
+  is_dashboard_admin boolean not null default false,
+  default_role public.member_role,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+create table public.invitations (
+  id uuid primary key default extensions.gen_random_uuid(),
+  email text not null unique,
+  default_role public.member_role,
+  grant_dashboard_admin boolean not null default false,
+  invited_by uuid references public.profiles(id),
+  created_at timestamptz not null default now(),
+  accepted_at timestamptz,
+  warehouse_ids uuid[] not null default '{}'
+);
+
+create table public.warehouses (
+  id uuid primary key default extensions.gen_random_uuid(),
+  name text not null unique,
+  go_live_date date,
+  snag_counter integer not null default 0,
+  site_location text,
+  created_by uuid references public.profiles(id),
+  created_at timestamptz not null default now(),
+  is_active boolean not null default true
+);
+
+create table public.warehouse_members (
+  id uuid primary key default extensions.gen_random_uuid(),
+  warehouse_id uuid not null references public.warehouses(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  role public.member_role not null,
+  created_at timestamptz not null default now(),
+  unique (warehouse_id, user_id, role)
+);
+
+create table public.warehouse_activity (
+  id uuid primary key default extensions.gen_random_uuid(),
+  warehouse_id uuid not null references public.warehouses(id) on delete cascade,
+  actor_id uuid references public.profiles(id),
+  action text not null,
+  field text,
+  old_value text,
+  new_value text,
+  created_at timestamptz not null default now()
+);
+
+create table public.people_activity (
+  id uuid primary key default gen_random_uuid(),
+  email text not null,
+  actor_id uuid references public.profiles(id),
+  action text not null,
+  detail text,
+  created_at timestamptz not null default now()
+);
+create index people_activity_email_idx on public.people_activity (email);
+
+create table public.snags (
+  id uuid primary key default extensions.gen_random_uuid(),
+  warehouse_id uuid not null references public.warehouses(id) on delete cascade,
+  serial_no integer not null,
+  date_raised date not null default current_date,
+  raised_by uuid not null references public.profiles(id),
+  description text not null,
+  category public.snag_category not null,
+  sub_category public.snag_sub_category not null,
+  sub_category_other text,
+  location public.snag_location not null,
+  scope public.snag_scope not null,
+  severity public.snag_severity not null,
+  status public.snag_status not null default 'open',
+  etc_date date,
+  verified_by uuid references public.profiles(id),
+  verified_at timestamptz,
+  closed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (warehouse_id, serial_no),
+  constraint sub_category_other_required check (
+    sub_category <> 'others' or (sub_category_other is not null and length(trim(sub_category_other)) > 0)
+  )
+);
+
+create table public.snag_updates (
+  id uuid primary key default extensions.gen_random_uuid(),
+  snag_id uuid not null references public.snags(id) on delete cascade,
+  body text not null,
+  author_id uuid not null references public.profiles(id),
+  created_at timestamptz not null default now(),
+  author_side public.snag_update_side not null
+);
+
+create table public.attachments (
+  id uuid primary key default extensions.gen_random_uuid(),
+  snag_id uuid not null references public.snags(id) on delete cascade,
+  update_id uuid references public.snag_updates(id) on delete cascade,
+  media_type public.attachment_media_type not null,
+  file_url text not null,
+  original_url text,
+  thumbnail_url text,
+  file_name text,
+  file_size bigint,
+  duration_seconds integer,
+  uploaded_by uuid references public.profiles(id),
+  created_at timestamptz not null default now()
+);
+
+create table public.snag_activity (
+  id uuid primary key default extensions.gen_random_uuid(),
+  snag_id uuid not null references public.snags(id) on delete cascade,
+  actor_id uuid references public.profiles(id),
+  action text not null,
+  field text,
+  old_value text,
+  new_value text,
+  created_at timestamptz not null default now()
+);
+
+create table public.snag_daily_snapshot (
+  warehouse_id uuid not null references public.warehouses(id) on delete cascade,
+  snapshot_date date not null,
+  total_raised integer not null default 0,
+  total_closed integer not null default 0,
+  open_count integer not null default 0,
+  open_high_count integer not null default 0,
+  primary key (warehouse_id, snapshot_date)
+);
+```
+
+### 15.3 Views
+
+```sql
+create view public.warehouse_readiness with (security_invoker = true) as
+select w.id, w.name, w.go_live_date, w.site_location,
+       count(s.id)::int as total_raised,
+       count(s.id) filter (where s.status <> 'closed')::int as open_count,
+       count(s.id) filter (where s.status <> 'closed' and s.severity = 'high')::int as open_high_count
+from warehouses w
+left join snags s on s.warehouse_id = w.id
+group by w.id, w.name, w.go_live_date, w.site_location;
+
+create view public.snags_with_derived with (security_invoker = true) as
+select id, warehouse_id, serial_no, date_raised, raised_by, description, category,
+       sub_category, sub_category_other, location, scope, severity, status, etc_date,
+       verified_by, verified_at, closed_at, created_at, updated_at,
+       (coalesce(closed_at::date, current_date) - date_raised) as ageing_days,
+       (etc_date is not null and etc_date < current_date and status <> 'closed') as is_overdue
+from snags s;
+```
+
+### 15.4 Functions
+
+```sql
+-- private schema — permission primitives, everything else routes through these three
+
+CREATE OR REPLACE FUNCTION private.is_active_user()
+ RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO ''
+AS $function$
+  select coalesce((select p.is_active from public.profiles p where p.id = (select auth.uid())), false);
+$function$;
+
+CREATE OR REPLACE FUNCTION private.is_dashboard_admin()
+ RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO ''
+AS $function$
+  select coalesce((select p.is_dashboard_admin from public.profiles p where p.id = (select auth.uid())), false)
+    and private.is_active_user();
+$function$;
+
+CREATE OR REPLACE FUNCTION private.is_warehouse_member(p_warehouse_id uuid)
+ RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO ''
+AS $function$
+  select private.is_active_user() and exists (
+    select 1 from public.warehouse_members wm
+    where wm.warehouse_id = p_warehouse_id and wm.user_id = (select auth.uid())
+  );
+$function$;
+
+CREATE OR REPLACE FUNCTION private.has_warehouse_role(p_warehouse_id uuid, p_roles public.member_role[])
+ RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO ''
+AS $function$
+  select private.is_active_user() and exists (
+    select 1 from public.warehouse_members wm
+    where wm.warehouse_id = p_warehouse_id and wm.user_id = (select auth.uid()) and wm.role = any(p_roles)
+  );
+$function$;
+
+CREATE OR REPLACE FUNCTION private.is_reporter(p_warehouse_id uuid)
+ RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO ''
+AS $function$
+  select private.has_warehouse_role(p_warehouse_id, array['operations','hvac_engineer','warehouse_admin']::public.member_role[]);
+$function$;
+
+CREATE OR REPLACE FUNCTION private.is_resolver(p_warehouse_id uuid)
+ RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO ''
+AS $function$
+  select private.has_warehouse_role(p_warehouse_id, array['program_manager_infra','pmc','pmo']::public.member_role[]);
+$function$;
+
+-- public schema — RPCs and triggers
+
+CREATE OR REPLACE FUNCTION public.raise_snag(
+  p_warehouse_id uuid, p_description text, p_category snag_category, p_sub_category snag_sub_category,
+  p_location snag_location, p_scope snag_scope, p_severity snag_severity,
+  p_sub_category_other text DEFAULT NULL, p_id uuid DEFAULT NULL, p_suppressed_duplicate_ids uuid[] DEFAULT NULL
+) RETURNS snags LANGUAGE plpgsql SECURITY DEFINER SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid());
+  v_serial integer;
+  v_row public.snags;
+  v_dup_id uuid;
+begin
+  if v_uid is null then raise exception 'not authenticated'; end if;
+  if not (private.is_reporter(p_warehouse_id) or private.is_dashboard_admin()) then
+    raise exception 'not a reporter on this warehouse';
+  end if;
+  if p_sub_category = 'others' and (p_sub_category_other is null or length(trim(p_sub_category_other)) = 0) then
+    raise exception 'sub_category_other is required when sub_category is others';
+  end if;
+
+  update public.warehouses set snag_counter = snag_counter + 1 where id = p_warehouse_id
+    returning snag_counter into v_serial;
+  if v_serial is null then raise exception 'warehouse not found'; end if;
+
+  insert into public.snags (id, warehouse_id, serial_no, raised_by, description, category,
+    sub_category, sub_category_other, location, scope, severity)
+  values (coalesce(p_id, extensions.gen_random_uuid()), p_warehouse_id, v_serial, v_uid, p_description,
+    p_category, p_sub_category, p_sub_category_other, p_location, p_scope, p_severity)
+  returning * into v_row;
+
+  insert into public.snag_activity (snag_id, actor_id, action) values (v_row.id, v_uid, 'raise');
+
+  if p_suppressed_duplicate_ids is not null then
+    foreach v_dup_id in array p_suppressed_duplicate_ids loop
+      insert into public.snag_activity (snag_id, actor_id, action, field, new_value)
+      values (v_row.id, v_uid, 'duplicate_suppressed', 'duplicate_of', v_dup_id::text);
+    end loop;
+  end if;
+  return v_row;
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.post_snag_update(
+  p_snag_id uuid, p_body text, p_etc_date date DEFAULT NULL, p_status snag_status DEFAULT NULL,
+  p_acting_as text DEFAULT 'resolver'
+) RETURNS snag_updates LANGUAGE plpgsql SECURITY DEFINER SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid());
+  v_warehouse_id uuid; v_row public.snag_updates; v_old_status public.snag_status; v_old_etc date;
+  v_side public.snag_update_side;
+begin
+  if v_uid is null then raise exception 'not authenticated'; end if;
+  if p_acting_as not in ('reporter', 'resolver') then raise exception 'p_acting_as must be reporter or resolver'; end if;
+
+  select warehouse_id, status, etc_date into v_warehouse_id, v_old_status, v_old_etc
+  from public.snags where id = p_snag_id;
+  if v_warehouse_id is null then raise exception 'snag not found'; end if;
+
+  if p_acting_as = 'reporter' then
+    if not (private.is_reporter(v_warehouse_id) or private.is_dashboard_admin()) then
+      raise exception 'not a reporter on this warehouse';
+    end if;
+    if p_etc_date is not null or p_status is not null then raise exception 'reporters may not set ETC or status'; end if;
+    v_side := case when private.is_reporter(v_warehouse_id) then 'reporter' else 'admin' end;
+  else
+    if not (private.is_resolver(v_warehouse_id) or private.is_dashboard_admin()) then
+      raise exception 'not a resolver on this warehouse';
+    end if;
+    if p_status is not null and p_status not in ('wip', 'ready_to_close') then
+      raise exception 'resolvers may only move status to wip or ready_to_close';
+    end if;
+    v_side := case when private.is_resolver(v_warehouse_id) then 'resolver' else 'admin' end;
+  end if;
+
+  insert into public.snag_updates (snag_id, body, author_id, author_side)
+  values (p_snag_id, p_body, v_uid, v_side) returning * into v_row;
+
+  if p_etc_date is not null or p_status is not null then
+    update public.snags set etc_date = coalesce(p_etc_date, etc_date), status = coalesce(p_status, status)
+    where id = p_snag_id;
+  end if;
+  if p_status is not null and p_status is distinct from v_old_status then
+    insert into public.snag_activity (snag_id, actor_id, action, field, old_value, new_value)
+    values (p_snag_id, v_uid, 'status_change', 'status', v_old_status::text, p_status::text);
+  end if;
+  if p_etc_date is not null and p_etc_date is distinct from v_old_etc then
+    insert into public.snag_activity (snag_id, actor_id, action, field, old_value, new_value)
+    values (p_snag_id, v_uid, 'etc_update', 'etc_date', v_old_etc::text, p_etc_date::text);
+  end if;
+  return v_row;
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.close_snag_directly(p_snag_id uuid, p_body text DEFAULT NULL)
+ RETURNS snag_action_result LANGUAGE plpgsql SECURITY DEFINER SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid());
+  v_warehouse_id uuid; v_old_status public.snag_status; v_row public.snags; v_update_id uuid;
+  v_side public.snag_update_side; v_result public.snag_action_result;
+begin
+  if v_uid is null then raise exception 'not authenticated'; end if;
+  select warehouse_id, status into v_warehouse_id, v_old_status from public.snags where id = p_snag_id;
+  if v_warehouse_id is null then raise exception 'snag not found'; end if;
+  if not (private.is_reporter(v_warehouse_id) or private.is_dashboard_admin()) then
+    raise exception 'not a reporter on this warehouse';
+  end if;
+  if v_old_status = 'closed' then raise exception 'snag is already closed'; end if;
+
+  update public.snags set status = 'closed', closed_at = now(), verified_by = v_uid, verified_at = now()
+    where id = p_snag_id returning * into v_row;
+  insert into public.snag_activity (snag_id, actor_id, action, field, old_value, new_value)
+  values (p_snag_id, v_uid, 'verify_closure', 'status', v_old_status::text, 'closed');
+
+  if p_body is not null and length(trim(p_body)) > 0 then
+    v_side := case when private.is_reporter(v_warehouse_id) then 'reporter' else 'admin' end;
+    insert into public.snag_updates (snag_id, body, author_id, author_side)
+    values (p_snag_id, p_body, v_uid, v_side) returning id into v_update_id;
+  end if;
+  v_result.snag := v_row; v_result.update_id := v_update_id;
+  return v_result;
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.verify_snag_closure(p_snag_id uuid, p_approved boolean, p_body text DEFAULT NULL)
+ RETURNS snag_action_result LANGUAGE plpgsql SECURITY DEFINER SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid());
+  v_warehouse_id uuid; v_old_status public.snag_status; v_row public.snags; v_update_id uuid;
+  v_side public.snag_update_side; v_result public.snag_action_result;
+begin
+  if v_uid is null then raise exception 'not authenticated'; end if;
+  select warehouse_id, status into v_warehouse_id, v_old_status from public.snags where id = p_snag_id;
+  if v_warehouse_id is null then raise exception 'snag not found'; end if;
+  if not (private.is_reporter(v_warehouse_id) or private.is_dashboard_admin()) then
+    raise exception 'not a reporter on this warehouse';
+  end if;
+  if v_old_status <> 'ready_to_close' then raise exception 'snag is not awaiting verification'; end if;
+
+  if p_approved then
+    update public.snags set status = 'closed', closed_at = now(), verified_by = v_uid, verified_at = now()
+      where id = p_snag_id returning * into v_row;
+    insert into public.snag_activity (snag_id, actor_id, action, field, old_value, new_value)
+    values (p_snag_id, v_uid, 'verify_closure', 'status', 'ready_to_close', 'closed');
+  else
+    update public.snags set status = 'wip' where id = p_snag_id returning * into v_row;
+    insert into public.snag_activity (snag_id, actor_id, action, field, old_value, new_value)
+    values (p_snag_id, v_uid, 'reject_closure', 'status', 'ready_to_close', 'wip');
+  end if;
+
+  if p_body is not null and length(trim(p_body)) > 0 then
+    v_side := case when private.is_reporter(v_warehouse_id) then 'reporter' else 'admin' end;
+    insert into public.snag_updates (snag_id, body, author_id, author_side)
+    values (p_snag_id, p_body, v_uid, v_side) returning id into v_update_id;
+  end if;
+  v_result.snag := v_row; v_result.update_id := v_update_id;
+  return v_result;
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.correct_date_raised(p_snag_id uuid, p_new_date date)
+ RETURNS snags LANGUAGE plpgsql SECURITY DEFINER SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); v_old_date date; v_row public.snags;
+begin
+  if v_uid is null then raise exception 'not authenticated'; end if;
+  if not private.is_dashboard_admin() then raise exception 'only a dashboard admin may correct date_raised'; end if;
+  select date_raised into v_old_date from public.snags where id = p_snag_id;
+  if v_old_date is null then raise exception 'snag not found'; end if;
+  update public.snags set date_raised = p_new_date where id = p_snag_id returning * into v_row;
+  insert into public.snag_activity (snag_id, actor_id, action, field, old_value, new_value)
+  values (p_snag_id, v_uid, 'correct_date_raised', 'date_raised', v_old_date::text, p_new_date::text);
+  return v_row;
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.find_similar_snags(
+  p_warehouse_id uuid, p_location snag_location, p_sub_category snag_sub_category, p_description text,
+  p_threshold real DEFAULT 0.3
+) RETURNS TABLE(id uuid, serial_no integer, description text, status snag_status, raised_by_name text, similarity real)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO ''
+AS $function$
+  select s.id, s.serial_no, s.description, s.status, coalesce(p.full_name, p.email) as raised_by_name,
+         extensions.similarity(s.description, p_description) as similarity
+  from public.snags s left join public.profiles p on p.id = s.raised_by
+  where s.warehouse_id = p_warehouse_id and s.location = p_location and s.sub_category = p_sub_category
+    and s.status <> 'closed' and extensions.similarity(s.description, p_description) > p_threshold
+  order by similarity desc limit 10;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.set_go_live_date(p_warehouse_id uuid, p_date date)
+ RETURNS warehouses LANGUAGE plpgsql SECURITY DEFINER SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); v_row public.warehouses; v_old_date date;
+begin
+  if v_uid is null then raise exception 'not authenticated'; end if;
+  if not (private.is_resolver(p_warehouse_id) or private.is_dashboard_admin()) then
+    raise exception 'not a resolver on this warehouse';
+  end if;
+  select go_live_date into v_old_date from public.warehouses where id = p_warehouse_id;
+  update public.warehouses set go_live_date = p_date where id = p_warehouse_id returning * into v_row;
+  if v_row.id is null then raise exception 'warehouse not found'; end if;
+  insert into public.warehouse_activity (warehouse_id, actor_id, action, field, old_value, new_value)
+  values (p_warehouse_id, v_uid, 'go_live_date_change', 'go_live_date', v_old_date::text, p_date::text);
+  return v_row;
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.set_user_active(p_user_id uuid, p_is_active boolean)
+ RETURNS profiles LANGUAGE plpgsql SECURITY DEFINER SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); v_row public.profiles;
+begin
+  if v_uid is null then raise exception 'not authenticated'; end if;
+  if not private.is_dashboard_admin() then raise exception 'only a dashboard admin may change account status'; end if;
+  if not p_is_active and p_user_id = v_uid then raise exception 'you cannot deactivate your own account'; end if;
+  update public.profiles set is_active = p_is_active where id = p_user_id returning * into v_row;
+  if v_row.id is null then raise exception 'user not found'; end if;
+  return v_row;
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.set_dashboard_admin(p_user_id uuid, p_is_admin boolean)
+ RETURNS profiles LANGUAGE plpgsql SECURITY DEFINER SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); v_row public.profiles;
+begin
+  if v_uid is null then raise exception 'not authenticated'; end if;
+  if not private.is_dashboard_admin() then raise exception 'only a dashboard admin may change dashboard admin status'; end if;
+  update public.profiles set is_dashboard_admin = p_is_admin where id = p_user_id returning * into v_row;
+  if v_row.id is null then raise exception 'user not found'; end if;
+  return v_row;
+end;
+$function$;
+-- No frontend caller today (§4) — admin status can only be granted at invite time.
+
+CREATE OR REPLACE FUNCTION public.create_warehouse(p_name text, p_site_location text, p_members jsonb)
+ RETURNS warehouses LANGUAGE plpgsql SECURITY DEFINER SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); v_row public.warehouses; m record;
+begin
+  if v_uid is null then raise exception 'not authenticated'; end if;
+  if not private.is_dashboard_admin() then raise exception 'only a dashboard admin may create a warehouse'; end if;
+  if p_name is null or length(trim(p_name)) = 0 then raise exception 'warehouse name is required'; end if;
+  insert into public.warehouses (name, site_location, created_by)
+  values (trim(p_name), nullif(trim(coalesce(p_site_location, '')), ''), v_uid) returning * into v_row;
+  for m in select * from jsonb_to_recordset(p_members) as x(user_id uuid, role public.member_role) loop
+    insert into public.warehouse_members (warehouse_id, user_id, role) values (v_row.id, m.user_id, m.role)
+    on conflict (warehouse_id, user_id, role) do nothing;
+  end loop;
+  return v_row;
+end;
+$function$;
+-- No frontend caller today (§5.4–5.5) — createWarehouseCode does a plain insert instead.
+
+CREATE OR REPLACE FUNCTION public.refresh_snag_daily_snapshot()
+ RETURNS void LANGUAGE sql SECURITY DEFINER SET search_path TO ''
+AS $function$
+  insert into public.snag_daily_snapshot (warehouse_id, snapshot_date, total_raised, total_closed, open_count, open_high_count)
+  select s.warehouse_id, current_date, count(*)::int, count(*) filter (where s.status = 'closed')::int,
+         count(*) filter (where s.status <> 'closed')::int,
+         count(*) filter (where s.status <> 'closed' and s.severity = 'high')::int
+  from public.snags s group by s.warehouse_id
+  on conflict (warehouse_id, snapshot_date) do update set
+    total_raised = excluded.total_raised, total_closed = excluded.total_closed,
+    open_count = excluded.open_count, open_high_count = excluded.open_high_count;
+$function$;
+-- No authenticated/anon grant — only postgres/service_role can call it; pg_cron is the only caller (§12.1).
+
+-- Triggers (§15.5)
+CREATE OR REPLACE FUNCTION public.set_updated_at()
+ RETURNS trigger LANGUAGE plpgsql SET search_path TO ''
+AS $function$
+begin new.updated_at = now(); return new; end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+ RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path TO ''
+AS $function$
+declare v_invite public.invitations; v_warehouse_id uuid;
+begin
+  select * into v_invite from public.invitations where email = new.email;
+  if v_invite.id is null then raise exception 'no invitation found for %', new.email; end if;
+  insert into public.profiles (id, email, full_name, is_dashboard_admin, default_role)
+  values (new.id, new.email, coalesce(new.raw_user_meta_data->>'full_name', new.email),
+          v_invite.grant_dashboard_admin, v_invite.default_role);
+  if v_invite.warehouse_ids is not null then
+    foreach v_warehouse_id in array v_invite.warehouse_ids loop
+      insert into public.warehouse_members (warehouse_id, user_id, role)
+      values (v_warehouse_id, new.id, v_invite.default_role) on conflict do nothing;
+    end loop;
+  end if;
+  update public.invitations set accepted_at = now() where id = v_invite.id;
+  return new;
+end;
+$function$;
+```
+
+### 15.5 Triggers
+
+```sql
+create trigger snags_set_updated_at before update on public.snags
+  for each row execute function public.set_updated_at();
+
+create trigger on_auth_user_created after insert on auth.users
+  for each row execute function public.handle_new_user();
+```
+
+### 15.6 RLS policies
+
+Every policy in the schema, grouped by table. `alter table ... enable row level security;` on all of them.
+
+```sql
+-- profiles — fully open read (§3.1), no write policy needed (writes go through
+-- handle_new_user/set_user_active/set_dashboard_admin, all SECURITY DEFINER)
+create policy profiles_select_all on public.profiles for select
+  using (true);
+
+-- invitations — admin table (§4.1), plain RLS not RPC
+create policy invitations_select_admin on public.invitations for select
+  using ((select private.is_dashboard_admin()));
+create policy invitations_insert_admin on public.invitations for insert
+  with check ((select private.is_dashboard_admin()));
+create policy invitations_update_admin on public.invitations for update
+  using ((select private.is_dashboard_admin())) with check ((select private.is_dashboard_admin()));
+
+-- warehouses — admin table
+create policy warehouses_select_scoped on public.warehouses for select
+  using (private.is_dashboard_admin() or private.is_warehouse_member(id));
+create policy warehouses_insert_admin on public.warehouses for insert
+  with check ((select private.is_dashboard_admin()));
+create policy warehouses_update_admin on public.warehouses for update
+  using ((select private.is_dashboard_admin())) with check ((select private.is_dashboard_admin()));
+create policy warehouses_delete_admin on public.warehouses for delete
+  using (private.is_dashboard_admin());
+
+-- warehouse_members — admin table
+create policy warehouse_members_select_scoped on public.warehouse_members for select
+  using (private.is_dashboard_admin() or private.is_warehouse_member(warehouse_id));
+create policy warehouse_members_insert_admin on public.warehouse_members for insert
+  with check ((select private.is_dashboard_admin()));
+create policy warehouse_members_delete_admin on public.warehouse_members for delete
+  using ((select private.is_dashboard_admin()));
+
+-- warehouse_activity — admin-only insert (§3.4a), scoped read (widened 18 Aug 2026)
+create policy warehouse_activity_select_scoped on public.warehouse_activity for select
+  using (private.is_dashboard_admin() or private.is_warehouse_member(warehouse_id));
+create policy warehouse_activity_insert_admin on public.warehouse_activity for insert
+  with check (private.is_dashboard_admin());
+
+-- people_activity — admin-only both ways (§3.4b)
+create policy people_activity_select_admin on public.people_activity for select
+  using (private.is_dashboard_admin());
+create policy people_activity_insert_admin on public.people_activity for insert
+  with check (private.is_dashboard_admin());
+
+-- snags, snag_updates, snag_activity, snag_daily_snapshot — read-scoped only;
+-- all writes go through the RPCs in §15.4, which are SECURITY DEFINER and
+-- bypass these policies entirely for their own inserts/updates
+create policy snags_select_scoped on public.snags for select
+  using (private.is_dashboard_admin() or private.is_warehouse_member(warehouse_id));
+create policy snag_updates_select_scoped on public.snag_updates for select
+  using (private.is_dashboard_admin() or exists (
+    select 1 from public.snags s where s.id = snag_updates.snag_id and private.is_warehouse_member(s.warehouse_id)
+  ));
+create policy snag_activity_select_scoped on public.snag_activity for select
+  using (private.is_dashboard_admin() or exists (
+    select 1 from public.snags s where s.id = snag_activity.snag_id and private.is_warehouse_member(s.warehouse_id)
+  ));
+create policy snag_daily_snapshot_select_scoped on public.snag_daily_snapshot for select
+  using (private.is_dashboard_admin() or private.is_warehouse_member(warehouse_id));
+
+-- attachments — insert allowed for reporters/resolvers directly (not RPC-gated,
+-- §6), since photo/video upload is a plain client insert against this table
+create policy attachments_select_scoped on public.attachments for select
+  using (private.is_dashboard_admin() or exists (
+    select 1 from public.snags s where s.id = attachments.snag_id and private.is_warehouse_member(s.warehouse_id)
+  ));
+create policy attachments_insert_members on public.attachments for insert
+  with check (private.is_dashboard_admin() or exists (
+    select 1 from public.snags s
+    where s.id = attachments.snag_id and (private.is_reporter(s.warehouse_id) or private.is_resolver(s.warehouse_id))
+  ));
+
+-- storage.objects, bucket_id = 'attachments' — path is {warehouse_id}/{snag_id}/{...} (§6)
+create policy attachments_bucket_select_all on storage.objects for select
+  using (bucket_id = 'attachments');
+create policy attachments_bucket_insert_members on storage.objects for insert
+  with check (
+    bucket_id = 'attachments' and (
+      private.is_dashboard_admin()
+      or private.is_reporter((storage.foldername(name))[1]::uuid)
+      or private.is_resolver((storage.foldername(name))[1]::uuid)
+    )
+  );
+```
+
+### 15.7 Function grants
+
+Verified via `aclexplode(proacl)` on 18 Aug 2026 — the detail CLAUDE.md's `CREATE OR REPLACE` gotcha warns is easy to lose track of when a function's parameter count changes.
+
+| Function | Grantees |
+|---|---|
+| `raise_snag`, `post_snag_update`, `close_snag_directly`, `verify_snag_closure`, `correct_date_raised`, `find_similar_snags`, `set_go_live_date`, `set_user_active`, `set_dashboard_admin`, `create_warehouse` | `authenticated` only (plus `postgres`/`service_role`, always present, not app-relevant) — **`anon` explicitly not granted** on any of these |
+| `handle_new_user`, `refresh_snag_daily_snapshot` | `postgres`/`service_role` only — not callable by `authenticated` or `anon` at all. `handle_new_user` only ever runs as the `on_auth_user_created` trigger; `refresh_snag_daily_snapshot` only ever runs as the `pg_cron` job (§12.1) |
+
+Confirmed via `pg_get_function_identity_arguments` that `close_snag_directly`, `post_snag_update`, and `verify_snag_closure` — the three CLAUDE.md's gotcha names as the ones widened with a new trailing parameter — each have exactly **one** signature live today, not two. The old overload the gotcha warns about does not currently exist; if one ever reappears after a future signature change, that's the bug the gotcha describes.
