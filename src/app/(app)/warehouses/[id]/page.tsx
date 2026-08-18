@@ -10,6 +10,7 @@ import { ExportButton } from "@/components/export-button";
 import { REPORTER_ROLES, RESOLVER_ROLES, roleLabel } from "@/lib/roles";
 import { daysUntil } from "@/lib/readiness";
 import { GoLiveEditor } from "./go-live-editor";
+import { GoLiveHistoryInfo, type GoLiveChange } from "./go-live-history-info";
 import { SnagFilters } from "./snag-filters";
 import { SearchBox } from "./search-box";
 import { RaisedBanner } from "./raised-banner";
@@ -46,26 +47,39 @@ export default async function WarehouseDetailPage({
   const { data: auth } = await supabase.auth.getClaims();
   const uid = auth?.claims?.sub;
 
-  const [{ data: w }, { data: membership }, { data: teamRows }, { data: snapshots }, { data: me }, { data: allProfiles }] =
-    await Promise.all([
-      supabase
-        .from("warehouse_readiness")
-        .select("id, name, go_live_date, total_raised, open_count, open_high_count")
-        .eq("id", id)
-        .single(),
-      supabase.from("warehouse_members").select("role").eq("warehouse_id", id).eq("user_id", uid ?? ""),
-      supabase
-        .from("warehouse_members")
-        .select("user_id, role, profile:profiles(full_name, email)")
-        .eq("warehouse_id", id),
-      supabase
-        .from("snag_daily_snapshot")
-        .select("snapshot_date, total_raised, total_closed")
-        .eq("warehouse_id", id)
-        .order("snapshot_date"),
-      supabase.from("profiles").select("is_dashboard_admin").eq("id", uid ?? "").maybeSingle(),
-      supabase.from("profiles").select("id, is_dashboard_admin"),
-    ]);
+  const [
+    { data: w },
+    { data: membership },
+    { data: teamRows },
+    { data: snapshots },
+    { data: me },
+    { data: allProfiles },
+    { data: goLiveChanges },
+  ] = await Promise.all([
+    supabase
+      .from("warehouse_readiness")
+      .select("id, name, go_live_date, total_raised, open_count, open_high_count")
+      .eq("id", id)
+      .single(),
+    supabase.from("warehouse_members").select("role").eq("warehouse_id", id).eq("user_id", uid ?? ""),
+    supabase
+      .from("warehouse_members")
+      .select("user_id, role, profile:profiles(full_name, email)")
+      .eq("warehouse_id", id),
+    supabase
+      .from("snag_daily_snapshot")
+      .select("snapshot_date, total_raised, total_closed")
+      .eq("warehouse_id", id)
+      .order("snapshot_date"),
+    supabase.from("profiles").select("is_dashboard_admin").eq("id", uid ?? "").maybeSingle(),
+    supabase.from("profiles").select("id, is_dashboard_admin"),
+    supabase
+      .from("warehouse_activity")
+      .select("id, old_value, new_value, created_at, actor:profiles(full_name, email)")
+      .eq("warehouse_id", id)
+      .eq("action", "go_live_date_change")
+      .order("created_at", { ascending: false }),
+  ]);
 
   if (!w) notFound();
 
@@ -190,9 +204,10 @@ export default async function WarehouseDetailPage({
           <div className="flex items-baseline gap-1.5 text-[13.5px] text-foreground">
             <span className="text-muted-foreground">Go-live date:</span>
             <GoLiveEditor warehouseId={id} goLiveDate={w.go_live_date} />
+            <GoLiveHistoryInfo changes={(goLiveChanges ?? []) as unknown as GoLiveChange[]} />
           </div>
         ) : (
-          <span className="text-[13px] text-muted-foreground">
+          <span className="flex items-baseline gap-1.5 text-[13px] text-muted-foreground">
             Go-live date:{" "}
             <span className="font-mono text-[11px] text-faint">
               {w.go_live_date
@@ -201,6 +216,7 @@ export default async function WarehouseDetailPage({
                     .toUpperCase()
                 : "NOT SET"}
             </span>
+            <GoLiveHistoryInfo changes={(goLiveChanges ?? []) as unknown as GoLiveChange[]} />
           </span>
         )}
       </div>
