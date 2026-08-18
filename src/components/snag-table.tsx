@@ -182,7 +182,7 @@ export function SnagTable({
   }
 
   return (
-    <div className="overflow-x-auto rounded-card border border-border bg-card">
+    <div className="overflow-x-auto rounded-card border border-border bg-card pb-2">
       <Table>
         <TableHeader>
           <TableRow>
