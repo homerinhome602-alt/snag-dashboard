@@ -22,10 +22,12 @@ One `snags` table keyed by `warehouse_id`, **not** a physical table per warehous
 
 | Category | Roles (per warehouse) | Rights in that warehouse |
 |---|---|---|
-| **Reporters** | HVAC Engineer, Operations | Raise snags: description, category, sub-category, location, scope, **severity**, photos |
-| **Resolvers** | Program Manager (Infra), PMC, PMO, Warehouse Admin | Post updates (with media), set ETC, set **go-live date**, move status to WIP / Ready to Close |
+| **Reporters** | HVAC Engineer, Operations, Warehouse Admin | Raise snags: description, category, sub-category, location, scope, **severity**, photos |
+| **Resolvers** | Program Manager (Infra), PMC, PMO | Post updates (with media), set ETC, set **go-live date**, move status to WIP / Ready to Close |
 
 Consequence: "reporter" and "resolver" are not properties of a user, they are properties of a **user-warehouse pair**. Every permission check must therefore name a warehouse. The same person can see `Add Snag` on one warehouse and `Add Update` on another.
+
+**Warehouse Admin moved from resolver to reporter (18 Aug 2026).** Was originally a resolver role (post updates, set ETC/status, verify closure); now classified as a reporter (raise snags, close tickets) instead — a full move, not an addition, so it no longer has resolver rights. Enforced in exactly two places, both updated together: `private.is_reporter()`/`private.is_resolver()` in Postgres (the actual authorization boundary for every RLS policy and RPC that checks role) and `REPORTER_ROLES`/`RESOLVER_ROLES` in `lib/roles.ts` (drives which controls the UI shows — must stay in sync with the Postgres functions by hand, there's no shared source of truth between the two). Verified via a rolled-back transaction simulating a `warehouse_admin`-tagged session: `is_reporter` now returns true, `is_resolver` false. `ROLE_COLOR_CLASS`'s per-role chip color is unrelated to this and was left unchanged — it's a distinct-identity color per role, not a warm/cool reporter-resolver signal.
 
 **Narrowed for admin-assigned tagging (17 Aug 2026):** the schema still allows a person to hold different roles on different warehouses, but the admin UI no longer lets anyone create that state deliberately — §5.6's "+ Add warehouse" control treats `profiles.default_role` as a person's one and only role and rewrites their entire `warehouse_members` set to match it every time it runs. A true per-warehouse dual role would need its own explicit design, not just a different value passed to that action.
 

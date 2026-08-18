@@ -39,11 +39,9 @@ export const ROLE_COLOR_CLASS: Record<string, string> = {
 
 // PLAN.md §2.1: reporters raise snags, resolvers drive them to close.
 // Typed as string[] (not MemberRole[]) since these are checked against
-// loosely-typed values coming back from the database client.
-export const REPORTER_ROLES: string[] = ["operations", "hvac_engineer"];
-export const RESOLVER_ROLES: string[] = [
-  "program_manager_infra",
-  "pmc",
-  "pmo",
-  "warehouse_admin",
-];
+// loosely-typed values coming back from the database client. Must match
+// private.is_reporter()/is_resolver() in Postgres exactly — those are the
+// functions actually enforcing this everywhere it matters (RLS, RPCs);
+// these arrays only drive which controls the UI shows.
+export const REPORTER_ROLES: string[] = ["operations", "hvac_engineer", "warehouse_admin"];
+export const RESOLVER_ROLES: string[] = ["program_manager_infra", "pmc", "pmo"];

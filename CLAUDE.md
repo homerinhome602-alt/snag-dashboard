@@ -2,7 +2,7 @@
 
 # Frozen Warehouse Launch Readiness
 
-Snag-tracking for cold-storage warehouse launches. Reporters (HVAC / Operations) raise defects; resolvers (Program Manager (Infra) / PMC / PMO / Warehouse Admin) drive them closed before go-live.
+Snag-tracking for cold-storage warehouse launches. Reporters (HVAC / Operations / Warehouse Admin) raise defects; resolvers (Program Manager (Infra) / PMC / PMO) drive them closed before go-live.
 
 Next.js 16 App Router · TypeScript · Tailwind · shadcn/ui (`@base-ui/react`) · Supabase (Auth, Postgres, Storage) · `exceljs`.
 
