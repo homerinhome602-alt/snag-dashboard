@@ -679,7 +679,7 @@ The snapshot job moves to Phase 0 deliberately — see §12.1. Everything else c
 - **Raised line** — every snag ever raised, cumulative. This is the scope
 - **Closed line** — every snag ever closed, cumulative. This is the progress
 - **The gap between them** — shaded; it is the current open count
-- **Projection** — both lines' recent slopes extended to the go-live date
+- **Projection** — both lines' recent slopes extended to the go-live date. **As built:** the slope is `(today's total − total 7 days ago) / 7` (fewer days if less history exists), not a slope over the whole history, so a burst of activity weeks ago doesn't skew today's line — then `today's total + slope × days-to-go-live`, floored at today's total so a negative slope can't draw the dashed line dipping below the last real point. Only drawn if a go-live date is set and still in the future; no target, no dashed line
 
 **Reading it**
 - Gap **narrowing** → on track; the two lines converge before go-live
@@ -704,7 +704,7 @@ A daily snapshot per warehouse, written by a `pg_cron` job (jobname `snag-daily-
 
 The chart derives entirely from this table, which keeps it a cheap indexed read rather than an aggregation over `snags`.
 
-**`total_raised`/`total_closed` are recomputed from live `snags` counts on each run, not a true ever-incrementing ledger** — so a snag deleted directly at the database layer (no UI path does this, but nothing blocks it) would show up as both totals dropping on that day's snapshot, which the chart's two-cumulative-lines premise can't represent sensibly. **As built (18 Aug 2026):** `BurnUpChart` clamps each day's displayed totals to never fall below the prior day's, purely at render time — a rendering-layer guard against exactly this, not a fix to the snapshot function itself.
+**`total_raised`/`total_closed` are recomputed from live `snags` counts on each run, not a true ever-incrementing ledger** — so a snag deleted directly at the database layer (no UI path does this, but nothing blocks it) would show up as both totals dropping on that day's snapshot, which the chart's two-cumulative-lines premise can't represent sensibly. **As built (18 Aug 2026, revised same day):** `BurnUpChart` finds the most recent day either total actually dropped and starts the visible series there, discarding everything before it — purely at render time, not a fix to the snapshot function itself. A first attempt clamped each day's displayed total to never fall below the prior day's instead; that was wrong whenever *today's* real count sits below a stale pre-drop peak (exactly Bhiwandi cold store 1's case after its test data was reset) — the clamp pinned the chart at that fictional peak forever, since today's true value could never climb back above it. Truncating instead of clamping shows the honest, currently-valid run of history.
 
 **Timing note:** the snapshot only records from the day the job is deployed, and history that was never captured cannot be recovered except by replaying `snag_activity`. The job therefore belongs in **Phase 0** with the schema, not in a later analytics phase — otherwise early warehouses will have a permanent hole at the start of their chart.
 
