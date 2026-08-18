@@ -193,11 +193,32 @@ Append-only audit log for **warehouse-level** administrative actions, structural
 | `id` | uuid PK |
 | `warehouse_id` | uuid FK |
 | `actor_id` | uuid FK → profiles, nullable |
-| `action` | text — currently `create`, `activate`, `deactivate` |
-| `field` / `old_value` / `new_value` | text, nullable — only populated for `activate`/`deactivate` (`field = "is_active"`); `create` rows leave all three null |
+| `action` | text — `create`, `activate`, `deactivate`, `go_live_date_change` (added 18 Aug 2026) |
+| `field` / `old_value` / `new_value` | text, nullable — populated for `activate`/`deactivate` (`field = "is_active"`) and `go_live_date_change` (`field = "go_live_date"`, both dates as `date`-cast text); `create` rows leave all three null |
 | `created_at` | timestamptz |
 
-Both RLS policies (`SELECT`, `INSERT`) are `private.is_dashboard_admin()` only — nobody else can read or write this table, matching the fact that only admins can reach the screen that shows it.
+`set_go_live_date()` writes the `go_live_date_change` row itself (old value read before the update, new value the resolver/admin just set) — not a separate action, so it can't be skipped.
+
+**RLS was widened 18 Aug 2026.** `SELECT` was originally `is_dashboard_admin()` only; it's now `is_dashboard_admin() OR is_warehouse_member(warehouse_id)` (policy renamed `warehouse_activity_select_scoped` to match), so reporters/resolvers can see a warehouse's own history too — needed once the go-live-date hover history (§5.7) started showing it on the warehouse detail page, which they view. `INSERT` stays admin-only — only admin actions and the `set_go_live_date` `SECURITY DEFINER` RPC ever write rows here, never a plain client insert.
+
+### 3.4b `people_activity` — **new table (18 Aug 2026)**
+
+Same shape and intent as `warehouse_activity`, scoped to people instead: logs the two admin actions on the People screen that previously left no trace — inviting someone, and tagging an already-accepted person onto another warehouse via "+ Add warehouse" (§5.6).
+
+| Column | Type |
+|---|---|
+| `id` | uuid PK |
+| `email` | text — the target person, **not** `user_id` |
+| `actor_id` | uuid FK → profiles, nullable |
+| `action` | text — `invited`, `warehouse_added` |
+| `detail` | text, nullable — a pre-built human-readable summary, e.g. `"Invited as HVAC Engineer, tagged to Bhiwandi cold store 1"` or `"Tagged to Nagpur frozen DC"` |
+| `created_at` | timestamptz |
+
+**Keyed by `email`, not `user_id`, deliberately.** An invited-but-not-yet-signed-up person has no `profiles.id` at all — email is the only identifier stable across that transition, and it's what the People table's rows are already keyed by.
+
+**`action` + `detail` instead of `warehouse_activity`'s `field`/`old_value`/`new_value` shape, deliberately.** Both actions here are compound, additive "here's what happened" events (a role plus a list of warehouses) rather than one field's clean before/after — trying to split that across `old_value`/`new_value` would be awkward, so the RPC/action builds the summary sentence once and stores it as-is.
+
+Both RLS policies are `is_dashboard_admin()` only, same admin-table convention as `warehouse_activity` and `invitations` — only admins can ever write these two actions, so there's no reporter/resolver case to widen for.
 
 ### 3.5 `snags`
 
@@ -485,6 +506,8 @@ Table of invitations: email, default role, **warehouse** (§3.2), status (invite
 
 **Revised (17 Aug 2026) — no role picker; one role per person, not per warehouse.** The first version let the admin choose a role per call, which meant re-running it on someone already tagged elsewhere with a different role left them holding two roles at once — discovered on a real test account with different roles stacked across four warehouses. `addWarehouseMembership` now takes no role argument: it reads `profiles.default_role` (set once at invite time) as the person's single role, and on every call rewrites *all* of their `warehouse_members` rows — existing warehouses plus newly-picked ones — under it, self-healing any prior drift rather than only preventing new drift. See §2.1's narrowing note. There's still no way to remove a warehouse tag outright (with no replacement) or change `is_dashboard_admin` for someone already signed in from this screen.
 
+**As built (18 Aug 2026) — rows expand to show change history, logged to `people_activity` (§3.4b).** A one-line hint ("Click a row to see its change history.") sits above the table, matching the equivalent hint on the snag table. `createInvitation` and `addWarehouseMembership` both now log a `people_activity` row on success; clicking a row (`PersonRow`, mirroring `WarehouseRow`'s expand pattern) shows that person's history — timestamp, actor, and a plain-language summary. **Still not logged anywhere**, found the same day: deactivating/reactivating a person (`set_user_active`) — the same function at the center of the `is_active` enforcement gap below — and there's no action at all yet to remove a warehouse tag or change an already-signed-in person's Dashboard Admin status, so neither has anything to log.
+
 ### 5.7 Warehouse detail
 Opens from a card or the sidebar.
 
@@ -502,6 +525,8 @@ The screen opens with a **header block above the snag table**, laid out in three
 | Open High | Drives the readiness colour |
 | Go-live date | Editable inline by resolvers |
 | Days to go-live | Derived |
+
+**As built (18 Aug 2026) — a small hover info icon sits next to the go-live date** (both the editable and read-only header variants), showing its change history (`GoLiveHistoryInfo`, reading `warehouse_activity`'s `go_live_date_change` rows, §3.4a) — timestamp, actor, old date → new date. Built as two nested CSS boxes rather than one: the outer box carries an invisible padding bridge (not a margin gap) between the icon and the visible tooltip, and drops `pointer-events-none`, so moving the mouse from the icon down into the tooltip doesn't cross a dead zone that would drop the hover state — a first version got this wrong and the tooltip closed before you could read a long list. The list itself is height-capped and scrolls under a fixed heading.
 
 **3. Burn-up chart** — the only chart in the product, rendered here and nowhere else.
 
@@ -759,6 +784,8 @@ Each is documented in place above; collected here so nothing is missed on a skim
 | `warehouse_admin` moved from the resolver group to the reporter group | §2.1 |
 | `warehouse_activity` — an audit-log table for warehouse create/activate/deactivate, structurally parallel to `snag_activity` but never in the original plan | §3.4a |
 | `profiles` gained a fully-open, unscoped `SELECT` policy (`profiles_select_all`) — anyone authenticated can read any profile, unlike every other table's per-warehouse scoping | §3.1 |
+| `people_activity` — a new audit-log table for two previously-untracked People-screen actions (invite, warehouse tag added), never in the original plan | §3.4b |
+| `warehouse_activity` gained a third action (`go_live_date_change`) and its `SELECT` policy was widened from admin-only to admin-or-warehouse-member | §3.4a |
 
 **Dead code, deployed but unreachable from the UI** — not a divergence in behaviour, but worth knowing before assuming any of these are load-bearing: the `create_warehouse` RPC (§5.4 – 5.5), `components/role-people-picker.tsx` (§5.4a), and the `warehouses_delete_admin` RLS policy (§5.4 – 5.5 ⚠️).
 
@@ -774,6 +801,8 @@ None of this changes the data model (except where noted in §14.1); it came out 
 - **Multi-select filters, search box, Export/Import/Add-snag** all share a single row rather than stacking on separate lines.
 - **Snag-raised confirmation** — a banner appears after raising a snag and dismisses itself after 5 seconds with an animated exit rather than disappearing instantly.
 - Dashboard card split (all-warehouses totals vs. next-to-launch), hover-pop on cards, standardised laptop-viewport padding (50px), description tag in the table, Add Snag form starts with no field pre-selected.
+- **People Management rows are now expandable** ("Click a row to see its change history." hint above the table), showing `people_activity` history per person — see §5.6.
+- **Go-live date gained a hover history icon** next to it, on both the editable and read-only header — see §5.7.
 
 ### 14.3 Known gaps
 
@@ -783,3 +812,4 @@ None of this changes the data model (except where noted in §14.1); it came out 
 - **Notifications** were never started — overdue ETC is visible in the UI but nothing reaches the person who can act on it. The chat thread (§5.7.1) has the same gap: no live push, so a new message from the other side is only seen on your own next action or reload, not in real time.
 - **Password-reset email deliverability depends on a one-time Supabase dashboard step.** The "Reset Password" email template still needs its link changed to `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery&next=/auth/update-password`, since the default template points at Supabase's hosted verify page, which can't set a session cookie on this app's own domain. Supabase's built-in email sending is also heavily rate-limited — fine for testing, not for production volume.
 - **"Deactivate" in User Management does not currently revoke access — found 18 Aug 2026, not yet applied.** `set_user_active()` writes `profiles.is_active`, but nothing reads it: not `private.is_dashboard_admin()`, not `private.is_warehouse_member()`, not `private.has_warehouse_role()` (which `is_reporter`/`is_resolver` both call), no RLS policy anywhere, no auth/proxy gate. Confirmed by searching every function body and every policy in the schema for `is_active` — `set_user_active` is the only hit. A deactivated person can still sign in and use every capability they had before; only the status badge changes. A fix was drafted — gate those three primitive functions on `is_active` (they're what every RLS policy and RPC route through, so this cascades everywhere at once) and add a self-deactivation guard to `set_user_active` (there's exactly one active Dashboard Admin today; without the guard they could lock themselves out with no one left to undo it) — but applying it was declined for this pass. The SQL is in this session's transcript if picked back up later.
+- **Not everything about a person is tracked, even after `people_activity` (§3.4b) closed two of the gaps — found 18 Aug 2026.** Still nothing logs deactivating/reactivating a person (`set_user_active`, same function as the gap above), and there's no action at all yet — so nothing to log — for removing a warehouse tag or for changing an already-signed-in person's Dashboard Admin status.

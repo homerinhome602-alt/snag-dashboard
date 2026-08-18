@@ -177,6 +177,12 @@ Total 420px pinned.
 
 **The expanded row's chat panel uses the same trick one level down — as built (17 Aug 2026), width fix and visual treatment revised the same day.** The `<td colSpan={13}>` it lives in can't itself be sticky (position:sticky doesn't work on a cell spanning the full row width), but a plain `<div>` nested inside that wide cell can be — it sticks to the left edge of the table's own scroll container regardless of how far the table is scrolled. Width was originally a guessed `w-[min(1000px,90vw)]` cap; that's gone, replaced by a `ResizeObserver` reading the scroll container's own `clientWidth` so the panel always matches the true visible screen area (accounts for sidebar state and viewport size without hardcoding either). The panel also sits on `bg-background` with a border, padding, and a small uppercase "SNAG #N — UPDATES" label — the earlier version shared the table body's plain `bg-card` and read as more table rather than a distinct panel.
 
+### Hover tooltips (CSS-only, no JS state)
+
+`GoLiveHistoryInfo` (go-live date's history icon, §Component map) is the first CSS-only `group`/`group-hover` tooltip in the app, built after a real bug: `pointer-events-none` on the tooltip box, combined with a `margin-top` gap between the trigger icon and the box, meant moving the mouse from the icon down into the tooltip crossed a stretch of nothing that isn't part of the `group`'s hoverable area — the browser hit-tests whatever's *behind* a `pointer-events-none` element, not the element itself, so hover dropped and the tooltip closed before you could read a long list or scroll it.
+
+**Fixed pattern for any future hover tooltip**: two nested boxes, not one. The outer box is invisible, positioned, and carries the gap as `padding-top` (not `margin-top`) — padding is still inside the element's own hoverable box, margin isn't. The inner box carries the visible background/border/shadow. Neither box sets `pointer-events-none`. This keeps the hover chain unbroken all the way from the trigger through the gap into the tooltip content itself.
+
 ### Sidebar
 
 Collapses to an icon rail. Content is **fully hidden when collapsed**, not clipped or overflowing — a partially-visible label reads as a rendering fault. The Home link lives inside that same hidden content, so it only appears once the rail is open, with a divider separating it from the warehouse list. Sticky-positioned so it (and the top header) stay in place while the page scrolls. Reveals Warehouse management and User management only to Dashboard Admins, and the warehouse list itself only shows warehouses the current user can read (`PLAN.md` §2.3).
@@ -208,8 +214,10 @@ Where each design element lives:
 | Fixed role colours | `lib/roles.ts` |
 | Warehouse management (create, activate/deactivate, status history) | `app/(app)/warehouses/manage/warehouse-code-manager.tsx`, `warehouse-row.tsx`, `status-filter.tsx` |
 | Go-live date inline editor | `components/go-live-editor.tsx` |
+| Go-live date hover history | `app/(app)/warehouses/[id]/go-live-history-info.tsx` |
 | About the page (roles explainer) | `app/(app)/about/page.tsx` |
 | Snag table search | `components/search-box.tsx` |
+| People row (expandable change history) | `app/(app)/admin/users/person-row.tsx` |
 
 ### Readiness thresholds
 
