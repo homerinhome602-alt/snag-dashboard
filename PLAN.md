@@ -45,6 +45,8 @@ Everything required to stand this app up from nothing, so a rebuild doesn't have
 
 **Migrations are Supabase-project-only, not version-controlled** — see the CLAUDE.md gotcha. `mcp__supabase__list_migrations` (or `npx supabase migration list`) is the only reliable inventory; the count keeps climbing, so this document doesn't try to track it. **§15 is the fallback if that tool isn't available** — a literal, verified snapshot of every table, function, view, trigger, and RLS policy as deployed, enough to reproduce the schema from nothing without needing to inspect the live project at all.
 
+**Root layout** (`src/app/layout.tsx`) — `next.config.ts` is untouched default (no custom config at all). Exact `<head>` metadata: title `"Frozen Warehouse Launch Readiness"`, description `"Snag tracking and launch readiness for frozen warehouse commissioning"`. The three `next/font/google` calls, exact weights loaded (see DESIGN.md's Type section for the Instrument Sans weight discrepancy this implies): `Instrument_Sans({ variable: "--font-display", subsets: ["latin"], weight: ["500"] })`, `Inter({ variable: "--font-body", subsets: ["latin"], weight: ["400", "500"] })`, `IBM_Plex_Mono({ variable: "--font-data", subsets: ["latin"], weight: ["400", "500"] })`.
+
 ---
 
 ## 1. Design decision carried forward
@@ -343,6 +345,24 @@ Append-only audit log: actor, action, field, old value, new value, timestamp. Ev
 
 `update_id` is set only when a non-empty comment was supplied — the caller uses it the same two-step way `raise_snag`/`post_snag_update` already work: the RPC creates the row, then the client uploads any attached photo/video to that id separately.
 
+### 3.14 Exact display labels — consolidated reference
+
+Every enum's stored value differs in casing/wording from what the UI actually shows, per `lib/roles.ts` and `lib/snags.ts`. §3.7/§3.8 already gave sub-category and location; the rest were only ever implied elsewhere. Full set, in one place:
+
+| Enum | Stored values → displayed labels |
+|---|---|
+| `category` | `hvac`→"HVAC", `ops`→"Ops" |
+| `sub_category` | `odu`→"ODU", `idu`→"IDU", `puff_panel`→"Puff panel", `plc`→"PLC", `door`→"Door", `floor`→"Floor", `piping`→"Piping", `racks`→"Racks", `electrical`→"Electrical", `iot_sensors`→"IoT sensors", `others`→"Others" |
+| `location` | `frozen_chamber`→"Frozen chamber", `ante_room`→"Ante room", `odu_area`→"ODU area", `ambient_area`→"WH ambient area" |
+| `scope` | `oem`→"OEM", `infra`→"Infra", `admin`→"Admin" |
+| `severity` | `high`→"High", `medium`→"Medium", `low`→"Low" |
+| `status` | `open`→"Open", `wip`→"WIP", `ready_to_close`→**"Verify"** (not "Ready to close" — the label speaks to what the reporter does next, not the status name itself), `closed`→"Closed" |
+| `member_role` | see `lib/roles.ts`'s `MEMBER_ROLES` — "Operations", "HVAC Engineer", "Program Manager (Infra)", "PMC", "PMO", "Warehouse Admin" (exact casing, including the parenthetical on Program Manager) |
+
+**Ageing colour bands** (`ageingClass()` in `lib/snags.ts`) — **not specified anywhere else in this document**, the source code comment says as much: `days >= 14` → `text-red`, `days >= 7` → `text-amber-deep`, otherwise → `text-muted-foreground`. Chosen as a reasonable default (under a week / one-to-two weeks / beyond) when this was built; §5.7 only ever said "colour-banded" without numbers.
+
+Excel import matches enum cells **against these labels, case-insensitively** (§8), not against the raw stored value — a cell reading `hvac`, `HVAC`, or `Hvac` all resolve to the same stored `hvac`.
+
 ---
 
 ## 4. Column-level permissions
@@ -609,6 +629,8 @@ Snags are raised on the floor, not at a desk. The raise flow is designed for a p
 
 Offline sync has a schema consequence: the client generates the snag `id` (uuid) locally, but `serial_no` can only be allocated server-side at sync time, since it depends on the warehouse counter. The UI must therefore show "pending" rather than a number until sync completes.
 
+**As built — exact offline-queue mechanics** (`lib/offline-queue.ts`, `lib/sync-queue.ts`): a single IndexedDB database, name `snag-offline-queue`, version `1`, one object store `pending-snags` keyed by `localId` (the client-generated snag uuid). `enqueueSnag`/`listQueuedSnags`/`removeQueuedSnag` are the only three operations — no update-in-place. `syncOfflineQueue()` runs on mount (`PendingSyncBanner`, §14.2) and on the browser's `online` event: for each queued item in order, it calls `raise_snag` with `p_id: localId` (so the client-generated uuid becomes the real primary key, not a throwaway) and then uploads any queued photos via `uploadAttachment`. **Stops at the first failing item** rather than skipping it — a mid-queue failure (e.g. lost membership, network drop) leaves the rest queued in their original order rather than silently reordering or dropping them. Only removed from IndexedDB after a fully successful raise + all photo uploads.
+
 ---
 
 ## 6. Media handling
@@ -620,6 +642,18 @@ Offline sync has a schema consequence: the client generates the snag `id` (uuid)
 - **Video** needs a hard size cap and a max duration, enforced client-side before upload begins
 - Thumbnails generated client-side on upload, since Supabase Storage does not transform media
 - Storage buckets are private; the app serves signed URLs
+
+**As built — exact numbers** (`lib/media.ts`):
+
+| Constant | Value | Applies to |
+|---|---|---|
+| `MAX_DIMENSION` | 1600px (longest edge) | Photo, annotated + original, re-encoded via canvas |
+| `THUMB_DIMENSION` | 320px (longest edge) | Thumbnail, both photo and video |
+| JPEG quality | 0.85 full-size, 0.7 thumbnail | `canvas.toBlob` quality param |
+| `MAX_VIDEO_BYTES` | 50MB (`50 * 1024 * 1024`) | Same limit as the storage bucket's own cap (§0) — belt and suspenders |
+| `MAX_VIDEO_SECONDS` | 60 | Enforced client-side; video thumbnail is a frame captured at `min(0.5s, duration/2)` |
+
+Every attachment upload writes up to three storage objects under one path prefix — `{base}.jpg`/`.mp4`, `{base}-thumb.jpg`, and (photos only) `{base}-original.jpg` — then one `attachments` table row referencing all three URLs, in that order (storage first, then the row; a storage failure never leaves an orphaned row, but a row-insert failure after a successful storage upload can leave an orphaned object — not currently cleaned up).
 
 ---
 
@@ -643,6 +677,34 @@ Requires the `pg_trgm` extension and a GIN index on `description`.
 
 - **Export** — current filtered view to `.xlsx`, all columns plus ageing and overdue flag
 - **Import** — download a sample template first, with the exact headers, the valid enum values per column, and one example row. Upload is validated row-by-row with errors reported per line before anything is committed.
+
+**As built — exact spec** (`lib/excel.ts`, via `exceljs`):
+
+**Export** (`exportSnagsToExcel`) — one worksheet, `"Snags"`, bold header row, file named `{warehouseName, non-word-chars replaced with _}-snags.xlsx`. Columns, in order, with their exact `exceljs` width:
+
+| Header | Key | Width |
+|---|---|---|
+| S.No | `serial_no` | 8 |
+| Date Raised | `date_raised` | 13 |
+| Raised By | `raised_by` | 22 |
+| Description | `description` | 45 |
+| Category | `category` | 10 |
+| Sub-category | `sub_category` | 14 |
+| Location | `location` | 16 |
+| Scope | `scope` | 10 |
+| Severity | `severity` | 10 |
+| Status | `status` | 13 |
+| ETC | `etc_date` | 13 |
+| Ageing (days) | `ageing` | 13 |
+| Overdue | `overdue` | 10 |
+
+Every enum column exports its **display label**, not the raw enum value (`SUB_CATEGORY_LABELS` etc., §3.14) — sub-category exports the free-text `sub_category_other` instead of "Others" when set. `Overdue` is the literal string `"Yes"`/`"No"`.
+
+**Import template** (`downloadImportTemplate`) — one worksheet, `"Import"`, headers `Description, Category, Sub-category, Sub-category Other, Location, Scope, Severity` (Description column width 45, all others 20), then exactly two data rows:
+1. A real example: `"Evaporator fan not coming back on after defrost cycle"`, HVAC, ODU, *(blank)*, Frozen chamber, Infra, High.
+2. An italic notes row (`color: {argb: "FF8A7A75"}`) — Description reads `"↑ Example row — delete before importing."`; every other cell lists that column's valid values joined by `" / "` (e.g. Category's cell literally reads `"Valid: HVAC / Ops"`); the Severity cell additionally appends the exact §3.6 sentence, `". High means this stops the warehouse launching."`.
+
+**Import parsing** (`parseImportFile`) — reads only the first worksheet. Row 1 is always skipped as the header. A row is silently skipped (not an error) if its Description starts with `"↑ Example row"`, or if Description/Category/Sub-category are all empty (blank row). Every enum cell is matched **case-insensitively against the display label**, not the raw enum value (`reverseLookup`, §3.14) — typing `hvac` or `HVAC` both resolve, but the underlying value stored is the enum (`hvac`), never the label. Validation order per row, first failure wins: Description required → Category valid → Sub-category valid → Sub-category Other required if Sub-category is Others → Location valid → Scope valid → Severity valid. Every row is validated before any row is committed (no partial-batch commits); each valid row is then raised through the same `raise_snag` path a manual Add Snag uses (§7's duplicate-detection RPC is **not** run for imports — there's no per-row duplicate check on the import path).
 
 ---
 

@@ -50,6 +50,7 @@ Status: open `--blush` · in progress `--sky` · ready to close `--mint` · clos
 | Role | Face | Notes |
 |---|---|---|
 | Display | Instrument Sans | **700 weight** (bumped from 500 — as built, 12 Aug 2026, after a legibility pass found the original weight read as too quiet against the palette's soft tones), `-0.015em` tracking. Screen and section titles only |
+| Display, discrepancy found 19 Aug 2026 | — | The 700-weight bump above only ever landed in `globals.css` (`h1,h2,h3 { font-weight: 700 }`) — `app/layout.tsx`'s `next/font/google` call still loads `Instrument_Sans` with `weight: ["500"]` only, never updated to include `"700"`. A static (non-`"variable"`) Google Font in `next/font` only serves the weights actually requested, so the browser is rendering headings as **synthetic/faux bold** applied to the 500-weight glyphs, not a genuine 700-weight font file — not what the 12 Aug change intended, and visually different (crisper true-bold vs. browser-faked bold) from what loading `weight: ["500", "700"]` would produce. Left as-is here since fixing it is a product decision outside a documentation pass — but an exact rebuild should replicate the *current* synthetic-bold behavior (i.e. keep `weight: ["500"]`), not silently "correct" it to load real 700, or headings will render subtly differently from the live app. |
 | Body | Inter | 400. All prose, form labels, descriptions |
 | Data | IBM Plex Mono | Serial numbers, dates, counts, ageing, metrics. Never for prose |
 
