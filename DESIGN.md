@@ -98,7 +98,13 @@ The triangular marker's fill is a separate small map, keyed by the same RAG colo
 
 It is a **gauge, not a progress bar** — the scale is fixed and identical on every card, so warehouses can be compared against each other at a glance rather than each against itself. Marker position derives from the readiness formula in `PLAN.md` §5.2.1.
 
-Reused at reduced scale as a top edge on the login card and on modal headers, so the motif ties screens together.
+**Reused at reduced scale as a top edge on the auth cards — corrected 19 Aug 2026, was previously mis-stated as "and on modal headers".** Verified by searching the whole codebase for this pattern: it appears on exactly three pages — `/login`, `/set-password`, `/forgot-password` — and **not** on `/auth/update-password` (that page's card has no top strip at all) and not on any modal (`duplicate-check-modal.tsx` has none). It's also not literally the same array as the main thermometer's 10 stops, scaled down — it's a separately hardcoded 8-stop gradient, defined identically (copy-pasted, not shared/imported) in each of the three page files as a local `THERMOMETER` constant:
+
+```
+["#DCEAEE", "#E4EBEA", "#EDEAE5", "#F5E7E0", "#FBE4DE", "#F2C7BB", "#E89484", "#C75B4E"]
+```
+
+Rendered as 8 equal-width `h-1.5` flex segments across the top of the auth card.
 
 When a warehouse has no go-live date, the thermometer collapses to a single inert grey band — absence of a scale, not a zero reading.
 

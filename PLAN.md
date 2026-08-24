@@ -415,6 +415,31 @@ The original plan specified Google sign-in as primary with password as a fallbac
 
 Because the gate is the email address, a user invited as `x@company.com` must sign in with exactly that address — a personal Gmail will not match. The User Management screen should say so.
 
+**As built — exact error copy** (each page has its own `ERROR_COPY` map, `Record<string, {title, body}>`, rendered in an accent-tinted box above the form; `/auth/update-password`'s is a flat `Record<string, string>`, one line, no title). All four pages share one hardcoded, page-local (not imported/shared) 8-stop gradient strip across the card's top edge — except `/auth/update-password`, which has none (§ DESIGN.md's "Signature: the readiness thermometer", corrected 19 Aug 2026 — this was previously mis-documented as also appearing on modal headers, which it never has).
+
+`/login`:
+| Error key | Title | Body |
+|---|---|---|
+| `not_invited` | "This email isn't set up yet" | "We don't have an invitation for that address. Ask your dashboard admin to add it, then sign in with that exact address." |
+| `invalid_credentials` | "Couldn't sign you in" | "That email and password combination doesn't match an account." |
+
+`/set-password`:
+| Error key | Title | Body |
+|---|---|---|
+| `missing_fields` | "Missing information" | "Fill in every field before submitting." |
+| `not_invited` | "This email isn't set up yet" | "We don't have an invitation for that address. Ask your dashboard admin to add it, then come back with that exact address." |
+| `already_exists` | "This email already has an account" | "Sign in instead, or use Forgot password if that account needs a password set." |
+| `password_mismatch` | "Passwords don't match" | "Type the same password in both fields." |
+| `weak_password` | "Choose a stronger password" | "That password is too easy to guess. Try something longer or less common." |
+
+Success (no error, `?success=1`): title "Almost there", body "Check your email to confirm your address, then sign in."
+
+**Stale copy found 19 Aug 2026, not fixed — flagging, not silently correcting.** `/set-password`'s subtitle still reads *"For people invited by email who don't sign in with Google."* — a leftover from before Google sign-in was reverted (this section's own opening paragraph). Read literally today it implies Google sign-in still exists as an alternative elsewhere in the app, which is false. Exact current text is captured here for reproduction fidelity; whether to fix the actual copy is a product call outside a documentation pass.
+
+`/forgot-password`: no keyed error map, just one conditional block — shown when `error=invalid_or_expired`: title "That link didn't work", body "It may have expired or already been used. Request a new one below." Success (`?sent=1`): title "Check your email", body "If an account exists for that address, a reset link is on its way." (deliberately identical whether or not the address exists, per the paragraph above).
+
+`/auth/update-password`: `password_mismatch` → "Those passwords don't match.", `weak_password` → "That password is too easy to guess. Try something longer or less common.", `unknown` → "Something went wrong. Try requesting a new reset link." This page also redirects to `/forgot-password?error=invalid_or_expired` itself, before rendering anything, if `getClaims()` finds no session — the one case where a *different* page's error copy is what the user actually sees.
+
 ### 5.2 Landing — warehouse cards
 Top bar: **Frozen Warehouse Launch Readiness**. Shows the warehouses the current user can read (§2.3) — all of them for a Dashboard Admin, only tagged ones otherwise.
 
@@ -630,6 +655,33 @@ Snags are raised on the floor, not at a desk. The raise flow is designed for a p
 Offline sync has a schema consequence: the client generates the snag `id` (uuid) locally, but `serial_no` can only be allocated server-side at sync time, since it depends on the warehouse counter. The UI must therefore show "pending" rather than a number until sync completes.
 
 **As built — exact offline-queue mechanics** (`lib/offline-queue.ts`, `lib/sync-queue.ts`): a single IndexedDB database, name `snag-offline-queue`, version `1`, one object store `pending-snags` keyed by `localId` (the client-generated snag uuid). `enqueueSnag`/`listQueuedSnags`/`removeQueuedSnag` are the only three operations — no update-in-place. `syncOfflineQueue()` runs on mount (`PendingSyncBanner`, §14.2) and on the browser's `online` event: for each queued item in order, it calls `raise_snag` with `p_id: localId` (so the client-generated uuid becomes the real primary key, not a throwaway) and then uploads any queued photos via `uploadAttachment`. **Stops at the first failing item** rather than skipping it — a mid-queue failure (e.g. lost membership, network drop) leaves the rest queued in their original order rather than silently reordering or dropping them. Only removed from IndexedDB after a fully successful raise + all photo uploads.
+
+### 5.9 Exact validation and empty-state copy — consolidated reference
+
+Every client-side validation message and empty-state string outside of auth (§5.1 has those), verified by grepping the whole `src/` tree on 19 Aug 2026 — a deliberately bounded set (unlike full UI copy, which this document doesn't attempt to transcribe, §14.3) because these are the strings a user actually has to read to understand *why* something didn't work, not decorative labels.
+
+**Client-side validation errors** (shown inline, not via redirect+query-param like §5.1's):
+| Text | Where |
+|---|---|
+| "Email and a role are required." | Invite form, §5.6 |
+| "Pick at least one warehouse." | Both the invite form's warehouse picker and "+ Add warehouse" (§5.6) |
+| "This person has no role on file, so they can't be tagged to a warehouse here." | `addWarehouseMembership`, §5.6 — should be unreachable in practice since every accepted profile has a `default_role` |
+| "Warehouse code can't be empty." | `createWarehouseCode`, §5.4–5.5 |
+| "All fields are required." | `raiseSnag`, §5.8 / Add Snag form |
+| "Add a comment before sending." | Chat compose box's "Send" button, §5.7.1 |
+| "Could not read that video file." | Video capture control, §6 |
+
+**Empty states:**
+| Text | Where |
+|---|---|
+| "No warehouses yet. Use "Warehouse management" in the sidebar to create the first one." | Landing page, zero readable warehouses |
+| "None yet" | Sidebar warehouse list, zero readable warehouses |
+| "No warehouses match this filter." | Warehouse Management table, §5.4–5.5 |
+| "No history yet." | Both Warehouse Management's and People Management's expanded-row history (§3.4a, §3.4b) — identical text, two different screens |
+| "No changes recorded yet." | Go-live date hover history, §5.7 |
+| "No one invited yet." | People Management, zero rows |
+| "No snags match this filter." | Snag table, §5.7 |
+| "No one tagged to this warehouse yet." | Team block, §5.7 |
 
 ---
 
@@ -877,6 +929,9 @@ None of this changes the data model (except where noted in §14.1); it came out 
 - **Password-reset email deliverability depends on a one-time Supabase dashboard step.** The "Reset Password" email template still needs its link changed to `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery&next=/auth/update-password`, since the default template points at Supabase's hosted verify page, which can't set a session cookie on this app's own domain. Supabase's built-in email sending is also heavily rate-limited — fine for testing, not for production volume.
 - **"Deactivate" in User Management does not currently revoke access — found 18 Aug 2026, not yet applied.** `set_user_active()` writes `profiles.is_active`, but nothing reads it: not `private.is_dashboard_admin()`, not `private.is_warehouse_member()`, not `private.has_warehouse_role()` (which `is_reporter`/`is_resolver` both call), no RLS policy anywhere, no auth/proxy gate. Confirmed by searching every function body and every policy in the schema for `is_active` — `set_user_active` is the only hit. A deactivated person can still sign in and use every capability they had before; only the status badge changes. A fix was drafted — gate those three primitive functions on `is_active` (they're what every RLS policy and RPC route through, so this cascades everywhere at once) and add a self-deactivation guard to `set_user_active` (there's exactly one active Dashboard Admin today; without the guard they could lock themselves out with no one left to undo it) — but applying it was declined for this pass. The SQL is in this session's transcript if picked back up later.
 - **Not everything about a person is tracked, even after `people_activity` (§3.4b) closed two of the gaps — found 18 Aug 2026.** Still nothing logs deactivating/reactivating a person (`set_user_active`, same function as the gap above), and there's no action at all yet — so nothing to log — for removing a warehouse tag or for changing an already-signed-in person's Dashboard Admin status.
+- **`/set-password`'s subtitle still references Google sign-in — found 19 Aug 2026, not fixed.** See §5.1's exact-copy table. Leftover from before Google auth was reverted; reads as if Google is still an option elsewhere, which it isn't anywhere in the app.
+
+**Where this document's precision deliberately stops.** As of the 19 Aug 2026 pass, §15 makes the database layer reproducible byte-for-byte, and §3.14/§5.9/§5.1's error tables cover every enum label, every client-side validation message, every empty state, and every auth-flow error string in the app — the full bounded set of copy a user actually has to *read to understand what happened*. What's **not** transcribed anywhere, deliberately: purely descriptive/decorative UI text with no behavioral weight — section headings, column headers, static labels, placeholder text, button labels that just name their own action ("Save", "Cancel", "Sign in"). Capturing those verbatim, component by component, would mean copying most of the source into markdown rather than describing it — at that point this stops being a plan and becomes a worse mirror of the repo. A rebuild working from these three files will be behaviorally and structurally exact; the last mile of literally-identical incidental wording on things like button labels is the one gap left standing on purpose.
 
 ---
 
