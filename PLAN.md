@@ -656,9 +656,9 @@ Offline sync has a schema consequence: the client generates the snag `id` (uuid)
 
 **As built — exact offline-queue mechanics** (`lib/offline-queue.ts`, `lib/sync-queue.ts`): a single IndexedDB database, name `snag-offline-queue`, version `1`, one object store `pending-snags` keyed by `localId` (the client-generated snag uuid). `enqueueSnag`/`listQueuedSnags`/`removeQueuedSnag` are the only three operations — no update-in-place. `syncOfflineQueue()` runs on mount (`PendingSyncBanner`, §14.2) and on the browser's `online` event: for each queued item in order, it calls `raise_snag` with `p_id: localId` (so the client-generated uuid becomes the real primary key, not a throwaway) and then uploads any queued photos via `uploadAttachment`. **Stops at the first failing item** rather than skipping it — a mid-queue failure (e.g. lost membership, network drop) leaves the rest queued in their original order rather than silently reordering or dropping them. Only removed from IndexedDB after a fully successful raise + all photo uploads.
 
-### 5.9 Exact validation and empty-state copy — consolidated reference
+### 5.9 Exact validation, empty-state, placeholder, and subtext copy — consolidated reference
 
-Every client-side validation message and empty-state string outside of auth (§5.1 has those), verified by grepping the whole `src/` tree on 19 Aug 2026 — a deliberately bounded set (unlike full UI copy, which this document doesn't attempt to transcribe, §14.3) because these are the strings a user actually has to read to understand *why* something didn't work, not decorative labels.
+Every client-side validation message, empty-state string, input placeholder, and screen subtitle outside of auth (§5.1 has those), verified by grepping the whole `src/` tree on 19 and 24 Aug 2026 — this is now the full set of copy with behavioral or orienting weight (what a user reads to understand *what a field wants*, *why something didn't work*, or *what screen they're on*), as opposed to purely structural labels (column headers, button text that just names its own action) that §14.3 explains this document still doesn't transcribe.
 
 **Client-side validation errors** (shown inline, not via redirect+query-param like §5.1's):
 | Text | Where |
@@ -682,6 +682,32 @@ Every client-side validation message and empty-state string outside of auth (§5
 | "No one invited yet." | People Management, zero rows |
 | "No snags match this filter." | Snag table, §5.7 |
 | "No one tagged to this warehouse yet." | Team block, §5.7 |
+
+**Input placeholders** (every `placeholder=` in the codebase outside auth, which already has its own three `priya@company.com` instances, §5.1):
+| Text | Field | Where |
+|---|---|---|
+| "Warehouse code" | Warehouse code input | Warehouse Management, §5.4–5.5 |
+| "Search description…" | Search box | Snag table, §5.7 (note the real ellipsis character `…`, not three periods) |
+| "Add description" | Description textarea | Add Snag form, §5.8 |
+| "Describe the sub-category" | Sub-category-other textarea | Add Snag form, shown only when Sub-category = Others |
+| "name@company.com" | Email input | Invite form, §5.6 |
+| "Search or select…" | `role-people-picker.tsx` — **dead code**, not reachable in the running app (§5.4a) |
+| "Add a comment" | Chat compose textarea | §5.7.1 |
+
+**Screen subtitles** (the small muted line directly under a screen's `<h1>`, where one exists — several screens have none, noted as such):
+| Screen | Subtitle text |
+|---|---|
+| Landing (`/`) | none — goes straight from the header bar into the summary cards |
+| Warehouse detail | none — go-live date sits where a subtitle would, in the header's top-right instead (§5.7) |
+| Warehouse Management | none |
+| People Management | "Add someone's work email and the role they'll hold by default. They sign in with that exact address — a personal account won't match." |
+| About the page | "Frozen Warehouse Launch Readiness tracks defects — snags — found while a cold-storage warehouse is being built and commissioned, so nothing blocks opening day by surprise. Everyone can see what's still open across a warehouse; the two roles below are the people who raise issues and the people who close them." |
+| Import snags | the warehouse's name (dynamic, not static copy) |
+| Raise a snag | the warehouse's name (dynamic, not static copy) |
+| `/login` | "Sign in to continue" |
+| `/set-password` | "For people invited by email who don't sign in with Google." — the stale Google reference flagged above |
+| `/forgot-password` | "We'll email you a link to choose a new one." |
+| `/auth/update-password` | "Choose a new password for your account." |
 
 ---
 
@@ -931,7 +957,7 @@ None of this changes the data model (except where noted in §14.1); it came out 
 - **Not everything about a person is tracked, even after `people_activity` (§3.4b) closed two of the gaps — found 18 Aug 2026.** Still nothing logs deactivating/reactivating a person (`set_user_active`, same function as the gap above), and there's no action at all yet — so nothing to log — for removing a warehouse tag or for changing an already-signed-in person's Dashboard Admin status.
 - **`/set-password`'s subtitle still references Google sign-in — found 19 Aug 2026, not fixed.** See §5.1's exact-copy table. Leftover from before Google auth was reverted; reads as if Google is still an option elsewhere, which it isn't anywhere in the app.
 
-**Where this document's precision deliberately stops.** As of the 19 Aug 2026 pass, §15 makes the database layer reproducible byte-for-byte, and §3.14/§5.9/§5.1's error tables cover every enum label, every client-side validation message, every empty state, and every auth-flow error string in the app — the full bounded set of copy a user actually has to *read to understand what happened*. What's **not** transcribed anywhere, deliberately: purely descriptive/decorative UI text with no behavioral weight — section headings, column headers, static labels, placeholder text, button labels that just name their own action ("Save", "Cancel", "Sign in"). Capturing those verbatim, component by component, would mean copying most of the source into markdown rather than describing it — at that point this stops being a plan and becomes a worse mirror of the repo. A rebuild working from these three files will be behaviorally and structurally exact; the last mile of literally-identical incidental wording on things like button labels is the one gap left standing on purpose.
+**Where this document's precision deliberately stops.** As of the 24 Aug 2026 pass, §15 makes the database layer reproducible byte-for-byte, and §3.14/§5.9/§5.1's tables cover every enum label, every client-side validation message, every empty state, every input placeholder, every screen subtitle, and every auth-flow error string in the app — the full set of copy a user actually reads to understand *what a field wants, why something didn't work, or what screen they're on*. DESIGN.md's "Interaction patterns" section (added the same pass) is equally exhaustive for hover-vs-click behavior — every dropdown, tooltip, and expandable row in the app is individually classified, not generalized. What's **not** transcribed anywhere, deliberately: purely structural UI text with no behavioral or orienting weight — column headers, static section labels, button text that just names its own action ("Save", "Cancel", "Sign in", "Deactivate"). Capturing those verbatim, component by component, would mean copying most of the source into markdown rather than describing it — at that point this stops being a plan and becomes a worse mirror of the repo. A rebuild working from these three files will be behaviorally, structurally, and interactionally exact; the last mile of literally-identical incidental wording on self-describing button labels is the one gap left standing on purpose.
 
 ---
 

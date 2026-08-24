@@ -190,6 +190,21 @@ Total 420px pinned.
 
 **Fixed pattern for any future hover tooltip**: two nested boxes, not one. The outer box is invisible, positioned, and carries the gap as `padding-top` (not `margin-top`) — padding is still inside the element's own hoverable box, margin isn't. The inner box carries the visible background/border/shadow. Neither box sets `pointer-events-none`. This keeps the hover chain unbroken all the way from the trigger through the gap into the tooltip content itself.
 
+### Interaction patterns — hover vs click, every dropdown and expandable element classified
+
+Added 24 Aug 2026 after a direct question about dropdown hover behavior — the honest answer turned out to be **almost nothing in this app opens or closes on hover**. Verified by reading every interactive open/close component in the codebase; this is the complete list, not a sample.
+
+**Hover-driven** (exactly two things in the whole app):
+- **Sidebar rail** (`app-shell.tsx`) — opens on `onMouseEnter` of the whole `<nav>`, closes on `onMouseLeave`. See "Sidebar" below.
+- **Go-live date history icon** (`go-live-history-info.tsx`) — pure CSS `group`/`group-hover`, no JS state at all. See "Hover tooltips" above. Opens when the cursor enters the icon *or* the tooltip panel itself (the padding-bridge fix above exists specifically so moving from one to the other doesn't drop it); closes the instant the cursor leaves both.
+
+**Click-driven — everything that looks like a "dropdown" is actually this**, not hover:
+- **`MultiSelectFilter`** (`components/multi-select-filter.tsx`) — every snag-table filter (Status/Category/Sub-category/Location/Scope/Severity), the invite form's warehouse picker, and "+ Add warehouse"'s picker all reuse this one component. Trigger button toggles `open` on **click** (`onClick={() => setOpen(v => !v)}`), not hover. Closes on a document-level `mousedown` listener that checks whether the click landed outside both the trigger and the panel — so clicking *inside* the panel (including the panel's own "All"/"Clear" buttons) never closes it. **Checking or unchecking an option does not close the dropdown either** — `toggle()` only calls `onChange`, never touches `open` — by design, so picking several values in a row doesn't require reopening it each time. Hovering the trigger or the panel does nothing at all; there's no `:hover`/`onMouseEnter` handler anywhere in this component.
+- **`Select`** (`components/ui/select.tsx`, the Role picker on the invite form) — a thin wrapper over `@base-ui/react`'s `Select` primitive. Standard combobox behavior: click the trigger to open, click an item (or Escape, or click outside) to close. No custom hover logic layered on top of the primitive.
+- **Native `<select>`** (the status dropdown in `snag-compose.tsx`'s `StatusControls`) — plain HTML, fully OS-native. Click to open, click an option to select and close; whatever hover-highlight-under-cursor behavior the OS provides is not something this app controls or customizes.
+- **Expandable rows** — the snag table's chat-thread expand (`snag-row.tsx`), Warehouse Management's status-history expand (`warehouse-row.tsx`), and People Management's change-history expand (`person-row.tsx`) all toggle on a **click** of the row (`onClick` on the `TableRow`), not hover. All three use local `useState`, not a shared component.
+- **Team block** (`team-block.tsx`) — "Show all N" is a click-toggled button, not hover.
+
 ### Sidebar
 
 Collapses to an icon rail. Content is **fully hidden when collapsed**, not clipped or overflowing — a partially-visible label reads as a rendering fault. The Home link lives inside that same hidden content, so it only appears once the rail is open, with a divider separating it from the warehouse list. Sticky-positioned so it (and the top header) stay in place while the page scrolls. Reveals Warehouse management and User management only to Dashboard Admins, and the warehouse list itself only shows warehouses the current user can read (`PLAN.md` §2.3).
