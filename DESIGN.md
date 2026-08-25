@@ -211,6 +211,47 @@ Collapses to an icon rail. Content is **fully hidden when collapsed**, not clipp
 
 **As built, the open/collapse trigger is hover, not click.** `app-shell.tsx`'s outer `<nav>` sets `open` state directly from `onMouseEnter`/`onMouseLeave` — entering the rail always forces it open, leaving always forces it closed. A hamburger button nested inside also carries its own `onClick` toggle, but since the hover handlers re-decide `open` on every enter/leave regardless of the button's own state, the click toggle is functionally superseded rather than an equal second way to operate it. `SIDEBAR_WIDTH = "11.5rem"`, `SIDEBAR_COLLAPSED = "3rem"`.
 
+### Shared primitives — as built
+
+`components/ui/*.tsx` are shadcn-generated; most are unmodified from the generator (`Input`, `Label`, `Alert`) and carry no app-specific customization worth documenting beyond what the token mapping already covers. Two are customized in ways that matter:
+
+**`Button`** (`ui/button.tsx`) — `variant="outline"` is the one hand-edited variant, changed from shadcn's neutral default to `border-teal bg-frost text-teal-deep` — this is the concrete implementation of "secondary controls read cool" (Form section above). Every other variant (`default`, `secondary`, `ghost`, `destructive`, `link`) is stock. Sizes: `default` (h-8), `sm` (h-7), `xs` (h-6), `lg` (h-9), plus icon-only squares at each height (`icon`/`icon-sm`/`icon-xs`/`icon-lg`). Active-state press feedback is a 1px downward translate (`active:translate-y-px`), app-wide, not per-component.
+
+**`Badge`** (`ui/badge.tsx`) — the component itself is stock shadcn; every visual variant seen in the app (status pills, role chips, severity chips) is a `className` override supplied at the call site, not a `badgeVariants` entry. Base shape is fixed regardless of caller: `h-5`, `rounded-4xl` (pill), `text-xs`, `px-2 py-0.5`.
+
+### Icons — as built
+
+Two sources, both small and enumerable — this app does not use a general-purpose icon set:
+
+**Custom inline SVG** (hand-drawn `<svg>` markup, no icon library), 3 distinct glyphs across 4 call sites:
+| Icon | Used in | Size | Definition |
+|---|---|---|---|
+| Hamburger | Sidebar toggle button (`app-shell.tsx`) | 18×14 viewBox | Three horizontal `<line>`s, `strokeWidth 1.5`, at y=1/7/13 |
+| Home | Sidebar Home link (`app-shell.tsx`) | 16×16 viewBox | One `<path>`, roof + door outline, `strokeWidth 1.4`, rounded caps/joins |
+| Info (circle-i) | Sidebar "About the page" link (`app-shell.tsx`), **and separately** the go-live date history icon (`go-live-history-info.tsx`) | 16×16 in the sidebar, **13×13** at the go-live icon | Circle `r=6` + a vertical stem + a dot, `strokeWidth 1.4`. **Duplicated, not shared** — the go-live icon's `<svg>` is a second, independent copy of the same path data at a different size, not an import of the sidebar's `InfoIcon` function. Editing one does not affect the other. |
+
+**`lucide-react`** (the only external icon library imported anywhere): `ArrowUp`/`ArrowDown`/`ArrowUpDown` — the snag table's column sort indicators (§ Sticky columns / `snag-table.tsx`). `ChevronDownIcon`/`ChevronUpIcon`/`CheckIcon` — inside `ui/select.tsx` only, part of the generated shadcn primitive, not hand-picked for this app.
+
+Nothing else in the app renders an icon — no icon on buttons like "Save"/"Cancel"/"Add snag", no icons in the sidebar's warehouse list, no icons on status/severity badges. Text and colour alone carry those, consistent with the Quality floor rule that colour is never the sole carrier of meaning (badges still get a text label) but the inverse also holds here in practice — most controls carry no icon at all.
+
+### Screen-by-screen layout — as built
+
+Most screens share one **page container** pattern, applied inline at each `page.tsx` rather than as a shared component: `mx-auto w-full max-w-screen-2xl px-4 py-6 sm:px-6 sm:py-8 lg:px-[50px]`. Three exceptions, verified by reading each page file rather than assumed from the pattern: the four auth pages (§5.1's pattern: a single centered `max-w-[340px]` card, no page container at all); **Import**, which uses a narrower centered card (`max-w-xl sm:max-w-3xl lg:max-w-4xl`); and **About the page**, capped at `max-w-screen-md`. **Add Snag uses the same full-width `max-w-screen-2xl` container as Landing and Warehouse detail** — despite visually reading as a narrow centered form (the card inside it just doesn't stretch to fill the space), it is not actually a narrow-container page, and it's the one screen most likely to be mis-copied as matching Import's container by a rebuild working from a general impression rather than the actual class.
+
+**Landing (`/`)** — page container, then: a 2-up summary strip (`grid-cols-1 sm:grid-cols-2`, gap `2.5`) — left card is all-warehouses totals (Open/Open High/Raised, three numbers in a row), right card is "Next to launch"; then a `grid-cols-1 sm:grid-cols-2 xl:grid-cols-3` warehouse-card grid, gap `2.5`. Empty state (§5.9) replaces the entire grid area, centered, when zero warehouses are readable.
+
+**Warehouse detail** — page container. Header row (`flex items-baseline justify-between`, `mb-3`): warehouse name left, go-live date + editor/history-icon right. Then a two-column grid at `lg:` (`grid-cols-1 lg:grid-cols-[0.85fr_1.15fr]`, gap `2.5`): left column is a `grid-cols-2` metrics tile grid (4 small tiles + one full-width "Days left for launch" tile spanning both columns), right column is the burn-up chart. Below that: the optional raised-snag banner, then a filter/search/action row (`flex flex-wrap items-center gap-2`, actions pushed right via `ml-auto`), the "click a row" hint, the snag table, and finally — as of 18 Aug 2026 — the Team block on its own, `mt-3`, below everything else (§5.7, §14.2).
+
+**Add Snag** (`/warehouses/[id]/snags/new`) — **standard full-width page container** (`max-w-screen-2xl`, not narrow — see the correction above), one card inside it (`rounded-card border bg-card p-5 sm:p-7`) that doesn't stretch to fill the width, which is what makes it *read* as a narrow form. Inside the card: h1 "Raise a snag", subtitle = warehouse name, then the form: a 2-up grid (`grid-cols-1 sm:grid-cols-2`) pairing Description with Photos, then Sub-category full-width (radio cards, `flex flex-wrap`, min-height 56px each per the glove-tap-target rule), then a second 2-up grid (`grid-cols-1 sm:grid-cols-2`) holding Category/Location/Scope/Severity as four stacked radio-card groups, Severity's group carrying the "High means this stops the warehouse launching." line directly beneath it. Footer: a top border (`border-t border-line-soft pt-3.5`) then right-aligned Cancel/Raise snag buttons, both `min-h-14`.
+
+**Import** (`/warehouses/[id]/import`) — the genuinely narrow-container screen (`max-w-xl sm:max-w-3xl lg:max-w-4xl`, see the correction above — this is the one Add Snag is *not*), one card, same h1+subtitle-as-warehouse-name pattern as Add Snag, but a much simpler body: template download, file upload dropzone, Cancel/Import snags buttons.
+
+**Warehouse Management** (`/warehouses/manage`) — page container, h1 "Warehouse management" (`mb-4`), then: a bordered card (`mb-5 rounded-card border bg-card p-4`) holding the "Add new warehouse code" label, a `max-w-xs` text input, and the Create button in one `flex flex-wrap gap-2` row; then a `flex items-center justify-between` row pairing the status filter with the "Click a row to see its status history." hint; then the warehouse table.
+
+**People Management** (`/admin/users`) — page container, header row (`flex items-baseline justify-between`, `mb-1`) with h1 "People" left and the "N active · N invited" count right; a subtitle paragraph (`max-w-[60ch]`, §5.9); the invite form (email input, Role select, Warehouse multi-select, Send invite button, all in one `flex flex-wrap items-center gap-2` row); the "Click a row to see its change history." hint; the table.
+
+**About the page** (`/about`) — page container capped narrower (`max-w-screen-md`); h1, subtitle paragraph, then a `grid-cols-1 sm:grid-cols-2` two-card grid (Reporters / Resolvers), each card holding role chips + a bulleted capability list; a closing muted line below the grid.
+
 ### Component map
 
 Where each design element lives:
