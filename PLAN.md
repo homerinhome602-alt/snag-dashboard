@@ -53,6 +53,38 @@ Everything required to stand this app up from nothing, so a rebuild doesn't have
 
 One `snags` table keyed by `warehouse_id`, **not** a physical table per warehouse. The UI renders a table per warehouse; the data stays in one queryable place. This is what makes the cross-warehouse landing cards and roll-up stats possible at all.
 
+### 1a. Signature features — what makes this dashboard distinctive, and why
+
+The rest of this document specifies *how* things are built. This section exists to keep the *why* from getting lost in that — every feature below is a deliberate response to something about frozen-warehouse commissioning specifically, not a generic snag-tracker default. Each links to its full technical treatment elsewhere.
+
+**The readiness thermometer — a gauge, not a progress bar (§5.2.1, `DESIGN.md`'s Signature section).** Every warehouse card carries a fixed 10-band red→green gradient with a marker showing where that warehouse sits. Because the scale is identical and fixed on every card, warehouses can be compared *against each other* at a glance — "which of our four launches is in the worst shape" is a one-second visual scan, not four separate mental calculations. A progress bar (0 → 100% of *something*) can't do that; a gauge with a fixed scale can.
+
+**RAG colour that answers one question: can we open? (§5.2.1)** The red/amber/green isn't severity-coded or generically "how many snags" — it's driven by the specific combination leadership actually asks about: any open High-severity snag, or open% above threshold, or days-to-launch running out with snags still open. A warehouse with 40 low-severity snags can be green; one with a single open High is red. The colour is a launch decision, not a snag count.
+
+**Burn-up, not burn-down (§12).** The chart shows two lines — total raised and total closed — instead of one line for "open count." This is the single most domain-specific decision in the app: in a cold-store commissioning, snags arrive continuously as chambers are pulled to temperature and systems are switched on, so a flat open-count line is ambiguous — it can't tell you whether the team stopped closing things or new things kept arriving, and those two problems need opposite responses (more resolver capacity vs. controlling intake). The burn-up separates them into two lines and shows which one is actually the risk.
+
+**Card order is launch proximity, not alphabetical (§5.2.2).** Warehouses with a go-live date sort soonest-first; undated warehouses sort last, but *among themselves* by open-snag-count descending — so an undated warehouse quietly carrying 40 open snags still surfaces above one carrying two, because it needs a date set more urgently. Nobody has to remember to check on it.
+
+**Duplicate detection catches the same defect logged five times (§7).** Multiple people walking the same chamber independently notice and raise the same fault. Before a snag is written, a `pg_trgm` text-similarity search checks the same warehouse + location + sub-category for a close match on description, and shows the raiser the candidate before letting them decide. This is specifically about reducing noise in a fast-moving, multi-person commissioning site, not a generic form-validation nicety.
+
+**The update thread is a two-sided chat, not a one-way status log (§5.7.1).** Reporters and resolvers see one merged, chronological feed with messages visually sided like a messaging app — reporter left, resolver right, system events centered and unobtrusive. Older versions of this kind of tool tend to make the update log resolver-only, turning the reporter into a passive ticket-filer; here the person who found the problem can keep talking to the person fixing it, in the same place, with the same permanence.
+
+**Mobile raising is designed for a gloved hand at −25 °C, not adapted from desktop (§5.8).** This is the app's most physically-constrained screen and it shows: 56px minimum tap targets (thermal gloves defeat capacitive touch), radio cards instead of dropdowns (nothing that needs precision tapping), camera-first flow, and a hard ceiling of 6 required fields because time inside a blast freezer is deliberately limited. The desktop form is the adaptation of this, not the other way round.
+
+**Offline-capable raising, because warehouse wifi doesn't reach the back of a chamber (§5.8, §14.2).** A snag raised with no signal is queued in IndexedDB with a client-generated id and synced automatically the moment connection returns — including its photos. Nobody has to remember to re-submit anything, and nothing is lost to a dead zone.
+
+**Column-level permissions enforced at the database, not just hidden in the UI (§4).** A reporter physically cannot write `etc_date` or `status`; a resolver physically cannot raise a snag under someone else's name. This isn't a UI convention that a client-side bug could quietly break — every write path is a `SECURITY DEFINER` RPC that checks real warehouse membership before touching a column, so the separation holds even against a malicious or buggy client.
+
+**Excel round-trips through a self-documenting template (§8).** The downloadable import template ships with a live example row and an italic notes row listing every valid value per column, including the exact "High means this stops the warehouse launching" severity guidance. A site engineer working entirely from a spreadsheet, no app access, can fill it out correctly without ever being told the rules out of band.
+
+**Near-total audit trail, added incrementally as real gaps were found (§3.13, §3.4a, §3.4b).** `snag_activity`, `warehouse_activity`, and `people_activity` mean almost nothing changes silently — who raised, who closed, who changed a go-live date, who invited whom, who got tagged to a new warehouse, all timestamped and attributed. §14.3 tracks the handful of actions that still aren't logged, honestly, rather than implying full coverage that doesn't exist.
+
+**Dashboard Admin acts everywhere without being tagged everywhere (§2.2).** A global admin bypasses the reporter/resolver tag check on every snag-adjacent write, but the audit trail still records their real identity, not a generic "admin" actor — so the convenience of a global role never costs you the accuracy of who actually did what.
+
+**Warehouse-scoped visibility respects real organizational boundaries (§2.3).** This isn't one flat pool of snags — a person only ever sees the warehouses they're tagged to. Different launch teams working different sites don't see each other's in-progress problems by default, matching how these commissioning projects are actually staffed and run.
+
+**The go-live date carries its own lightweight history, not a separate audit screen (§5.7, `go-live-history-info.tsx`).** Hover the small info icon next to the date and see every change, who made it, and when — without navigating away from the number that matters most to everyone watching the countdown.
+
 ---
 
 ## 2. Roles and visibility
