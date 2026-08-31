@@ -8,8 +8,8 @@ Next.js 16 App Router · TypeScript · Tailwind · shadcn/ui (`@base-ui/react`) 
 
 ## Where truth lives
 
-- **`PLAN.md`** — behaviour, schema, permissions, roles, screens. Reconciled with the running code; §14 lists as-built divergences and known gaps. §0 has everything a from-scratch environment needs (dependency versions, env vars, storage bucket config, extensions).
-- **`DESIGN.md`** — palette, type, layout rules, component map.
+- **`PLAN.md`** — behaviour, schema, permissions, roles, screens. Reconciled with the running code; §14 lists as-built divergences and known gaps. §0 has everything a from-scratch environment needs (dependency versions, env vars, storage bucket config, extensions). §1a is a plain-language tour of what makes this app distinctive and why, not just how it's built. §5.9 is the exact copy reference (every validation message, empty state, placeholder, and screen subtitle). **§15 is a literal, verified SQL snapshot of the entire database** (every table, function, view, trigger, RLS policy, and grant, as deployed) — check it before re-deriving schema behavior from prose alone, and re-verify it against `mcp__supabase__list_migrations` if picked back up much later, since it's a point-in-time snapshot that goes stale the moment a new migration lands.
+- **`DESIGN.md`** — palette, type, layout rules, component map, plus (as of 25 Aug 2026) an exact screen-by-screen layout reference, a complete icon inventory, and a definitive hover-vs-click classification for every interactive element in the app. It's not just a mood board — check it for exact container widths and interaction behavior before guessing.
 
 Read the relevant section before changing behaviour or visuals. Don't restate their contents here or in code comments.
 
@@ -52,6 +52,7 @@ If you're asked to rebuild warehouse onboarding or add a delete button, these th
 ```bash
 npm run dev      # dev server
 npm run build    # production build
+npm run start    # serve the production build (run `build` first)
 npm run lint     # eslint
 ```
 
@@ -73,6 +74,8 @@ Schema changes go through Supabase migrations, not hand-edited SQL against the l
 - **If the burn-up chart's cumulative totals ever drop day over day, don't fix it by clamping to the prior day's value — truncate to start from the drop instead.** Tried the clamp first (18 Aug 2026): a warehouse whose test data got reset had a real current total sitting *below* its stale pre-reset peak, so the clamp pinned the chart at that fictional peak forever, since the true value could never climb back above it. See `PLAN.md` §12.1.
 - **An `actor_id`/similar audit-log column must `references public.profiles(id)`, not `auth.users(id)`, or PostgREST silently can't embed it.** Hit building `people_activity` (18 Aug 2026): the FK was written against `auth.users(id)` (technically correct — that's the real parent table), but a `select actor:profiles(full_name, email)` query needs an actual FK edge to `profiles` to resolve that embed. With the FK pointing at `auth.users` instead, the query returned no error and no data — every activity list just rendered "No history yet." even though the rows existed. Every other `actor_id`/`user_id` column in this schema (`warehouse_activity`, `snag_activity`, `snag_updates`) already points at `profiles.id` for exactly this reason — match that, not the "real" auth table.
 - **CSS-only hover tooltips need `padding`, not `margin`, between the trigger and the box, and no `pointer-events-none` on the box.** See `DESIGN.md`'s "Hover tooltips" section — a margin gap plus `pointer-events-none` breaks `group-hover` the moment the mouse tries to move onto the tooltip itself, closing it before a long list can be read or scrolled.
+- **Instrument Sans is rendering as fake bold, not real 700 weight — found 19 Aug 2026, unpatched.** `globals.css` sets `h1,h2,h3{font-weight:700}`, but `app/layout.tsx`'s `next/font/google` call only ever loads `weight: ["500"]` for it — never updated when the 700 bump was made. The browser is synthesizing bold onto the 500-weight glyphs rather than rendering genuine 700-weight ones. Don't "fix" the font-weight array to add `"700"` without asking — that changes how every heading in the app actually looks (crisper true-bold vs. today's faked bold), which is a visual product decision, not a bug fix. See `DESIGN.md`'s Type section for the full account.
+- **Don't infer a screen's layout from a similar-looking sibling — read the file.** Add Snag and Import look like they share the same narrow centered-card layout; they don't. Add Snag uses the app's standard full-width `max-w-screen-2xl` container (the card inside it just doesn't stretch to fill it); only Import actually uses the narrow `max-w-xl`/`max-w-3xl`/`max-w-4xl` container. This was written down wrong once during a documentation pass specifically *because* the two screens look alike — see `DESIGN.md`'s "Screen-by-screen layout" section, which now states both explicitly for exactly this reason.
 
 ## Scope
 
