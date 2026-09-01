@@ -1002,7 +1002,9 @@ None of this changes the data model (except where noted in §14.1); it came out 
 - **Not everything about a person is tracked, even after `people_activity` (§3.4b) closed two of the gaps — found 18 Aug 2026.** Still nothing logs deactivating/reactivating a person (`set_user_active`, same function as the gap above), and there's no action at all yet — so nothing to log — for removing a warehouse tag or for changing an already-signed-in person's Dashboard Admin status.
 - **`/set-password`'s subtitle still references Google sign-in — found 19 Aug 2026, not fixed.** See §5.1's exact-copy table. Leftover from before Google auth was reverted; reads as if Google is still an option elsewhere, which it isn't anywhere in the app.
 
-**Where this document's precision deliberately stops.** As of the 25 Aug 2026 pass, §15 makes the database layer reproducible byte-for-byte; §3.14/§5.9/§5.1's tables cover every enum label, every client-side validation message, every empty state, every input placeholder, every screen subtitle, and every auth-flow error string; and DESIGN.md now also has an exact screen-by-screen layout reference (container widths, grid structures, spacing, verified against each page's actual source rather than assumed from the general pattern — this is how the Add-Snag-vs-Import container mix-up below was caught), a full icon inventory (exactly 3 hand-drawn glyphs plus 4 `lucide-react` icons, nothing else), and a definitive hover-vs-click classification for every interactive element. What's **not** transcribed anywhere, deliberately: purely structural UI text with no behavioral or orienting weight — column headers, static section labels, button text that just names its own action ("Save", "Cancel", "Sign in", "Deactivate"). Capturing those verbatim, component by component, would mean copying most of the source into markdown rather than describing it — at that point this stops being a plan and becomes a worse mirror of the repo. A rebuild working from these three files will be behaviorally, structurally, visually, and interactionally exact; the last mile of literally-identical incidental wording on self-describing button labels is the one gap left standing on purpose.
+**Where this document's precision used to stop, until it didn't.** Through 25 Aug 2026, this section said the last gap was left standing on purpose: purely structural UI text with no behavioral weight (column headers, self-describing button labels) wasn't transcribed anywhere, because doing so "would mean copying most of the source into markdown rather than describing it." **On 1 Sept 2026, asked to close that gap anyway, it was closed literally.** §16 is the entire application source tree — every `.ts`/`.tsx` file, every root config file, `globals.css` — embedded verbatim. There is no longer any UI text, however structural or decorative, that isn't captured somewhere in this document: either described with intent in the sections above, or simply *present*, byte-for-byte, in §16. A rebuild no longer has to trust any prose description at all where §16 covers the same ground — it can read the actual component.
+
+This changes what "keeping this document accurate" means going forward: §16 is a snapshot, and unlike the prose sections (which describe intent and mostly survive small edits), it goes stale the instant a single line of source changes. Treat it the way §15 is already treated — regenerate it from the live repository rather than hand-patching it, and don't trust it for a codebase that's since moved on without re-syncing it first.
 
 **A caught error, left visible rather than quietly fixed.** This same pass initially mis-stated Add Snag as using Import's narrow page container, from generalizing "these two screens look similar" instead of reading each file. Corrected in DESIGN.md's "Screen-by-screen layout" section. Recorded here as a concrete reminder that even a systematic pass can introduce a wrong "fact" if it generalizes instead of verifying — the fix for that is always the same one this whole document has used throughout: read the actual file, don't infer from a sibling.
 
@@ -1646,3 +1648,7477 @@ Verified via `aclexplode(proacl)` on 18 Aug 2026 — the detail CLAUDE.md's `CRE
 | `handle_new_user`, `refresh_snag_daily_snapshot` | `postgres`/`service_role` only — not callable by `authenticated` or `anon` at all. `handle_new_user` only ever runs as the `on_auth_user_created` trigger; `refresh_snag_daily_snapshot` only ever runs as the `pg_cron` job (§12.1) |
 
 Confirmed via `pg_get_function_identity_arguments` that `close_snag_directly`, `post_snag_update`, and `verify_snag_closure` — the three CLAUDE.md's gotcha names as the ones widened with a new trailing parameter — each have exactly **one** signature live today, not two. The old overload the gotcha warns about does not currently exist; if one ever reappears after a future signature change, that's the bug the gotcha describes.
+
+---
+
+## 16. Complete application source code — every file, verbatim
+
+This is the literal, final layer: every application source file and root config file in the repository, exactly as it exists on disk on 1 Sept 2026, in full. Everything above this section describes the app in prose, tables, and targeted exact-copy references; this section removes any remaining ambiguity by including the actual source. Generated files (`package-lock.json`, `next-env.d.ts`, `tsconfig.tsbuildinfo`, `.next/`), secrets (`.env.local`), and OS/editor artifacts (`.DS_Store`) are excluded — everything else that is authored, version-controllable project source is here. If this section and the prose sections ever disagree after a future code change, **this section is stale, not wrong-by-design** — regenerate it from the live repository the same way it was built.
+
+### 16.1 Root configuration
+
+#### `next.config.ts`
+
+```ts
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  /* config options here */
+};
+
+export default nextConfig;
+```
+
+#### `tsconfig.json`
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts",
+    "**/*.mts"
+  ],
+  "exclude": ["node_modules"]
+}
+```
+
+#### `postcss.config.mjs`
+
+```js
+const config = {
+  plugins: {
+    "@tailwindcss/postcss": {},
+  },
+};
+
+export default config;
+```
+
+#### `eslint.config.mjs`
+
+```js
+import { defineConfig, globalIgnores } from "eslint/config";
+import nextVitals from "eslint-config-next/core-web-vitals";
+import nextTs from "eslint-config-next/typescript";
+
+const eslintConfig = defineConfig([
+  ...nextVitals,
+  ...nextTs,
+  // Override default ignores of eslint-config-next.
+  globalIgnores([
+    // Default ignores of eslint-config-next:
+    ".next/**",
+    "out/**",
+    "build/**",
+    "next-env.d.ts",
+  ]),
+]);
+
+export default eslintConfig;
+```
+
+#### `components.json`
+
+```json
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "base-nova",
+  "rsc": true,
+  "tsx": true,
+  "tailwind": {
+    "config": "",
+    "css": "src/app/globals.css",
+    "baseColor": "neutral",
+    "cssVariables": true,
+    "prefix": ""
+  },
+  "iconLibrary": "lucide",
+  "rtl": false,
+  "aliases": {
+    "components": "@/components",
+    "utils": "@/lib/utils",
+    "ui": "@/components/ui",
+    "lib": "@/lib",
+    "hooks": "@/hooks"
+  },
+  "menuColor": "default",
+  "menuAccent": "subtle",
+  "registries": {}
+}
+```
+
+#### `package.json`
+
+```json
+{
+  "name": "snag-web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@base-ui/react": "^1.7.0",
+    "@supabase/ssr": "^0.12.4",
+    "@supabase/supabase-js": "^2.112.2",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "exceljs": "^4.4.0",
+    "lucide-react": "^1.30.0",
+    "next": "16.3.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "shadcn": "^4.16.2",
+    "tailwind-merge": "^3.6.0",
+    "tw-animate-css": "^1.4.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.0",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
+```
+
+#### `.gitignore`
+
+```
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+```
+
+### 16.2 Global styles
+
+#### `src/app/globals.css`
+
+```css
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-body);
+  --font-mono: var(--font-data);
+  --font-heading: var(--font-display);
+  --color-ground: var(--ground);
+  --color-surface: var(--surface);
+  --color-line: var(--line);
+  --color-line-soft: var(--line-soft);
+  --color-blush: var(--blush);
+  --color-coral: var(--coral);
+  --color-red: var(--red);
+  --color-red-deep: var(--red-deep);
+  --color-frost: var(--frost);
+  --color-teal: var(--teal);
+  --color-teal-deep: var(--teal-deep);
+  --color-sky: var(--sky);
+  --color-mint: var(--mint);
+  --color-mint-deep: var(--mint-deep);
+  --color-amber: var(--amber);
+  --color-amber-deep: var(--amber-deep);
+  --color-faint: var(--faint);
+  --radius-card: 0.875rem;
+  --radius-pill: 1.25rem;
+  --radius-chip: 0.25rem;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  /* Frozen Warehouse Launch Readiness — thermal gradient palette, see DESIGN.md */
+  --ground: #FFF9F7;
+  --surface: #FFFFFF;
+  --line: #E0C0B0;
+  --line-soft: #F7EAE6;
+  --blush: #FBE4DE;
+  --coral: #E89484;
+  --red: #C75B4E;
+  --red-deep: #8C3A31;
+  --frost: #DCEAEE;
+  --teal: #6E9CA6;
+  --teal-deep: #28505E;
+  --sky: #E2ECF2;
+  --mint: #E4EFE9;
+  --mint-deep: #2C5142;
+  --amber: #F7EAD8;
+  --amber-deep: #7A4A12;
+  --ink: #2E2422;
+  --faint: #6B5A54;
+
+  --background: var(--ground);
+  --foreground: var(--ink);
+  --card: var(--surface);
+  --card-foreground: var(--ink);
+  --popover: var(--surface);
+  --popover-foreground: var(--ink);
+  --primary: var(--red);
+  --primary-foreground: var(--ground);
+  --secondary: var(--surface);
+  --secondary-foreground: var(--ink);
+  --muted: var(--line-soft);
+  --muted-foreground: #5C4F4B;
+  --accent: var(--blush);
+  --accent-foreground: var(--red-deep);
+  --destructive: var(--red);
+  --border: var(--line);
+  --input: var(--line);
+  --ring: var(--red);
+  --chart-1: var(--red);
+  --chart-2: var(--teal);
+  --chart-3: var(--coral);
+  --chart-4: var(--frost);
+  --chart-5: var(--amber);
+  --radius: 0.5rem;
+  --sidebar: var(--surface);
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--red);
+  --sidebar-primary-foreground: var(--ground);
+  --sidebar-accent: var(--blush);
+  --sidebar-accent-foreground: var(--red-deep);
+  --sidebar-border: var(--line);
+  --sidebar-ring: var(--red);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+  h1, h2, h3 {
+    @apply font-heading tracking-[-0.015em];
+    font-weight: 700;
+  }
+}
+```
+
+### 16.3 Application source — `src/`, every `.ts`/`.tsx` file
+
+#### `src/app/(app)/about/page.tsx`
+
+```tsx
+import { ROLE_COLOR_CLASS, roleLabel } from "@/lib/roles";
+
+const REPORTER_ROLE_VALUES = ["hvac_engineer", "operations", "warehouse_admin"];
+const RESOLVER_ROLE_VALUES = ["program_manager_infra", "pmc", "pmo"];
+
+function RoleChips({ values }: { values: string[] }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {values.map((v) => (
+        <span key={v} className={`rounded-pill border px-2 py-0.5 text-[11px] ${ROLE_COLOR_CLASS[v]}`}>
+          {roleLabel(v)}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+export default function AboutPage() {
+  return (
+    <div className="mx-auto w-full max-w-screen-md px-4 py-6 sm:px-6 sm:py-8 lg:px-[50px]">
+      <h1 className="mb-2 text-[17px] font-medium tracking-[-0.015em] text-foreground">About this dashboard</h1>
+      <p className="mb-6 text-[13px] leading-relaxed text-muted-foreground">
+        Frozen Warehouse Launch Readiness tracks defects — snags — found while a cold-storage warehouse is being
+        built and commissioned, so nothing blocks opening day by surprise. Everyone can see what&apos;s still open
+        across a warehouse; the two roles below are the people who raise issues and the people who close them.
+      </p>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="rounded-card border border-border bg-card p-4">
+          <div className="mb-1 text-[14px] font-medium text-foreground">Reporters</div>
+          <p className="mb-3 text-[12px] text-muted-foreground">Raise what they find on the floor.</p>
+          <div className="mb-3">
+            <RoleChips values={REPORTER_ROLE_VALUES} />
+          </div>
+          <ul className="flex flex-col gap-2 text-[12.5px] text-foreground">
+            <li>
+              Raise a new snag — description, category, sub-category, location, scope, severity, and photos.
+            </li>
+            <li>Comment on any snag raised on a warehouse they&apos;re tagged to.</li>
+            <li>Close a ticket directly at any time.</li>
+            <li>Confirm or reject a snag once a resolver has marked it ready to close.</li>
+          </ul>
+        </div>
+
+        <div className="rounded-card border border-border bg-card p-4">
+          <div className="mb-1 text-[14px] font-medium text-foreground">Resolvers</div>
+          <p className="mb-3 text-[12px] text-muted-foreground">Drive each snag to close.</p>
+          <div className="mb-3">
+            <RoleChips values={RESOLVER_ROLE_VALUES} />
+          </div>
+          <ul className="flex flex-col gap-2 text-[12.5px] text-foreground">
+            <li>Comment on a snag, with photos or video.</li>
+            <li>Set an ETC for when the fix will be done.</li>
+            <li>Move a snag to WIP, or mark it ready to close for the reporter to verify.</li>
+            <li>Set a warehouse&apos;s go-live date.</li>
+          </ul>
+        </div>
+      </div>
+
+      <p className="mt-6 text-[11.5px] text-faint">
+        A person holds one role — Reporter or Resolver — the same on every warehouse they&apos;re tagged to.
+      </p>
+    </div>
+  );
+}
+```
+
+#### `src/app/(app)/actions.ts`
+
+```ts
+"use server";
+
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+
+export async function signOut() {
+  const supabase = await createClient();
+  await supabase.auth.signOut();
+  redirect("/login");
+}
+```
+
+#### `src/app/(app)/admin/users/actions.ts`
+
+```ts
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { createClient } from "@/lib/supabase/server";
+import type { MemberRole } from "@/lib/roles";
+import { DASHBOARD_ADMIN_VALUE, roleLabel } from "@/lib/roles";
+
+export async function createInvitation(formData: FormData) {
+  const email = (formData.get("email") as string)?.trim().toLowerCase();
+  const role = formData.get("role") as string;
+
+  if (!email || !role) {
+    return { error: "Email and a role are required." };
+  }
+
+  // Dashboard Admin is mutually exclusive with an operational role here —
+  // picking it means no default_role and no warehouse tagging, since
+  // admin's powers are global, not warehouse-scoped (PLAN.md §2.2).
+  const isAdminPick = role === DASHBOARD_ADMIN_VALUE;
+  const defaultRole = isAdminPick ? null : (role as MemberRole);
+  const grantDashboardAdmin = isAdminPick;
+  const warehouseIds = isAdminPick ? [] : (formData.getAll("warehouse_ids") as string[]);
+
+  const supabase = await createClient();
+
+  // handle_new_user() only ever runs on someone's first sign-in — once
+  // they have a profile, editing this invitation has no effect on their
+  // real access. Say so instead of silently upserting a value that will
+  // never take effect.
+  const { data: existingProfile } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("email", email)
+    .maybeSingle();
+
+  if (existingProfile) {
+    return {
+      error:
+        "This person has already signed in, so their role, warehouse, and admin status can't be changed here — there's currently no way to edit an existing member's access.",
+    };
+  }
+
+  const { data: auth } = await supabase.auth.getClaims();
+  const invitedBy = auth?.claims?.sub;
+
+  const { error } = await supabase.from("invitations").upsert(
+    {
+      email,
+      default_role: defaultRole,
+      grant_dashboard_admin: grantDashboardAdmin,
+      warehouse_ids: warehouseIds,
+      invited_by: invitedBy,
+    },
+    { onConflict: "email" }
+  );
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  let detail = isAdminPick ? "Invited as Dashboard Admin" : `Invited as ${roleLabel(defaultRole)}`;
+  if (warehouseIds.length > 0) {
+    const { data: whs } = await supabase.from("warehouses").select("name").in("id", warehouseIds);
+    const names = (whs ?? []).map((w) => w.name);
+    if (names.length > 0) detail += `, tagged to ${names.join(", ")}`;
+  }
+  await supabase.from("people_activity").insert({ email, actor_id: invitedBy, action: "invited", detail });
+
+  revalidatePath("/admin/users");
+  return { error: null };
+}
+
+// Adds warehouse_members rows for someone who has already signed in — the
+// gap CLAUDE.md documents (handle_new_user only runs on first sign-in, so
+// re-inviting has no effect on real access). A person holds exactly one
+// role, full stop — not chosen here, but read from profiles.default_role
+// (set once at invite time and otherwise unused as anything but a sort
+// hint elsewhere, but authoritative for this control). Every call
+// re-derives the person's *entire* warehouse_members set from their
+// current + newly-picked warehouses, all under that one role, so this
+// also self-heals anyone left holding two different roles by an earlier
+// version of this action that let the caller pass a role per call. Still
+// can't remove a warehouse entirely or touch admin status — see the
+// "no way to edit an existing member" gotcha.
+export async function addWarehouseMembership(userId: string, newWarehouseIds: string[]) {
+  if (newWarehouseIds.length === 0) {
+    return { error: "Pick at least one warehouse." };
+  }
+
+  const supabase = await createClient();
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("default_role, email")
+    .eq("id", userId)
+    .maybeSingle();
+  const role = profile?.default_role as MemberRole | null;
+
+  if (!role) {
+    return { error: "This person has no role on file, so they can't be tagged to a warehouse here." };
+  }
+
+  const { data: existingRows, error: readError } = await supabase
+    .from("warehouse_members")
+    .select("warehouse_id")
+    .eq("user_id", userId);
+
+  if (readError) {
+    return { error: readError.message };
+  }
+
+  const warehouseIds = Array.from(
+    new Set([...(existingRows ?? []).map((r) => r.warehouse_id), ...newWarehouseIds])
+  );
+
+  const { error: deleteError } = await supabase
+    .from("warehouse_members")
+    .delete()
+    .eq("user_id", userId);
+
+  if (deleteError) {
+    return { error: deleteError.message };
+  }
+
+  const rows = warehouseIds.map((warehouse_id) => ({ warehouse_id, user_id: userId, role }));
+  const { error } = await supabase.from("warehouse_members").insert(rows);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  if (profile?.email) {
+    const { data: auth } = await supabase.auth.getClaims();
+    const { data: newWhs } = await supabase.from("warehouses").select("name").in("id", newWarehouseIds);
+    const names = (newWhs ?? []).map((w) => w.name).join(", ");
+    await supabase.from("people_activity").insert({
+      email: profile.email,
+      actor_id: auth?.claims?.sub,
+      action: "warehouse_added",
+      detail: `Tagged to ${names}`,
+    });
+  }
+
+  revalidatePath("/admin/users");
+  return { error: null };
+}
+
+export async function setUserActive(userId: string, isActive: boolean) {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_user_active", {
+    p_user_id: userId,
+    p_is_active: isActive,
+  });
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath("/admin/users");
+  return { error: null };
+}
+```
+
+#### `src/app/(app)/admin/users/add-warehouse-control.tsx`
+
+```tsx
+"use client";
+
+import { useState, useTransition } from "react";
+import { Button } from "@/components/ui/button";
+import { MultiSelectFilter } from "@/components/multi-select-filter";
+import { addWarehouseMembership } from "./actions";
+
+type Warehouse = { id: string; name: string };
+
+export function AddWarehouseControl({
+  userId,
+  warehouses,
+}: {
+  userId: string;
+  warehouses: Warehouse[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [warehouseIds, setWarehouseIds] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  function reset() {
+    setOpen(false);
+    setWarehouseIds([]);
+    setError(null);
+  }
+
+  function submit() {
+    if (warehouseIds.length === 0) {
+      setError("Pick at least one warehouse.");
+      return;
+    }
+    startTransition(async () => {
+      const result = await addWarehouseMembership(userId, warehouseIds);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      reset();
+    });
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="mt-0.5 text-[11px] text-primary hover:underline"
+      >
+        + Add warehouse
+      </button>
+    );
+  }
+
+  // Nothing left to offer — say so instead of showing a picker that opens
+  // onto an empty, confusing dropdown.
+  if (warehouses.length === 0) {
+    return (
+      <div className="mt-1 flex items-center gap-1.5">
+        <p className="text-[11px] text-faint">All warehouses added</p>
+        <Button type="button" variant="outline" size="sm" onClick={reset}>
+          Close
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-1 flex flex-col items-start gap-1.5">
+      <div className="flex flex-wrap items-center gap-1.5">
+        {/* No role picker — a person holds exactly one role, set at invite
+            time (profiles.default_role); this control only adds warehouse
+            tags under that existing role. */}
+        <MultiSelectFilter
+          label="Warehouse"
+          emptySuffix=""
+          options={warehouses.map((w) => ({ value: w.id, label: w.name }))}
+          selected={warehouseIds}
+          onChange={setWarehouseIds}
+          onSelectAll={() => setWarehouseIds(warehouses.map((w) => w.id))}
+        />
+
+        <Button type="button" size="sm" disabled={pending || warehouseIds.length === 0} onClick={submit}>
+          {pending ? "Adding…" : "Add"}
+        </Button>
+        <Button type="button" variant="outline" size="sm" disabled={pending} onClick={reset}>
+          Cancel
+        </Button>
+      </div>
+      {error && <p className="text-[11px] text-destructive">{error}</p>}
+    </div>
+  );
+}
+```
+
+#### `src/app/(app)/admin/users/invite-form.tsx`
+
+```tsx
+"use client";
+
+import { useActionState, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { MultiSelectFilter } from "@/components/multi-select-filter";
+import { INVITE_ROLE_OPTIONS, DASHBOARD_ADMIN_VALUE, roleLabel } from "@/lib/roles";
+import { createInvitation } from "./actions";
+
+type State = { error: string | null; success: boolean };
+type Warehouse = { id: string; name: string };
+
+export function InviteForm({ warehouses }: { warehouses: Warehouse[] }) {
+  const [formKey, setFormKey] = useState(0);
+  const [warehouseIds, setWarehouseIds] = useState<string[]>([]);
+  const [role, setRole] = useState<string | null>(null);
+  const isAdminPick = role === DASHBOARD_ADMIN_VALUE;
+
+  const [state, formAction, pending] = useActionState<State, FormData>(
+    async (_prev, formData) => {
+      const result = await createInvitation(formData);
+      if (result.error) return { error: result.error, success: false };
+      // Role (base-ui Select) and the Warehouse multi-select manage their
+      // own state — a native form reset after the action doesn't reach
+      // them, so force a full remount to clear everything rather than
+      // leaving the last invite's values sitting there.
+      setWarehouseIds([]);
+      setRole(null);
+      setFormKey((k) => k + 1);
+      return { error: null, success: true };
+    },
+    { error: null, success: false }
+  );
+
+  return (
+    <form key={formKey} action={formAction} className="mb-5">
+      <h2 className="mb-2 text-[14px] font-medium text-foreground">Invite people</h2>
+      <div className="flex flex-wrap items-center gap-2">
+        <Input name="email" type="email" placeholder="name@company.com" required className="w-60" />
+
+        <Select name="role" required onValueChange={(v) => setRole(v as string)}>
+          <SelectTrigger className="w-56">
+            <SelectValue>
+              {(value: string | null) => (value ? roleLabel(value) : "Role")}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {INVITE_ROLE_OPTIONS.map((r) => (
+              <SelectItem key={r.value} value={r.value}>
+                {r.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {!isAdminPick && (
+          <>
+            <MultiSelectFilter
+              label="Warehouse"
+              emptySuffix=""
+              options={warehouses.map((w) => ({ value: w.id, label: w.name }))}
+              selected={warehouseIds}
+              onChange={setWarehouseIds}
+              onSelectAll={() => setWarehouseIds(warehouses.map((w) => w.id))}
+              className="w-56"
+            />
+            {warehouseIds.map((id) => (
+              <input key={id} type="hidden" name="warehouse_ids" value={id} />
+            ))}
+          </>
+        )}
+
+        <Button type="submit" disabled={pending} className="w-56">
+          {pending ? "Sending…" : "Send invite"}
+        </Button>
+      </div>
+      {state.error && <p className="mt-2 text-[12.5px] text-destructive">{state.error}</p>}
+      {state.success && <p className="mt-2 text-[12.5px] text-mint-deep">Invite sent.</p>}
+    </form>
+  );
+}
+```
+
+#### `src/app/(app)/admin/users/page.tsx`
+
+```tsx
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { roleLabel } from "@/lib/roles";
+import { InviteForm } from "./invite-form";
+import { PersonRow, type PersonActivityRow } from "./person-row";
+
+type Row = {
+  key: string;
+  name: string;
+  role: string;
+  warehouseNames: string[];
+  status: "active" | "invited" | "deactivated";
+  userId: string | null;
+  isDashboardAdmin: boolean;
+};
+
+export default async function UserManagementPage() {
+  const supabase = await createClient();
+  const { data } = await supabase.auth.getClaims();
+  const uid = data?.claims?.sub;
+
+  const { data: me } = await supabase
+    .from("profiles")
+    .select("is_dashboard_admin")
+    .eq("id", uid)
+    .single();
+
+  if (!me?.is_dashboard_admin) {
+    redirect("/");
+  }
+
+  const [{ data: invitations }, { data: profiles }, { data: warehouses }, { data: memberships }, { data: activity }] =
+    await Promise.all([
+      supabase
+        .from("invitations")
+        .select("email, default_role, accepted_at, grant_dashboard_admin, warehouse_ids")
+        .order("created_at"),
+      supabase.from("profiles").select("id, email, full_name, is_active, is_dashboard_admin"),
+      supabase.from("warehouses").select("id, name, is_active").order("name"),
+      supabase.from("warehouse_members").select("user_id, warehouse_id, role, warehouse:warehouses(name)"),
+      supabase
+        .from("people_activity")
+        .select("id, email, action, detail, created_at, actor:profiles(full_name, email)")
+        .order("created_at", { ascending: false }),
+    ]);
+
+  const activityByEmail: Record<string, PersonActivityRow[]> = {};
+  for (const a of activity ?? []) {
+    const key = (a as { email: string }).email;
+    (activityByEmail[key] ??= []).push(a as unknown as PersonActivityRow);
+  }
+
+  const activeWarehouses = (warehouses ?? []).filter((w) => w.is_active);
+  const warehouseNameById = new Map((warehouses ?? []).map((w) => [w.id, w.name]));
+  const profileByEmail = new Map((profiles ?? []).map((p) => [p.email, p]));
+
+  const membershipsByUser = new Map<string, Set<string>>();
+  const warehouseIdsByUser = new Map<string, Set<string>>();
+  const rolesByUser = new Map<string, Set<string>>();
+  for (const m of memberships ?? []) {
+    const warehouseName = (m.warehouse as unknown as { name: string } | null)?.name;
+    if (!warehouseName) continue;
+    // A person can hold more than one role on the same warehouse (two
+    // warehouse_members rows) — this column doesn't show roles, so the
+    // warehouse name itself should only ever appear once per person.
+    if (!membershipsByUser.has(m.user_id)) membershipsByUser.set(m.user_id, new Set());
+    membershipsByUser.get(m.user_id)!.add(warehouseName);
+    if (!warehouseIdsByUser.has(m.user_id)) warehouseIdsByUser.set(m.user_id, new Set());
+    warehouseIdsByUser.get(m.user_id)!.add(m.warehouse_id);
+    if (!rolesByUser.has(m.user_id)) rolesByUser.set(m.user_id, new Set());
+    rolesByUser.get(m.user_id)!.add(m.role);
+  }
+
+  const rows: Row[] = (invitations ?? []).map((inv) => {
+    const profile = profileByEmail.get(inv.email);
+    const invitedWarehouseNames = (inv.warehouse_ids ?? [])
+      .map((id: string) => warehouseNameById.get(id))
+      .filter((n: string | undefined): n is string => Boolean(n));
+    // Dashboard Admin is folded into this same column rather than shown
+    // separately — once someone has signed in, default_role on the
+    // invitation is no longer authoritative (PLAN.md §3.1), so an accepted
+    // profile shows its real is_dashboard_admin flag plus real
+    // warehouse_members role(s); a pending invitation has no real
+    // membership yet, so it falls back to what was invited.
+    const isDashboardAdmin = profile ? profile.is_dashboard_admin : inv.grant_dashboard_admin;
+    const roleText = profile
+      ? [
+          ...(isDashboardAdmin ? ["Dashboard Admin"] : []),
+          ...[...(rolesByUser.get(profile.id) ?? [])].map(roleLabel),
+        ].join(", ") || "—"
+      : isDashboardAdmin
+        ? "Dashboard Admin"
+        : roleLabel(inv.default_role);
+    return {
+      key: inv.email,
+      name: profile?.full_name ?? inv.email,
+      role: roleText,
+      userId: profile?.id ?? null,
+      isDashboardAdmin,
+      status: !profile ? "invited" : profile.is_active ? "active" : "deactivated",
+      // Dashboard Admin reads (and now writes) every warehouse regardless
+      // of warehouse_members tags (PLAN.md §2.2, §2.3) — show that
+      // directly instead of their real tag list (usually none) or a
+      // misleading "—".
+      warehouseNames: isDashboardAdmin
+        ? ["All"]
+        : profile
+          ? [...(membershipsByUser.get(profile.id) ?? [])]
+          : invitedWarehouseNames,
+    };
+  });
+
+  const activeCount = rows.filter((r) => r.status === "active").length;
+  const invitedCount = rows.filter((r) => r.status === "invited").length;
+
+  return (
+    <div className="mx-auto w-full max-w-screen-2xl px-4 py-6 sm:px-6 sm:py-8 lg:px-[50px]">
+      <div className="mb-1 flex items-baseline justify-between">
+        <h1 className="text-[17px] text-foreground">People</h1>
+        <span className="text-[13px] text-muted-foreground">
+          {activeCount} active · {invitedCount} invited
+        </span>
+      </div>
+      <p className="mb-5 max-w-[60ch] text-[13px] leading-relaxed text-muted-foreground">
+        Add someone&apos;s work email and the role they&apos;ll hold by default. They sign in
+        with that exact address — a personal account won&apos;t match.
+      </p>
+
+      <InviteForm warehouses={activeWarehouses} />
+
+      <p className="mb-1.5 text-[12.5px] text-muted-foreground">Click a row to see its change history.</p>
+
+      <div className="overflow-hidden rounded-card border border-border bg-card">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>Role</TableHead>
+              <TableHead>Warehouse</TableHead>
+              <TableHead className="text-center">Status</TableHead>
+              <TableHead className="text-right">Change status</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center text-muted-foreground">
+                  No one invited yet.
+                </TableCell>
+              </TableRow>
+            )}
+            {rows.map((row) => (
+              <PersonRow
+                key={row.key}
+                row={row}
+                activity={activityByEmail[row.key] ?? []}
+                addableWarehouses={activeWarehouses.filter(
+                  (w) => !warehouseIdsByUser.get(row.userId ?? "")?.has(w.id)
+                )}
+              />
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}
+```
+
+#### `src/app/(app)/admin/users/person-row.tsx`
+
+```tsx
+"use client";
+
+import { useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { TableCell, TableRow } from "@/components/ui/table";
+import { StatusToggle } from "./status-toggle";
+import { AddWarehouseControl } from "./add-warehouse-control";
+
+export type PersonActivityRow = {
+  id: string;
+  action: string;
+  detail: string | null;
+  created_at: string;
+  actor: { full_name: string | null; email: string } | null;
+};
+
+type Row = {
+  key: string;
+  name: string;
+  role: string;
+  warehouseNames: string[];
+  status: "active" | "invited" | "deactivated";
+  userId: string | null;
+  isDashboardAdmin: boolean;
+};
+
+type Warehouse = { id: string; name: string };
+
+function describeActivity(a: PersonActivityRow): string {
+  return a.detail ?? a.action.replaceAll("_", " ");
+}
+
+function fmtDateTime(iso: string) {
+  const d = new Date(iso);
+  return `${d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })} ${d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
+}
+
+export function PersonRow({
+  row,
+  activity,
+  addableWarehouses,
+}: {
+  row: Row;
+  activity: PersonActivityRow[];
+  addableWarehouses: Warehouse[];
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <>
+      <TableRow className="cursor-pointer" onClick={() => setExpanded((v) => !v)}>
+        <TableCell className="text-[13px] text-foreground">{row.name}</TableCell>
+        <TableCell className="text-[13px]">{row.role}</TableCell>
+        <TableCell
+          className="whitespace-normal text-[12.5px] text-muted-foreground"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {row.warehouseNames.length === 0 ? (
+            <span className="block">—</span>
+          ) : (
+            <div className="flex flex-col gap-0.5">
+              {row.warehouseNames.map((n) => (
+                <span key={n}>{n}</span>
+              ))}
+            </div>
+          )}
+          {row.userId && !row.isDashboardAdmin && (
+            <AddWarehouseControl userId={row.userId} warehouses={addableWarehouses} />
+          )}
+        </TableCell>
+        <TableCell className="text-center">
+          <Badge
+            variant="outline"
+            className={
+              row.status === "active"
+                ? "border-mint bg-mint text-mint-deep"
+                : row.status === "invited"
+                  ? "border-blush bg-blush text-red-deep"
+                  : "border-line-soft bg-line-soft text-muted-foreground"
+            }
+          >
+            {row.status === "active" ? "Active" : row.status === "invited" ? "Invited" : "Deactivated"}
+          </Badge>
+        </TableCell>
+        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+          {row.userId && <StatusToggle userId={row.userId} isActive={row.status === "active"} />}
+        </TableCell>
+      </TableRow>
+      {expanded && (
+        <TableRow className="bg-background hover:bg-background">
+          <TableCell colSpan={5} className="whitespace-normal p-3">
+            {activity.length === 0 ? (
+              <p className="text-[12px] text-muted-foreground">No history yet.</p>
+            ) : (
+              <ul className="flex flex-col gap-1">
+                {activity.map((a) => (
+                  <li key={a.id} className="text-[11.5px] text-muted-foreground">
+                    <span className="font-mono text-[10px] text-faint">{fmtDateTime(a.created_at)}</span>{" "}
+                    · <span className="text-foreground">{a.actor?.full_name ?? a.actor?.email ?? "Someone"}</span>{" "}
+                    {describeActivity(a)}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </TableCell>
+        </TableRow>
+      )}
+    </>
+  );
+}
+```
+
+#### `src/app/(app)/admin/users/status-toggle.tsx`
+
+```tsx
+"use client";
+
+import { useTransition } from "react";
+import { Button } from "@/components/ui/button";
+import { setUserActive } from "./actions";
+
+export function StatusToggle({ userId, isActive }: { userId: string; isActive: boolean }) {
+  const [pending, startTransition] = useTransition();
+
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={pending}
+      onClick={() =>
+        startTransition(async () => {
+          await setUserActive(userId, !isActive);
+        })
+      }
+    >
+      {isActive ? "Deactivate" : "Activate"}
+    </Button>
+  );
+}
+```
+
+#### `src/app/(app)/app-shell.tsx`
+
+```tsx
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { PendingSyncBanner } from "@/components/pending-sync-banner";
+import { signOut } from "./actions";
+
+type Warehouse = { id: string; name: string };
+type Profile = { full_name: string | null; email: string; is_dashboard_admin: boolean } | null;
+
+function HamburgerIcon() {
+  return (
+    <svg width="18" height="14" viewBox="0 0 18 14" fill="none">
+      <line x1="0" y1="1" x2="18" y2="1" stroke="currentColor" strokeWidth="1.5" />
+      <line x1="0" y1="7" x2="18" y2="7" stroke="currentColor" strokeWidth="1.5" />
+      <line x1="0" y1="13" x2="18" y2="13" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+  );
+}
+
+function HomeIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path
+        d="M2 7.5 8 2l6 5.5M3.5 6.5V13a.5.5 0 0 0 .5.5h3v-4h2v4h3a.5.5 0 0 0 .5-.5V6.5"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function InfoIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M8 7.25v4M8 5.25v.01" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+const SIDEBAR_WIDTH = "11.5rem"; // w-46 equivalent
+const SIDEBAR_COLLAPSED = "3rem";
+
+// Sidebar links pop slightly and shift to a light red on hover.
+const SIDEBAR_LINK_HOVER = "transition-all duration-150 ease-out hover:translate-x-0.5 hover:text-coral"
+
+export function AppShell({
+  profile,
+  warehouses,
+  children,
+}: {
+  profile: Profile;
+  warehouses: Warehouse[];
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const pathname = usePathname();
+  const isAdmin = !!profile?.is_dashboard_admin;
+
+  return (
+    <div className="flex h-full min-h-screen flex-1">
+      <nav
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        style={{ width: open ? SIDEBAR_WIDTH : SIDEBAR_COLLAPSED }}
+        className="sticky top-0 flex h-screen shrink-0 flex-col overflow-hidden border-r border-border bg-card py-3.5 transition-[width] duration-200 ease-in-out"
+      >
+        <div className="ml-2 mb-3 flex shrink-0 flex-col gap-1">
+          <button
+            type="button"
+            aria-label="Toggle sidebar"
+            onClick={() => setOpen((v) => !v)}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-foreground hover:bg-muted"
+          >
+            <HamburgerIcon />
+          </button>
+        </div>
+        <div
+          style={{ width: SIDEBAR_WIDTH }}
+          className={cn(
+            "flex flex-1 flex-col overflow-y-auto overflow-x-hidden transition-opacity ease-in-out",
+            open ? "opacity-100 duration-150 delay-100" : "pointer-events-none opacity-0 duration-75"
+          )}
+        >
+          <Link
+            href="/"
+            aria-label="Home"
+            className={cn(SIDEBAR_LINK_HOVER, "flex h-8 items-center gap-2 px-4 text-foreground hover:bg-muted")}
+          >
+            <HomeIcon />
+            <span className="text-[12px] whitespace-nowrap">Home</span>
+          </Link>
+          <Link
+            href="/about"
+            aria-label="About the page"
+            className={cn(SIDEBAR_LINK_HOVER, "flex h-8 items-center gap-2 px-4 text-foreground hover:bg-muted")}
+          >
+            <InfoIcon />
+            <span className="text-[12px] whitespace-nowrap">About the page</span>
+          </Link>
+          <div className="mx-4 my-2.5 h-px bg-border" />
+          <div className="px-4 pb-2 text-[9px] uppercase tracking-[0.07em] text-faint">Warehouses</div>
+          {warehouses.length === 0 && (
+            <div className="px-4 py-1 text-[12px] text-muted-foreground">None yet</div>
+          )}
+          {warehouses.map((w) => {
+            const href = `/warehouses/${w.id}`;
+            const active = pathname === href;
+            return (
+              <Link
+                key={w.id}
+                href={href}
+                className={cn(
+                  SIDEBAR_LINK_HOVER,
+                  "block px-4 py-1.5 text-[12px] whitespace-nowrap text-foreground",
+                  active && "border-l-2 border-primary bg-accent pl-[14px] text-accent-foreground"
+                )}
+              >
+                {w.name}
+              </Link>
+            );
+          })}
+          {isAdmin && (
+            <>
+              <div className="mx-4 my-2.5 h-px bg-border" />
+              <Link
+                href="/warehouses/manage"
+                className={cn(
+                  SIDEBAR_LINK_HOVER,
+                  "block px-4 py-1.5 text-[12px] whitespace-nowrap text-muted-foreground",
+                  pathname === "/warehouses/manage" &&
+                    "border-l-2 border-primary bg-accent pl-[14px] text-accent-foreground"
+                )}
+              >
+                Warehouse management
+              </Link>
+              <Link
+                href="/admin/users"
+                className={cn(
+                  SIDEBAR_LINK_HOVER,
+                  "block px-4 py-1.5 text-[12px] whitespace-nowrap text-muted-foreground",
+                  pathname === "/admin/users" &&
+                    "border-l-2 border-primary bg-accent pl-[14px] text-accent-foreground"
+                )}
+              >
+                User management
+              </Link>
+            </>
+          )}
+        </div>
+      </nav>
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="sticky top-0 z-20 flex items-center justify-between border-b border-border bg-card px-4.5 py-3">
+          <span className="text-[14px] font-medium tracking-[-0.015em] text-foreground">
+            Frozen warehouse launch readiness
+          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-[11.5px] text-muted-foreground">
+              {profile?.full_name ?? profile?.email}
+              {isAdmin ? " · Dashboard Admin" : ""}
+            </span>
+            <form action={signOut}>
+              <Button type="submit" variant="ghost" size="sm">
+                Sign out
+              </Button>
+            </form>
+          </div>
+        </div>
+        <PendingSyncBanner />
+        <main className="min-w-0 flex-1 bg-background">{children}</main>
+      </div>
+    </div>
+  );
+}
+```
+
+#### `src/app/(app)/layout.tsx`
+
+```tsx
+import { createClient } from "@/lib/supabase/server";
+import { AppShell } from "./app-shell";
+
+export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  const supabase = await createClient();
+  const { data } = await supabase.auth.getClaims();
+  const uid = data?.claims?.sub;
+
+  const [{ data: profile }, { data: warehouses }] = await Promise.all([
+    supabase.from("profiles").select("full_name, email, is_dashboard_admin").eq("id", uid).single(),
+    supabase.from("warehouses").select("id, name").eq("is_active", true).order("name"),
+  ]);
+
+  return (
+    <AppShell profile={profile} warehouses={warehouses ?? []}>
+      {children}
+    </AppShell>
+  );
+}
+```
+
+#### `src/app/(app)/page.tsx`
+
+```tsx
+import { createClient } from "@/lib/supabase/server";
+import { WarehouseCard } from "@/components/warehouse-card";
+import { daysUntil, nextToLaunch, sortByLaunchProximity, type WarehouseReadiness } from "@/lib/readiness";
+import { cn, CARD_HOVER } from "@/lib/utils";
+
+export default async function Home() {
+  const supabase = await createClient();
+  const [{ data }, { data: activeWarehouses }] = await Promise.all([
+    supabase
+      .from("warehouse_readiness")
+      .select("id, name, go_live_date, total_raised, open_count, open_high_count"),
+    supabase.from("warehouses").select("id").eq("is_active", true),
+  ]);
+
+  const activeIds = new Set((activeWarehouses ?? []).map((w) => w.id));
+  const warehouses = ((data ?? []) as WarehouseReadiness[]).filter((w) => activeIds.has(w.id));
+  const sorted = sortByLaunchProximity(warehouses);
+  const next = nextToLaunch(warehouses);
+  const nextDays = next ? daysUntil(next.go_live_date) : null;
+
+  const totals = warehouses.reduce(
+    (acc, w) => ({
+      open: acc.open + w.open_count,
+      openHigh: acc.openHigh + w.open_high_count,
+      raised: acc.raised + w.total_raised,
+    }),
+    { open: 0, openHigh: 0, raised: 0 }
+  );
+
+  if (warehouses.length === 0) {
+    return (
+      <div className="flex h-full items-center justify-center px-6 text-center text-[13px] text-muted-foreground">
+        No warehouses yet. Use &ldquo;Warehouse management&rdquo; in the sidebar to create the first one.
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-screen-2xl px-4 py-6 sm:px-6 sm:py-8 lg:px-[50px]">
+      <div className="mb-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+        <div className={cn(CARD_HOVER, "flex flex-col justify-center rounded-card border border-border bg-card p-3.5")}>
+          <div className="mb-1.5 text-[9px] uppercase tracking-[0.07em] text-faint">All warehouses</div>
+          <div className="flex items-center gap-6">
+            <div>
+              <div className="font-mono text-[22px] leading-none">{totals.open}</div>
+              <div className="text-[9px] uppercase tracking-[0.07em] text-faint">Open</div>
+            </div>
+            <div>
+              <div className="font-mono text-[22px] leading-none text-red">
+                {totals.openHigh}
+              </div>
+              <div className="text-[9px] uppercase tracking-[0.07em] text-faint">Open high</div>
+            </div>
+            <div>
+              <div className="font-mono text-[22px] leading-none">{totals.raised}</div>
+              <div className="text-[9px] uppercase tracking-[0.07em] text-faint">Raised</div>
+            </div>
+          </div>
+        </div>
+
+        <div className={cn(CARD_HOVER, "flex flex-col justify-center rounded-card border border-border bg-card p-3.5")}>
+          <div className="text-[9px] uppercase tracking-[0.07em] text-faint">Next to launch</div>
+          {next ? (
+            <>
+              <div className="mt-1 text-[15px] font-medium text-foreground">{next.name}</div>
+              <div className="mt-0.5 text-[12px] text-muted-foreground">
+                Opens in {nextDays} days with {next.open_count} snags still open
+              </div>
+            </>
+          ) : (
+            <div className="mt-1 text-[12px] text-muted-foreground">No upcoming launch date set</div>
+          )}
+        </div>
+      </div>
+
+      <div className="mb-2.5 text-[9px] uppercase tracking-[0.07em] text-faint">
+        {warehouses.length} warehouse{warehouses.length === 1 ? "" : "s"} · soonest launch first
+      </div>
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
+        {sorted.map((w) => (
+          <WarehouseCard key={w.id} w={w} />
+        ))}
+      </div>
+    </div>
+  );
+}
+```
+
+#### `src/app/(app)/warehouses/[id]/actions.ts`
+
+```ts
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { createClient } from "@/lib/supabase/server";
+
+export async function updateGoLiveDate(
+  warehouseId: string,
+  date: string
+): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_go_live_date", {
+    p_warehouse_id: warehouseId,
+    p_date: date || null,
+  });
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath("/", "layout");
+  return { error: null };
+}
+```
+
+#### `src/app/(app)/warehouses/[id]/filter-utils.ts`
+
+```ts
+export function parseMulti(value: string | undefined): string[] {
+  return value ? value.split(",").filter(Boolean) : [];
+}
+```
+
+#### `src/app/(app)/warehouses/[id]/go-live-editor.tsx`
+
+```tsx
+"use client";
+
+import { useState, useTransition } from "react";
+import { updateGoLiveDate } from "./actions";
+
+export function GoLiveEditor({
+  warehouseId,
+  goLiveDate,
+}: {
+  warehouseId: string;
+  goLiveDate: string | null;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(goLiveDate ?? "");
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        className="text-[13.5px] underline-offset-2 hover:underline"
+      >
+        {goLiveDate
+          ? new Date(goLiveDate + "T00:00:00").toLocaleDateString("en-GB", {
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+            })
+          : "Set date"}
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <input
+        type="date"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        className="rounded-md border border-input bg-background px-1.5 py-0.5 text-[12px]"
+      />
+      <button
+        type="button"
+        disabled={pending}
+        onClick={() =>
+          startTransition(async () => {
+            const result = await updateGoLiveDate(warehouseId, value);
+            if (result.error) {
+              setError(result.error);
+              return;
+            }
+            setError(null);
+            setEditing(false);
+          })
+        }
+        className="text-[12px] font-medium text-primary"
+      >
+        Save
+      </button>
+      <button type="button" onClick={() => setEditing(false)} className="text-[12px] text-muted-foreground">
+        Cancel
+      </button>
+      {error && <span className="text-[11px] text-destructive">{error}</span>}
+    </div>
+  );
+}
+```
+
+#### `src/app/(app)/warehouses/[id]/go-live-history-info.tsx`
+
+```tsx
+export type GoLiveChange = {
+  id: string;
+  old_value: string | null;
+  new_value: string | null;
+  created_at: string;
+  actor: { full_name: string | null; email: string } | null;
+};
+
+function fmtDate(dateStr: string) {
+  return new Date(dateStr + "T00:00:00").toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function fmtDateTime(iso: string) {
+  const d = new Date(iso);
+  return `${d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })} ${d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
+}
+
+function describeChange(c: GoLiveChange) {
+  const to = c.new_value ? fmtDate(c.new_value) : "not set";
+  return c.old_value ? `Changed from ${fmtDate(c.old_value)} to ${to}` : `Set to ${to}`;
+}
+
+// Hover-only, CSS-driven (group/group-hover) rather than JS state — the
+// tooltip has no interactivity of its own beyond scrolling, so it doesn't
+// need to be a client component.
+//
+// The hover target is split into two nested boxes on purpose: the outer one
+// carries the invisible pt-1.5 gap above the visible box, so that gap is
+// still part of the hoverable area (no pointer-events-none, no margin) —
+// otherwise moving the mouse from the icon down into the box crosses a dead
+// zone with nothing under the cursor, which drops the hover state and
+// closes the tooltip before you can reach it or scroll a long list.
+export function GoLiveHistoryInfo({ changes }: { changes: GoLiveChange[] }) {
+  return (
+    <span className="group relative inline-flex cursor-help items-center" aria-label="Go-live date change history">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" className="text-faint group-hover:text-foreground">
+        <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.4" />
+        <path d="M8 7.25v4M8 5.25v.01" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      </svg>
+      <div className="invisible absolute right-0 top-full z-30 w-72 max-w-[min(18rem,calc(100vw-1.5rem))] pt-1.5 opacity-0 transition-opacity duration-100 group-hover:visible group-hover:opacity-100">
+        <div className="max-h-56 overflow-hidden rounded-md bg-foreground text-[11px] leading-relaxed text-background shadow-md">
+          <div className="px-2.5 pb-1 pt-2 font-medium">Go-live date history</div>
+          <div className="max-h-44 overflow-y-auto px-2.5 pb-2">
+            {changes.length === 0 ? (
+              <p className="text-background/70">No changes recorded yet.</p>
+            ) : (
+              <ul className="flex flex-col gap-1">
+                {changes.map((c) => (
+                  <li key={c.id}>
+                    <span className="font-mono text-background/80">{fmtDateTime(c.created_at)}</span>
+                    {" · "}
+                    {c.actor?.full_name ?? c.actor?.email ?? "Someone"} — {describeChange(c)}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </div>
+    </span>
+  );
+}
+```
+
+#### `src/app/(app)/warehouses/[id]/import/import-form.tsx`
+
+```tsx
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { downloadImportTemplate, parseImportFile, type ImportRow, type ImportRowError } from "@/lib/excel";
+import { raiseSnag } from "../snags/new/actions";
+
+type Phase = "idle" | "parsed" | "importing" | "done";
+
+export function ImportForm({ warehouseId }: { warehouseId: string }) {
+  const router = useRouter();
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [rows, setRows] = useState<ImportRow[]>([]);
+  const [errors, setErrors] = useState<ImportRowError[]>([]);
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [results, setResults] = useState<{ succeeded: number; failed: ImportRowError[] }>({
+    succeeded: 0,
+    failed: [],
+  });
+
+  async function onFileSelected(file: File) {
+    setFileName(file.name);
+    const { rows: parsedRows, errors: parseErrors } = await parseImportFile(file);
+    setRows(parsedRows);
+    setErrors(parseErrors);
+    setPhase("parsed");
+  }
+
+  async function commitImport() {
+    setPhase("importing");
+    let succeeded = 0;
+    const failed: ImportRowError[] = [];
+
+    // Row by row through the same RPC-gated path as a manual raise — no
+    // bulk-insert shortcut around the reporter check or activity log.
+    for (const row of rows) {
+      const result = await raiseSnag(warehouseId, {
+        description: row.description,
+        category: row.category,
+        subCategory: row.subCategory,
+        subCategoryOther: row.subCategoryOther,
+        location: row.location,
+        scope: row.scope,
+        severity: row.severity,
+      });
+      if (result.error) {
+        failed.push({ rowNumber: row.rowNumber, message: result.error });
+      } else {
+        succeeded++;
+      }
+    }
+
+    setResults({ succeeded, failed });
+    setPhase("done");
+  }
+
+  if (phase === "done") {
+    return (
+      <div>
+        <div className="rounded-md border border-mint bg-mint p-3 text-[13px] text-mint-deep">
+          {results.succeeded} snag{results.succeeded === 1 ? "" : "s"} imported.
+        </div>
+        {results.failed.length > 0 && (
+          <div className="mt-3 rounded-md border border-blush bg-blush p-3">
+            <p className="text-[12.5px] font-medium text-red-deep">
+              {results.failed.length} row{results.failed.length === 1 ? "" : "s"} failed:
+            </p>
+            <ul className="mt-1 list-disc pl-4">
+              {results.failed.map((f) => (
+                <li key={f.rowNumber} className="text-[12px] text-red-deep">
+                  Row {f.rowNumber}: {f.message}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        <Button type="button" className="mt-4" onClick={() => router.push(`/warehouses/${warehouseId}`)}>
+          Back to warehouse
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div>
+        <p className="mb-2 text-[12.5px] text-muted-foreground">
+          Download the template, fill in one row per snag, then upload it below.
+        </p>
+        <Button type="button" variant="outline" onClick={() => downloadImportTemplate()}>
+          Download template
+        </Button>
+      </div>
+
+      <div>
+        <label className="flex h-11 cursor-pointer items-center justify-center rounded-md border border-dashed border-input text-[12.5px] text-muted-foreground hover:bg-muted">
+          {fileName ?? "Upload filled-in template (.xlsx)"}
+          <input
+            type="file"
+            accept=".xlsx"
+            className="hidden"
+            onChange={(e) => e.target.files?.[0] && onFileSelected(e.target.files[0])}
+          />
+        </label>
+      </div>
+
+      {phase === "parsed" && (
+        <div>
+          {errors.length > 0 ? (
+            <div className="rounded-md border border-blush bg-blush p-3">
+              <p className="text-[12.5px] font-medium text-red-deep">
+                {errors.length} row{errors.length === 1 ? "" : "s"} need fixing before anything is imported:
+              </p>
+              <ul className="mt-1 list-disc pl-4">
+                {errors.map((e, i) => (
+                  <li key={i} className="text-[12px] text-red-deep">
+                    Row {e.rowNumber}: {e.message}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <div className="rounded-md border border-mint bg-mint p-3 text-[12.5px] text-mint-deep">
+              {rows.length} row{rows.length === 1 ? "" : "s"} validated and ready to import.
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="flex justify-end gap-2 border-t border-line-soft pt-3.5">
+        <Button type="button" variant="outline" onClick={() => history.back()}>
+          Cancel
+        </Button>
+        <Button
+          type="button"
+          disabled={phase !== "parsed" || errors.length > 0 || rows.length === 0}
+          onClick={commitImport}
+        >
+          {phase === "importing" ? "Importing…" : `Import ${rows.length || ""} snag${rows.length === 1 ? "" : "s"}`}
+        </Button>
+      </div>
+    </div>
+  );
+}
+```
+
+#### `src/app/(app)/warehouses/[id]/import/page.tsx`
+
+```tsx
+import { notFound, redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { REPORTER_ROLES } from "@/lib/roles";
+import { ImportForm } from "./import-form";
+
+export default async function ImportSnagsPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const supabase = await createClient();
+  const { data } = await supabase.auth.getClaims();
+  const uid = data?.claims?.sub;
+
+  const [{ data: warehouse }, { data: membership }, { data: me }] = await Promise.all([
+    supabase.from("warehouses").select("id, name").eq("id", id).single(),
+    supabase.from("warehouse_members").select("role").eq("warehouse_id", id).eq("user_id", uid ?? ""),
+    supabase.from("profiles").select("is_dashboard_admin").eq("id", uid ?? "").maybeSingle(),
+  ]);
+
+  if (!warehouse) notFound();
+
+  // Dashboard Admin bypasses the reporter tag here too — matches raise_snag's RPC-level check.
+  const isReporter =
+    (membership ?? []).some((m) => REPORTER_ROLES.includes(m.role)) || (me?.is_dashboard_admin ?? false);
+  if (!isReporter) {
+    redirect(`/warehouses/${id}`);
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-xl px-4 py-6 sm:max-w-3xl sm:px-6 sm:py-8 lg:max-w-4xl lg:px-[50px]">
+      <div className="rounded-card border border-border bg-card p-5 sm:p-7">
+        <h1 className="text-[15px] font-medium tracking-[-0.015em] text-foreground">
+          Import snags
+        </h1>
+        <p className="mb-4 mt-0.5 text-[12px] text-muted-foreground">{warehouse.name}</p>
+        <ImportForm warehouseId={id} />
+      </div>
+    </div>
+  );
+}
+```
+
+#### `src/app/(app)/warehouses/[id]/page.tsx`
+
+```tsx
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { Button } from "@/components/ui/button";
+import { SnagTable, type SnagRow } from "@/components/snag-table";
+import type { UpdateRow, AttachmentRow, ActivityRow } from "@/components/snag-row";
+import { TeamBlock } from "@/components/team-block";
+import { BurnUpChart } from "@/components/burn-up-chart";
+import { ExportButton } from "@/components/export-button";
+import { REPORTER_ROLES, RESOLVER_ROLES, roleLabel } from "@/lib/roles";
+import { daysUntil } from "@/lib/readiness";
+import { GoLiveEditor } from "./go-live-editor";
+import { GoLiveHistoryInfo, type GoLiveChange } from "./go-live-history-info";
+import { SnagFilters } from "./snag-filters";
+import { SearchBox } from "./search-box";
+import { RaisedBanner } from "./raised-banner";
+import { parseMulti } from "./filter-utils";
+import { cn, CARD_HOVER } from "@/lib/utils";
+
+export default async function WarehouseDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{
+    status?: string;
+    q?: string;
+    raised?: string;
+    category?: string;
+    sub_category?: string;
+    location?: string;
+    scope?: string;
+    severity?: string;
+  }>;
+}) {
+  const { id } = await params;
+  const { status, q = "", raised, category, sub_category, location, scope, severity } =
+    await searchParams;
+  const statusValues = parseMulti(status);
+  const categoryValues = parseMulti(category);
+  const subCategoryValues = parseMulti(sub_category);
+  const locationValues = parseMulti(location);
+  const scopeValues = parseMulti(scope);
+  const severityValues = parseMulti(severity);
+  const supabase = await createClient();
+
+  const { data: auth } = await supabase.auth.getClaims();
+  const uid = auth?.claims?.sub;
+
+  const [
+    { data: w },
+    { data: membership },
+    { data: teamRows },
+    { data: snapshots },
+    { data: me },
+    { data: allProfiles },
+    { data: goLiveChanges },
+  ] = await Promise.all([
+    supabase
+      .from("warehouse_readiness")
+      .select("id, name, go_live_date, total_raised, open_count, open_high_count")
+      .eq("id", id)
+      .single(),
+    supabase.from("warehouse_members").select("role").eq("warehouse_id", id).eq("user_id", uid ?? ""),
+    supabase
+      .from("warehouse_members")
+      .select("user_id, role, profile:profiles(full_name, email)")
+      .eq("warehouse_id", id),
+    supabase
+      .from("snag_daily_snapshot")
+      .select("snapshot_date, total_raised, total_closed")
+      .eq("warehouse_id", id)
+      .order("snapshot_date"),
+    supabase.from("profiles").select("is_dashboard_admin").eq("id", uid ?? "").maybeSingle(),
+    supabase.from("profiles").select("id, is_dashboard_admin"),
+    supabase
+      .from("warehouse_activity")
+      .select("id, old_value, new_value, created_at, actor:profiles(full_name, email)")
+      .eq("warehouse_id", id)
+      .eq("action", "go_live_date_change")
+      .order("created_at", { ascending: false }),
+  ]);
+
+  if (!w) notFound();
+
+  // Dashboard Admin bypasses the reporter/resolver tag on snag actions the
+  // same way it already bypasses read scoping — matches the RPC-level
+  // check in raise_snag/post_snag_update/verify_snag_closure/close_snag_directly.
+  const isDashboardAdmin = me?.is_dashboard_admin ?? false;
+  // Real membership, not bypass-merged — the chat compose box needs to tell
+  // "genuinely tagged both reporter and resolver" apart from "admin with no
+  // tag at all," which an isReporter/isResolver OR'd with admin can't do.
+  const hasReporterTag = (membership ?? []).some((m) => REPORTER_ROLES.includes(m.role));
+  const hasResolverTag = (membership ?? []).some((m) => RESOLVER_ROLES.includes(m.role));
+  const isReporter = hasReporterTag || isDashboardAdmin;
+  const isResolver = hasResolverTag || isDashboardAdmin;
+  const daysToGoLive = daysUntil(w.go_live_date);
+  const team = (teamRows ?? []).map((t) => ({
+    role: t.role,
+    full_name: (t.profile as unknown as { full_name: string | null; email: string } | null)?.full_name ?? null,
+    email: (t.profile as unknown as { full_name: string | null; email: string } | null)?.email ?? "",
+  }));
+
+  // Lets the chat feed show a message's author's actual operational role
+  // (e.g. "HVAC Engineer") instead of just the generic reporter/resolver
+  // bucket. A person can hold more than one role on this warehouse, so this
+  // is a list per user, joined at render time.
+  const rolesByUserId: Record<string, string[]> = {};
+  for (const t of teamRows ?? []) {
+    (rolesByUserId[t.user_id] ??= []).push(roleLabel(t.role));
+  }
+
+  // A message's role badge should say "Dashboard Admin" for someone who
+  // posted via the admin bypass with no real tag here — not the generic
+  // reporter/resolver bucket label, which isn't true of them. Needed
+  // separately from rolesByUserId since admin status is global, not scoped
+  // to this warehouse's membership rows.
+  const adminUserIds = (allProfiles ?? []).filter((p) => p.is_dashboard_admin).map((p) => p.id);
+
+  let query = supabase
+    .from("snags")
+    .select(
+      "id, serial_no, date_raised, description, category, sub_category, sub_category_other, location, scope, severity, status, etc_date, closed_at, raised_by, raised_by_profile:profiles!snags_raised_by_fkey(full_name, email)"
+    )
+    .eq("warehouse_id", id)
+    .order("serial_no", { ascending: false });
+
+  if (statusValues.length) query = query.in("status", statusValues);
+  if (q) query = query.ilike("description", `%${q}%`);
+  if (categoryValues.length) query = query.in("category", categoryValues);
+  if (subCategoryValues.length) query = query.in("sub_category", subCategoryValues);
+  if (locationValues.length) query = query.in("location", locationValues);
+  if (scopeValues.length) query = query.in("scope", scopeValues);
+  if (severityValues.length) query = query.in("severity", severityValues);
+
+  const { data: snags } = await query;
+
+  const snagIds = (snags ?? []).map((s) => s.id);
+  const { data: updates } = snagIds.length
+    ? await supabase
+        .from("snag_updates")
+        .select("id, snag_id, body, author_id, author_side, created_at, author:profiles(full_name, email)")
+        .in("snag_id", snagIds)
+        .order("created_at")
+    : { data: [] as never[] };
+
+  const updatesBySnag: Record<string, UpdateRow[]> = {};
+  for (const u of updates ?? []) {
+    const key = (u as { snag_id: string }).snag_id;
+    (updatesBySnag[key] ??= []).push(u as unknown as UpdateRow);
+  }
+
+  const { data: attachmentRows } = snagIds.length
+    ? await supabase
+        .from("attachments")
+        .select("id, snag_id, update_id, media_type, thumbnail_url, file_url")
+        .in("snag_id", snagIds)
+        .order("created_at")
+    : { data: [] as never[] };
+
+  const paths = (attachmentRows ?? []).flatMap((a) => [a.thumbnail_url, a.file_url]);
+  const { data: signedUrls } = paths.length
+    ? await supabase.storage.from("attachments").createSignedUrls(paths, 3600)
+    : { data: [] as { path: string | null; signedUrl: string }[] | null };
+  const urlByPath = new Map((signedUrls ?? []).map((s) => [s.path, s.signedUrl]));
+
+  const attachmentsBySnag: Record<string, AttachmentRow[]> = {};
+  for (const a of attachmentRows ?? []) {
+    (attachmentsBySnag[a.snag_id] ??= []).push({
+      id: a.id,
+      update_id: a.update_id,
+      media_type: a.media_type,
+      thumbnail_url: urlByPath.get(a.thumbnail_url) ?? "",
+      file_url: urlByPath.get(a.file_url) ?? "",
+    });
+  }
+
+  const { data: activityRows } = snagIds.length
+    ? await supabase
+        .from("snag_activity")
+        .select("id, snag_id, action, field, old_value, new_value, created_at, actor:profiles(full_name, email)")
+        .in("snag_id", snagIds)
+        .order("created_at")
+    : { data: [] as never[] };
+
+  const activityBySnag: Record<string, ActivityRow[]> = {};
+  for (const a of activityRows ?? []) {
+    const key = (a as { snag_id: string }).snag_id;
+    (activityBySnag[key] ??= []).push(a as unknown as ActivityRow);
+  }
+
+  const summaryTiles = [
+    { label: "Snags Open", value: w.open_count, highlight: false },
+    { label: "Snags Closed", value: w.total_raised - w.open_count, highlight: false },
+    { label: "Total Snags Raised", value: w.total_raised, highlight: false },
+    { label: "Snags Marked High Severity", value: w.open_high_count, highlight: true },
+  ];
+
+  return (
+    <div className="mx-auto w-full max-w-screen-2xl px-4 py-6 sm:px-6 sm:py-8 lg:px-[50px]">
+      <div className="mb-3 flex items-baseline justify-between">
+        <h1 className="text-[17px] font-medium tracking-[-0.015em] text-foreground">{w.name}</h1>
+        {isResolver ? (
+          <div className="flex items-baseline gap-1.5 text-[13.5px] text-foreground">
+            <span className="text-muted-foreground">Go-live date:</span>
+            <GoLiveEditor warehouseId={id} goLiveDate={w.go_live_date} />
+            <GoLiveHistoryInfo changes={(goLiveChanges ?? []) as unknown as GoLiveChange[]} />
+          </div>
+        ) : (
+          <span className="flex items-baseline gap-1.5 text-[13px] text-muted-foreground">
+            Go-live date:{" "}
+            <span className="font-mono text-[11px] text-faint">
+              {w.go_live_date
+                ? new Date(w.go_live_date + "T00:00:00")
+                    .toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+                    .toUpperCase()
+                : "NOT SET"}
+            </span>
+            <GoLiveHistoryInfo changes={(goLiveChanges ?? []) as unknown as GoLiveChange[]} />
+          </span>
+        )}
+      </div>
+
+      <div className="mb-3 mt-2.5 grid grid-cols-1 gap-2.5 lg:grid-cols-[0.85fr_1.15fr]">
+        <div className="grid grid-cols-2 auto-rows-fr gap-2">
+          {summaryTiles.map((tile) => (
+            <div
+              key={tile.label}
+              className={cn(
+                CARD_HOVER,
+                "rounded-md border p-2.5 hover:bg-blush",
+                tile.highlight ? "border-blush bg-blush" : "border-border bg-card"
+              )}
+            >
+              <div className={`font-mono text-[19px] ${tile.highlight ? "text-red-deep" : ""}`}>{tile.value}</div>
+              <div className={`text-[9px] ${tile.highlight ? "text-red-deep" : "text-faint"}`}>{tile.label}</div>
+            </div>
+          ))}
+          <div className={cn(CARD_HOVER, "col-span-2 rounded-md border border-border bg-card p-2.5 hover:bg-blush")}>
+            <div className="font-mono text-[19px]">{daysToGoLive ?? "—"}</div>
+            <div className="text-[9px] text-faint">Days left for launch</div>
+          </div>
+        </div>
+        <BurnUpChart snapshots={snapshots ?? []} goLiveDate={w.go_live_date} liveTotalRaised={w.total_raised} liveTotalClosed={w.total_raised - w.open_count} />
+      </div>
+
+      {raised && <RaisedBanner serialNo={raised} />}
+
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <SnagFilters />
+        <SearchBox />
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <ExportButton snags={(snags ?? []) as unknown as SnagRow[]} warehouseName={w.name} />
+          {isReporter && (
+            <>
+              <Button size="sm" variant="outline" nativeButton={false} render={<Link href={`/warehouses/${id}/import`} />}>
+                Import
+              </Button>
+              <Button size="sm" nativeButton={false} render={<Link href={`/warehouses/${id}/snags/new`} />}>
+                Add snag
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+
+      <p className="mb-1.5 text-[12.5px] text-muted-foreground">
+        Click a row to expand its update log and see attached photos/videos.
+      </p>
+
+      <SnagTable
+        snags={(snags ?? []) as unknown as SnagRow[]}
+        updatesBySnag={updatesBySnag}
+        attachmentsBySnag={attachmentsBySnag}
+        activityBySnag={activityBySnag}
+        warehouseId={id}
+        hasReporterTag={hasReporterTag}
+        hasResolverTag={hasResolverTag}
+        isDashboardAdmin={isDashboardAdmin}
+        rolesByUserId={rolesByUserId}
+        adminUserIds={adminUserIds}
+        currentUserId={uid ?? ""}
+      />
+
+      <div className="mt-3">
+        <TeamBlock members={team} />
+      </div>
+    </div>
+  );
+}
+```
+
+#### `src/app/(app)/warehouses/[id]/raised-banner.tsx`
+
+```tsx
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
+
+export function RaisedBanner({ serialNo }: { serialNo: string }) {
+  const [mounted, setMounted] = useState(true);
+  const [exiting, setExiting] = useState(false);
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const timer = setTimeout(() => setExiting(true), 5000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!exiting) return;
+    const timer = setTimeout(() => {
+      setMounted(false);
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete("raised");
+      const query = params.toString();
+      router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+    }, 300);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exiting]);
+
+  if (!mounted) return null;
+
+  return (
+    <div
+      className={`mb-3 max-h-16 overflow-hidden rounded-md border border-mint bg-mint px-3 py-2 text-[12.5px] text-mint-deep transition-all duration-300 ease-in ${
+        exiting ? "max-h-0 -translate-y-2 border-0 px-3 py-0 opacity-0" : "translate-y-0 opacity-100"
+      }`}
+    >
+      Snag #{String(serialNo).padStart(3, "0")} raised.
+    </div>
+  );
+}
+```
+
+#### `src/app/(app)/warehouses/[id]/search-box.tsx`
+
+```tsx
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
+
+export function SearchBox() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [q, setQ] = useState(searchParams.get("q") ?? "");
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      if (q !== (searchParams.get("q") ?? "")) {
+        const params = new URLSearchParams(searchParams.toString());
+        if (q) params.set("q", q);
+        else params.delete("q");
+        router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+      }
+    }, 300);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q]);
+
+  return (
+    <input
+      value={q}
+      onChange={(e) => setQ(e.target.value)}
+      placeholder="Search description…"
+      className="rounded-md border border-input bg-background px-2.5 py-1 text-[12px] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+    />
+  );
+}
+```
+
+#### `src/app/(app)/warehouses/[id]/snag-actions.ts`
+
+```ts
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { createClient } from "@/lib/supabase/server";
+
+export async function postSnagUpdate(
+  warehouseId: string,
+  snagId: string,
+  body: string,
+  actingAs: "reporter" | "resolver",
+  etcDate: string | null,
+  status: string | null
+): Promise<{ updateId: string | null; error: string | null }> {
+  if (!body.trim()) {
+    return { updateId: null, error: "Update text is required." };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .rpc("post_snag_update", {
+      p_snag_id: snagId,
+      p_body: body.trim(),
+      p_etc_date: etcDate || null,
+      p_status: status || null,
+      p_acting_as: actingAs,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    return { updateId: null, error: error.message };
+  }
+
+  revalidatePath(`/warehouses/${warehouseId}`);
+  return { updateId: (data as { id: string }).id, error: null };
+}
+
+export async function closeSnagDirectly(
+  warehouseId: string,
+  snagId: string,
+  body: string | null
+): Promise<{ updateId: string | null; error: string | null }> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .rpc("close_snag_directly", { p_snag_id: snagId, p_body: body?.trim() || null })
+    .select()
+    .single();
+
+  if (error) {
+    return { updateId: null, error: error.message };
+  }
+
+  revalidatePath(`/warehouses/${warehouseId}`);
+  return { updateId: (data as { update_id: string | null }).update_id, error: null };
+}
+
+export async function verifySnagClosure(
+  warehouseId: string,
+  snagId: string,
+  approved: boolean,
+  body: string | null
+): Promise<{ updateId: string | null; error: string | null }> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .rpc("verify_snag_closure", {
+      p_snag_id: snagId,
+      p_approved: approved,
+      p_body: body?.trim() || null,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    return { updateId: null, error: error.message };
+  }
+
+  revalidatePath(`/warehouses/${warehouseId}`);
+  return { updateId: (data as { update_id: string | null }).update_id, error: null };
+}
+```
+
+#### `src/app/(app)/warehouses/[id]/snag-filters.tsx`
+
+```tsx
+"use client";
+
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
+import { MultiSelectFilter } from "@/components/multi-select-filter";
+import {
+  CATEGORY_LABELS,
+  LOCATION_LABELS,
+  SCOPE_LABELS,
+  SEVERITY_LABELS,
+  STATUS_LABELS,
+  SUB_CATEGORY_LABELS,
+} from "@/lib/snags";
+import { parseMulti } from "./filter-utils";
+
+function toOptions(labels: Record<string, string>) {
+  return Object.entries(labels).map(([value, label]) => ({ value, label }));
+}
+
+const FILTERS: { key: string; label: string; options: { value: string; label: string }[] }[] = [
+  { key: "status", label: "Status", options: toOptions(STATUS_LABELS) },
+  { key: "category", label: "Category", options: toOptions(CATEGORY_LABELS) },
+  { key: "sub_category", label: "Sub-category", options: toOptions(SUB_CATEGORY_LABELS) },
+  { key: "location", label: "Location", options: toOptions(LOCATION_LABELS) },
+  { key: "scope", label: "Scope", options: toOptions(SCOPE_LABELS) },
+  { key: "severity", label: "Severity", options: toOptions(SEVERITY_LABELS) },
+];
+
+export function SnagFilters() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  function updateParam(key: string, values: string[]) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (values.length === 0) {
+      params.delete(key);
+    } else {
+      params.set(key, values.join(","));
+    }
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }
+
+  return (
+    <>
+      {FILTERS.map((f) => (
+        <MultiSelectFilter
+          key={f.key}
+          label={f.label}
+          options={f.options}
+          selected={parseMulti(searchParams.get(f.key) ?? undefined)}
+          onChange={(next) => updateParam(f.key, next)}
+        />
+      ))}
+    </>
+  );
+}
+```
+
+#### `src/app/(app)/warehouses/[id]/snags/new/actions.ts`
+
+```ts
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { createClient } from "@/lib/supabase/server";
+
+export type RaiseSnagInput = {
+  description: string;
+  category: string;
+  subCategory: string;
+  subCategoryOther: string | null;
+  location: string;
+  scope: string;
+  severity: string;
+};
+
+export type DuplicateCandidate = {
+  id: string;
+  serial_no: number;
+  description: string;
+  status: string;
+  raised_by_name: string | null;
+};
+
+export async function findSimilarSnags(
+  warehouseId: string,
+  location: string,
+  subCategory: string,
+  description: string
+): Promise<DuplicateCandidate[]> {
+  if (!description.trim()) return [];
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("find_similar_snags", {
+    p_warehouse_id: warehouseId,
+    p_location: location,
+    p_sub_category: subCategory,
+    p_description: description,
+  });
+
+  if (error || !data) return [];
+  return data as DuplicateCandidate[];
+}
+
+export async function raiseSnag(
+  warehouseId: string,
+  input: RaiseSnagInput,
+  suppressedDuplicateIds: string[] = []
+): Promise<{ snagId: string | null; serialNo: number | null; error: string | null }> {
+  if (!input.description || !input.category || !input.subCategory || !input.location || !input.scope || !input.severity) {
+    return { snagId: null, serialNo: null, error: "All fields are required." };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .rpc("raise_snag", {
+      p_warehouse_id: warehouseId,
+      p_description: input.description,
+      p_category: input.category,
+      p_sub_category: input.subCategory,
+      p_sub_category_other: input.subCategoryOther,
+      p_location: input.location,
+      p_scope: input.scope,
+      p_severity: input.severity,
+      p_suppressed_duplicate_ids: suppressedDuplicateIds.length ? suppressedDuplicateIds : null,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    return { snagId: null, serialNo: null, error: error.message };
+  }
+
+  revalidatePath(`/warehouses/${warehouseId}`);
+  const row = data as { id: string; serial_no: number };
+  return { snagId: row.id, serialNo: row.serial_no, error: null };
+}
+```
+
+#### `src/app/(app)/warehouses/[id]/snags/new/add-snag-form.tsx`
+
+```tsx
+"use client";
+
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { MultiPhotoCaptureInput } from "@/components/photo-capture";
+import { DuplicateCheckModal } from "@/components/duplicate-check-modal";
+import { createClient } from "@/lib/supabase/client";
+import { uploadAttachment, type PhotoCapture } from "@/lib/media";
+import { enqueueSnag } from "@/lib/offline-queue";
+import {
+  CATEGORY_LABELS,
+  LOCATION_LABELS,
+  SCOPE_LABELS,
+  SEVERITY_LABELS,
+  SUB_CATEGORY_LABELS,
+} from "@/lib/snags";
+import { findSimilarSnags, raiseSnag, type DuplicateCandidate } from "./actions";
+
+// Minimum 56px tap targets throughout — this form is used with gloved
+// hands at -25°C (PLAN.md §5.7).
+function RadioCards({
+  options,
+  value,
+  onChange,
+}: {
+  options: [string, string][];
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {options.map(([val, label]) => (
+        <button
+          key={val}
+          type="button"
+          onClick={() => onChange(val)}
+          className={`min-h-14 rounded-md border px-3.5 py-3 text-[13px] ${
+            value === val
+              ? "border-primary bg-accent text-accent-foreground"
+              : "border-input bg-background text-foreground"
+          }`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function AddSnagForm({
+  warehouseId,
+  warehouseName,
+  currentUserId,
+}: {
+  warehouseId: string;
+  warehouseName: string;
+  currentUserId: string;
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [queued, setQueued] = useState(false);
+
+  const [description, setDescription] = useState("");
+  const [category, setCategory] = useState("");
+  const [subCategory, setSubCategory] = useState("");
+  const [subCategoryOther, setSubCategoryOther] = useState("");
+  const [location, setLocation] = useState("");
+  const [scope, setScope] = useState("");
+  const [severity, setSeverity] = useState("");
+  const [photos, setPhotos] = useState<PhotoCapture[]>([]);
+  const [duplicates, setDuplicates] = useState<DuplicateCandidate[] | null>(null);
+
+  const isComplete = Boolean(
+    description.trim() &&
+      category &&
+      subCategory &&
+      (subCategory !== "others" || subCategoryOther.trim()) &&
+      location &&
+      scope &&
+      severity
+  );
+
+  async function doRaise(suppressedDuplicateIds: string[]) {
+    const subCategoryOtherValue = subCategory === "others" ? subCategoryOther.trim() : null;
+
+    const result = await raiseSnag(
+      warehouseId,
+      {
+        description: description.trim(),
+        category,
+        subCategory,
+        subCategoryOther: subCategoryOtherValue,
+        location,
+        scope,
+        severity,
+      },
+      suppressedDuplicateIds
+    );
+
+    if (result.error || !result.snagId) {
+      setError(result.error ?? "Could not raise the snag.");
+      return;
+    }
+
+    if (photos.length > 0) {
+      const supabase = createClient();
+      for (let i = 0; i < photos.length; i++) {
+        const uploadResult = await uploadAttachment(supabase, {
+          warehouseId,
+          snagId: result.snagId,
+          mediaType: "image",
+          file: photos[i].annotated,
+          original: photos[i].original,
+          thumbnail: photos[i].thumbnail,
+          fileName: `snag-photo-${i + 1}.jpg`,
+          uploaderId: currentUserId,
+        });
+        if (uploadResult.error) {
+          setError(`Snag raised, but a photo failed to upload: ${uploadResult.error}`);
+          return;
+        }
+      }
+    }
+
+    router.push(`/warehouses/${warehouseId}?raised=${result.serialNo}`);
+  }
+
+  function submit() {
+    setError(null);
+    startTransition(async () => {
+      const subCategoryOtherValue = subCategory === "others" ? subCategoryOther.trim() : null;
+
+      // Offline-capable: queue locally and sync when connection returns
+      // rather than letting the request hang or fail (PLAN.md §5.7). No
+      // duplicate check while offline — that needs a network round trip.
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        await enqueueSnag({
+          localId: crypto.randomUUID(),
+          warehouseId,
+          warehouseName,
+          description: description.trim(),
+          category,
+          subCategory,
+          subCategoryOther: subCategoryOtherValue,
+          location,
+          scope,
+          severity,
+          photos: photos.map((p) => ({ annotated: p.annotated, original: p.original, thumbnail: p.thumbnail })),
+          createdAt: Date.now(),
+        });
+        setQueued(true);
+        return;
+      }
+
+      const candidates = await findSimilarSnags(warehouseId, location, subCategory, description.trim());
+      if (candidates.length > 0) {
+        setDuplicates(candidates);
+        return;
+      }
+
+      await doRaise([]);
+    });
+  }
+
+  if (queued) {
+    return (
+      <div className="rounded-md border border-amber bg-amber p-4 text-center">
+        <p className="text-[13px] font-medium text-amber-deep">Queued — pending sync</p>
+        <p className="mt-1 text-[12px] text-amber-deep">
+          No connection right now. This snag is saved on your device and will be raised
+          automatically once you&apos;re back online.
+        </p>
+        <Button type="button" size="sm" className="mt-3" onClick={() => router.push(`/warehouses/${warehouseId}`)}>
+          Back to warehouse
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div>
+          <Label className="mb-1.5 text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
+            Description
+          </Label>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            required
+            rows={5}
+            className="w-full rounded-md border border-input bg-background px-2.5 py-2 text-[13px] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            placeholder="Add description"
+          />
+        </div>
+
+        <div>
+          <Label className="mb-1.5 text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
+            Photos (optional)
+          </Label>
+          <MultiPhotoCaptureInput onChange={setPhotos} />
+        </div>
+      </div>
+
+      <div>
+        <Label className="mb-1.5 text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
+          Sub-category
+        </Label>
+        <RadioCards
+          value={subCategory}
+          onChange={setSubCategory}
+          options={Object.entries(SUB_CATEGORY_LABELS) as [string, string][]}
+        />
+        {subCategory === "others" && (
+          <input
+            value={subCategoryOther}
+            onChange={(e) => setSubCategoryOther(e.target.value)}
+            required
+            placeholder="Describe the sub-category"
+            className="mt-1.5 w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-[12.5px] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+          />
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div>
+          <Label className="mb-1.5 text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
+            Category
+          </Label>
+          <RadioCards value={category} onChange={setCategory} options={Object.entries(CATEGORY_LABELS) as [string, string][]} />
+        </div>
+
+        <div>
+          <Label className="mb-1.5 text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
+            Location
+          </Label>
+          <RadioCards value={location} onChange={setLocation} options={Object.entries(LOCATION_LABELS) as [string, string][]} />
+        </div>
+
+        <div>
+          <Label className="mb-1.5 text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
+            Scope
+          </Label>
+          <RadioCards value={scope} onChange={setScope} options={Object.entries(SCOPE_LABELS) as [string, string][]} />
+        </div>
+
+        <div>
+          <Label className="mb-1.5 text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
+            Severity
+          </Label>
+          <RadioCards value={severity} onChange={setSeverity} options={Object.entries(SEVERITY_LABELS) as [string, string][]} />
+          <p className="mt-1.5 text-[11.5px] font-medium text-red-deep">
+            High means this stops the warehouse launching.
+          </p>
+        </div>
+      </div>
+
+      {error && <p className="text-[12.5px] text-destructive">{error}</p>}
+
+      <div className="flex justify-end gap-2 border-t border-line-soft pt-3.5">
+        <Button type="button" variant="outline" className="min-h-14" onClick={() => history.back()}>
+          Cancel
+        </Button>
+        <Button type="button" className="min-h-14" disabled={pending || !isComplete} onClick={submit}>
+          {pending ? "Raising…" : "Raise snag"}
+        </Button>
+      </div>
+
+      {duplicates && (
+        <DuplicateCheckModal
+          candidates={duplicates}
+          pending={pending}
+          onCancel={() => setDuplicates(null)}
+          onRaiseAnyway={() => {
+            startTransition(async () => {
+              await doRaise(duplicates.map((d) => d.id));
+            });
+          }}
+        />
+      )}
+    </div>
+  );
+}
+```
+
+#### `src/app/(app)/warehouses/[id]/snags/new/page.tsx`
+
+```tsx
+import { notFound, redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { REPORTER_ROLES } from "@/lib/roles";
+import { AddSnagForm } from "./add-snag-form";
+
+export default async function NewSnagPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const supabase = await createClient();
+  const { data } = await supabase.auth.getClaims();
+  const uid = data?.claims?.sub;
+
+  const [{ data: warehouse }, { data: membership }, { data: me }] = await Promise.all([
+    supabase.from("warehouses").select("id, name").eq("id", id).single(),
+    supabase.from("warehouse_members").select("role").eq("warehouse_id", id).eq("user_id", uid ?? ""),
+    supabase.from("profiles").select("is_dashboard_admin").eq("id", uid ?? "").maybeSingle(),
+  ]);
+
+  if (!warehouse) notFound();
+
+  // Dashboard Admin bypasses the reporter tag here too — matches raise_snag's RPC-level check.
+  const isReporter =
+    (membership ?? []).some((m) => REPORTER_ROLES.includes(m.role)) || (me?.is_dashboard_admin ?? false);
+  if (!isReporter || !uid) {
+    redirect(`/warehouses/${id}`);
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-screen-2xl px-4 py-6 sm:px-6 sm:py-8 lg:px-[50px]">
+      <div className="rounded-card border border-border bg-card p-5 sm:p-7">
+        <h1 className="text-[15px] font-medium tracking-[-0.015em] text-foreground">
+          Raise a snag
+        </h1>
+        <p className="mb-4 mt-0.5 text-[12px] text-muted-foreground">{warehouse.name}</p>
+        <AddSnagForm warehouseId={id} warehouseName={warehouse.name} currentUserId={uid} />
+      </div>
+    </div>
+  );
+}
+```
+
+#### `src/app/(app)/warehouses/manage/actions.ts`
+
+```ts
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { createClient } from "@/lib/supabase/server";
+
+export async function createWarehouseCode(
+  code: string
+): Promise<{ id: string | null; error: string | null }> {
+  const trimmed = code.trim();
+  if (!trimmed) return { id: null, error: "Warehouse code can't be empty." };
+
+  const supabase = await createClient();
+  const { data: auth } = await supabase.auth.getClaims();
+  const uid = auth?.claims?.sub;
+
+  const { data, error } = await supabase
+    .from("warehouses")
+    .insert({ name: trimmed, created_by: uid })
+    .select("id")
+    .single();
+
+  if (error) {
+    return { id: null, error: error.message };
+  }
+
+  await supabase.from("warehouse_activity").insert({
+    warehouse_id: data.id,
+    actor_id: uid,
+    action: "create",
+  });
+
+  // Revalidate the whole layout tree, not just the current segment — the
+  // sidebar's warehouse list lives in the shared (app) layout, and a plain
+  // client-side router.refresh() to this page won't refetch it.
+  revalidatePath("/", "layout");
+
+  return { id: data.id, error: null };
+}
+
+export async function setWarehouseActive(
+  warehouseId: string,
+  isActive: boolean
+): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  const { data: auth } = await supabase.auth.getClaims();
+  const uid = auth?.claims?.sub;
+
+  const { error } = await supabase
+    .from("warehouses")
+    .update({ is_active: isActive })
+    .eq("id", warehouseId);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  await supabase.from("warehouse_activity").insert({
+    warehouse_id: warehouseId,
+    actor_id: uid,
+    action: isActive ? "activate" : "deactivate",
+    field: "is_active",
+    old_value: String(!isActive),
+    new_value: String(isActive),
+  });
+
+  revalidatePath("/", "layout");
+  return { error: null };
+}
+```
+
+#### `src/app/(app)/warehouses/manage/page.tsx`
+
+```tsx
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { WarehouseCodeManager } from "./warehouse-code-manager";
+import type { WarehouseActivityRow } from "./warehouse-row";
+
+export default async function WarehouseManagementPage() {
+  const supabase = await createClient();
+  const { data } = await supabase.auth.getClaims();
+  const uid = data?.claims?.sub;
+
+  const { data: me } = await supabase
+    .from("profiles")
+    .select("is_dashboard_admin")
+    .eq("id", uid)
+    .single();
+
+  if (!me?.is_dashboard_admin || !uid) {
+    redirect("/");
+  }
+
+  const [{ data: warehouses }, { data: activity }] = await Promise.all([
+    supabase.from("warehouses").select("id, name, is_active").order("name"),
+    supabase
+      .from("warehouse_activity")
+      .select("id, warehouse_id, action, field, old_value, new_value, created_at, actor:profiles(full_name, email)")
+      .order("created_at"),
+  ]);
+
+  const activityByWarehouse: Record<string, WarehouseActivityRow[]> = {};
+  for (const a of activity ?? []) {
+    const key = (a as { warehouse_id: string }).warehouse_id;
+    (activityByWarehouse[key] ??= []).push(a as unknown as WarehouseActivityRow);
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-screen-2xl px-4 py-6 sm:px-6 sm:py-8 lg:px-[50px]">
+      <h1 className="mb-4 text-[17px] text-foreground">Warehouse management</h1>
+      <WarehouseCodeManager warehouses={warehouses ?? []} activityByWarehouse={activityByWarehouse} />
+    </div>
+  );
+}
+```
+
+#### `src/app/(app)/warehouses/manage/status-filter.tsx`
+
+```tsx
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+
+export type StatusFilterValue = "all" | "active" | "deactivated";
+
+const OPTIONS: { value: StatusFilterValue; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "active", label: "Active" },
+  { value: "deactivated", label: "Deactivated" },
+];
+
+export function StatusFilter({
+  value,
+  onChange,
+}: {
+  value: StatusFilterValue;
+  onChange: (next: StatusFilterValue) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, []);
+
+  const currentLabel = OPTIONS.find((o) => o.value === value)?.label ?? "All";
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={`rounded-md border px-2 py-1 text-[11.5px] font-medium ${
+          value !== "all"
+            ? "border-primary bg-accent text-accent-foreground"
+            : "border-teal bg-frost text-teal-deep"
+        }`}
+      >
+        Current status: {currentLabel}
+      </button>
+      {open && (
+        <div className="absolute z-20 mt-1 w-40 overflow-hidden rounded-md border border-border bg-card py-1 shadow-md">
+          {value !== "all" && (
+            <button
+              type="button"
+              onClick={() => {
+                onChange("all");
+                setOpen(false);
+              }}
+              className="w-full px-2.5 py-1 text-left text-[11px] text-primary hover:bg-muted"
+            >
+              Clear
+            </button>
+          )}
+          {OPTIONS.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              onClick={() => {
+                onChange(o.value);
+                setOpen(false);
+              }}
+              className={`flex w-full items-center px-2.5 py-1.5 text-left text-[12px] hover:bg-muted ${
+                value === o.value ? "font-medium text-foreground" : "text-foreground"
+              }`}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+#### `src/app/(app)/warehouses/manage/warehouse-code-manager.tsx`
+
+```tsx
+"use client";
+
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { createWarehouseCode } from "./actions";
+import { WarehouseRow, type WarehouseActivityRow } from "./warehouse-row";
+import { StatusFilter, type StatusFilterValue } from "./status-filter";
+
+type Warehouse = { id: string; name: string; is_active: boolean };
+
+export function WarehouseCodeManager({
+  warehouses,
+  activityByWarehouse,
+}: {
+  warehouses: Warehouse[];
+  activityByWarehouse: Record<string, WarehouseActivityRow[]>;
+}) {
+  const router = useRouter();
+  const [code, setCode] = useState("");
+  const [creating, startCreate] = useTransition();
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<StatusFilterValue>("all");
+
+  function submit() {
+    setCreateError(null);
+    startCreate(async () => {
+      const result = await createWarehouseCode(code);
+      if (result.error) {
+        setCreateError(result.error);
+        return;
+      }
+      setCode("");
+      router.refresh();
+    });
+  }
+
+  const filtered =
+    statusFilter === "all"
+      ? warehouses
+      : warehouses.filter((w) => (w.is_active ? "active" : "deactivated") === statusFilter);
+
+  return (
+    <div>
+      <div className="mb-5 rounded-card border border-border bg-card p-4">
+        <label className="mb-1.5 block text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
+          Add new warehouse code
+        </label>
+        <div className="flex flex-wrap gap-2">
+          <Input
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            placeholder="Warehouse code"
+            className="max-w-xs"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                submit();
+              }
+            }}
+          />
+          <Button type="button" disabled={creating || !code.trim()} onClick={submit}>
+            {creating ? "Creating…" : "Create new warehouse"}
+          </Button>
+        </div>
+        {createError && <p className="mt-1.5 text-[12.5px] text-destructive">{createError}</p>}
+      </div>
+
+      <div className="mb-3 flex items-center justify-between">
+        <StatusFilter value={statusFilter} onChange={setStatusFilter} />
+        <p className="text-[12.5px] text-muted-foreground">Click a row to see its status history.</p>
+      </div>
+
+      <div className="overflow-hidden rounded-card border border-border bg-card">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Warehouse code</TableHead>
+              <TableHead className="text-center">Current status</TableHead>
+              <TableHead className="text-center">Change status</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filtered.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={3} className="text-center text-muted-foreground">
+                  No warehouses match this filter.
+                </TableCell>
+              </TableRow>
+            )}
+            {filtered.map((w) => (
+              <WarehouseRow key={w.id} warehouse={w} activity={activityByWarehouse[w.id] ?? []} />
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}
+```
+
+#### `src/app/(app)/warehouses/manage/warehouse-row.tsx`
+
+```tsx
+"use client";
+
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { TableCell, TableRow } from "@/components/ui/table";
+import { setWarehouseActive } from "./actions";
+
+export type WarehouseActivityRow = {
+  id: string;
+  action: string;
+  field: string | null;
+  old_value: string | null;
+  new_value: string | null;
+  created_at: string;
+  actor: { full_name: string | null; email: string } | null;
+};
+
+function fmtDate(dateStr: string) {
+  return new Date(dateStr + "T00:00:00").toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function describeActivity(a: WarehouseActivityRow): string {
+  switch (a.action) {
+    case "create":
+      return "created this warehouse";
+    case "activate":
+      return "activated this warehouse";
+    case "deactivate":
+      return "deactivated this warehouse";
+    case "go_live_date_change":
+      return a.old_value
+        ? `changed the go-live date from ${fmtDate(a.old_value)} to ${a.new_value ? fmtDate(a.new_value) : "not set"}`
+        : `set the go-live date to ${a.new_value ? fmtDate(a.new_value) : "not set"}`;
+    default:
+      return a.action.replaceAll("_", " ");
+  }
+}
+
+function fmtDateTime(iso: string) {
+  const d = new Date(iso);
+  return `${d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })} ${d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
+}
+
+export function WarehouseRow({
+  warehouse,
+  activity,
+}: {
+  warehouse: { id: string; name: string; is_active: boolean };
+  activity: WarehouseActivityRow[];
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
+
+  return (
+    <>
+      <TableRow className="cursor-pointer" onClick={() => setExpanded((v) => !v)}>
+        <TableCell className="text-[13px] text-foreground">{warehouse.name}</TableCell>
+        <TableCell className="text-center">
+          <Badge
+            variant="outline"
+            className={
+              warehouse.is_active
+                ? "border-mint bg-mint text-mint-deep"
+                : "border-line-soft bg-line-soft text-muted-foreground"
+            }
+          >
+            {warehouse.is_active ? "Active" : "Deactivated"}
+          </Badge>
+        </TableCell>
+        <TableCell className="text-center">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={pending}
+            onClick={(e) => {
+              e.stopPropagation();
+              setError(null);
+              startTransition(async () => {
+                const r = await setWarehouseActive(warehouse.id, !warehouse.is_active);
+                if (r.error) setError(r.error);
+                else router.refresh();
+              });
+            }}
+          >
+            {pending ? "Saving…" : warehouse.is_active ? "Deactivate" : "Activate"}
+          </Button>
+          {error && <p className="mt-1 text-[11px] text-destructive">{error}</p>}
+        </TableCell>
+      </TableRow>
+      {expanded && (
+        <TableRow className="bg-background hover:bg-background">
+          <TableCell colSpan={3} className="whitespace-normal p-3">
+            {activity.length === 0 ? (
+              <p className="text-[12px] text-muted-foreground">No history yet.</p>
+            ) : (
+              <ul className="flex flex-col gap-1">
+                {activity.map((a) => (
+                  <li key={a.id} className="text-[11.5px] text-muted-foreground">
+                    <span className="font-mono text-[10px] text-faint">{fmtDateTime(a.created_at)}</span>{" "}
+                    · <span className="text-foreground">{a.actor?.full_name ?? a.actor?.email ?? "Someone"}</span>{" "}
+                    {describeActivity(a)}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </TableCell>
+        </TableRow>
+      )}
+    </>
+  );
+}
+```
+
+#### `src/app/auth/confirm/route.ts`
+
+```ts
+import { NextResponse } from "next/server";
+import type { EmailOtpType } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabase/server";
+
+export async function GET(request: Request) {
+  const { searchParams, origin } = new URL(request.url);
+  const tokenHash = searchParams.get("token_hash");
+  const type = searchParams.get("type") as EmailOtpType | null;
+  const next = searchParams.get("next") ?? "/";
+
+  if (tokenHash && type) {
+    const supabase = await createClient();
+    const { error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
+    if (!error) {
+      return NextResponse.redirect(`${origin}${next}`);
+    }
+  }
+
+  return NextResponse.redirect(`${origin}/forgot-password?error=invalid_or_expired`);
+}
+```
+
+#### `src/app/auth/update-password/actions.ts`
+
+```ts
+"use server";
+
+import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
+import { createClient } from "@/lib/supabase/server";
+
+export async function updatePassword(formData: FormData) {
+  const password = formData.get("password") as string;
+  const confirmPassword = formData.get("confirm_password") as string;
+
+  if (password !== confirmPassword) {
+    redirect("/auth/update-password?error=password_mismatch");
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.updateUser({ password });
+
+  if (error) {
+    redirect(`/auth/update-password?error=${error.code === "weak_password" ? "weak_password" : "unknown"}`);
+  }
+
+  revalidatePath("/", "layout");
+  redirect("/");
+}
+```
+
+#### `src/app/auth/update-password/page.tsx`
+
+```tsx
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { updatePassword } from "./actions";
+
+const ERROR_COPY: Record<string, string> = {
+  password_mismatch: "Those passwords don't match.",
+  weak_password: "That password is too easy to guess. Try something longer or less common.",
+  unknown: "Something went wrong. Try requesting a new reset link.",
+};
+
+export default async function UpdatePasswordPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
+  const supabase = await createClient();
+  const { data } = await supabase.auth.getClaims();
+
+  // Only reachable with the recovery session /auth/confirm just set —
+  // no session here means the link was invalid, expired, or already used.
+  if (!data?.claims) {
+    redirect("/forgot-password?error=invalid_or_expired");
+  }
+
+  const { error } = await searchParams;
+  const errorCopy = error ? ERROR_COPY[error] : undefined;
+
+  return (
+    <div className="flex flex-1 items-center justify-center bg-background px-6 py-12">
+      <div className="w-full max-w-[340px] overflow-hidden rounded-card border border-border bg-card">
+        <div className="p-6">
+          <h1 className="text-[17px] leading-tight text-foreground">Set a new password</h1>
+          <p className="mt-1 mb-5 text-[13px] text-muted-foreground">Choose a new password for your account.</p>
+
+          {errorCopy && (
+            <div className="mb-4 rounded-md bg-accent p-3">
+              <p className="text-[12.5px] text-accent-foreground">{errorCopy}</p>
+            </div>
+          )}
+
+          <form action={updatePassword} className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="password" className="text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
+                New password
+              </Label>
+              <Input id="password" name="password" type="password" minLength={8} required />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="confirm_password" className="text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
+                Confirm password
+              </Label>
+              <Input id="confirm_password" name="confirm_password" type="password" minLength={8} required />
+            </div>
+            <Button type="submit" className="mt-1 w-full">
+              Update password
+            </Button>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+#### `src/app/forgot-password/actions.ts`
+
+```ts
+"use server";
+
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+
+export async function requestPasswordReset(formData: FormData) {
+  const email = (formData.get("email") as string)?.trim().toLowerCase();
+  if (!email) {
+    redirect("/forgot-password");
+  }
+
+  const supabase = await createClient();
+  const origin = (await headers()).get("origin");
+
+  // Supabase never reveals whether an email is registered, so the caller
+  // always sees the same "check your email" message regardless of this
+  // result — don't branch the UI on error/success here.
+  await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${origin}/auth/update-password`,
+  });
+
+  redirect("/forgot-password?sent=1");
+}
+```
+
+#### `src/app/forgot-password/page.tsx`
+
+```tsx
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { requestPasswordReset } from "./actions";
+
+const THERMOMETER = ["#DCEAEE", "#E4EBEA", "#EDEAE5", "#F5E7E0", "#FBE4DE", "#F2C7BB", "#E89484", "#C75B4E"];
+
+export default async function ForgotPasswordPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ sent?: string; error?: string }>;
+}) {
+  const { sent, error } = await searchParams;
+
+  return (
+    <div className="flex flex-1 items-center justify-center bg-background px-6 py-12">
+      <div className="w-full max-w-[340px] overflow-hidden rounded-card border border-border bg-card">
+        <div className="flex">
+          {THERMOMETER.map((c, i) => (
+            <span key={i} className="h-1.5 flex-1" style={{ background: c }} />
+          ))}
+        </div>
+        <div className="p-6">
+          <h1 className="text-[17px] leading-tight text-foreground">Reset your password</h1>
+          <p className="mt-1 mb-5 text-[13px] text-muted-foreground">
+            We&apos;ll email you a link to choose a new one.
+          </p>
+
+          {error === "invalid_or_expired" && (
+            <div className="mb-4 rounded-md bg-accent p-3">
+              <p className="text-[12.5px] font-medium text-accent-foreground">That link didn&apos;t work</p>
+              <p className="mt-1 text-[11.5px] leading-relaxed text-accent-foreground">
+                It may have expired or already been used. Request a new one below.
+              </p>
+            </div>
+          )}
+
+          {sent ? (
+            <div className="rounded-md bg-mint p-3">
+              <p className="text-[12.5px] font-medium text-mint-deep">Check your email</p>
+              <p className="mt-1 text-[11.5px] leading-relaxed text-mint-deep">
+                If an account exists for that address, a reset link is on its way.
+              </p>
+            </div>
+          ) : (
+            <form action={requestPasswordReset} className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="email" className="text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
+                  Work email
+                </Label>
+                <Input id="email" name="email" type="email" placeholder="priya@company.com" required />
+              </div>
+              <Button type="submit" className="mt-1 w-full">
+                Send reset link
+              </Button>
+            </form>
+          )}
+
+          <p className="mt-3 text-center text-[13px] text-muted-foreground">
+            <a href="/login" className="hover:text-foreground">
+              Back to sign in
+            </a>
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+#### `src/app/layout.tsx`
+
+```tsx
+import type { Metadata } from "next";
+import { Instrument_Sans, Inter, IBM_Plex_Mono } from "next/font/google";
+import "./globals.css";
+
+const instrumentSans = Instrument_Sans({
+  variable: "--font-display",
+  subsets: ["latin"],
+  weight: ["500"],
+});
+
+const inter = Inter({
+  variable: "--font-body",
+  subsets: ["latin"],
+  weight: ["400", "500"],
+});
+
+const plexMono = IBM_Plex_Mono({
+  variable: "--font-data",
+  subsets: ["latin"],
+  weight: ["400", "500"],
+});
+
+export const metadata: Metadata = {
+  title: "Frozen Warehouse Launch Readiness",
+  description: "Snag tracking and launch readiness for frozen warehouse commissioning",
+};
+
+export default function RootLayout({ children }: LayoutProps<"/">) {
+  return (
+    <html
+      lang="en"
+      className={`${instrumentSans.variable} ${inter.variable} ${plexMono.variable} h-full antialiased`}
+    >
+      <body className="min-h-full flex flex-col">{children}</body>
+    </html>
+  );
+}
+```
+
+#### `src/app/login/actions.ts`
+
+```ts
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+
+export async function signInWithPassword(formData: FormData) {
+  const supabase = await createClient();
+  const email = formData.get("email") as string;
+  const password = formData.get("password") as string;
+
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) {
+    redirect(`/login?error=invalid_credentials`);
+  }
+
+  revalidatePath("/", "layout");
+  redirect("/");
+}
+```
+
+#### `src/app/login/page.tsx`
+
+```tsx
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { signInWithPassword } from "./actions";
+
+const THERMOMETER = ["#DCEAEE", "#E4EBEA", "#EDEAE5", "#F5E7E0", "#FBE4DE", "#F2C7BB", "#E89484", "#C75B4E"];
+
+const ERROR_COPY: Record<string, { title: string; body: string }> = {
+  not_invited: {
+    title: "This email isn't set up yet",
+    body: "We don't have an invitation for that address. Ask your dashboard admin to add it, then sign in with that exact address.",
+  },
+  invalid_credentials: {
+    title: "Couldn't sign you in",
+    body: "That email and password combination doesn't match an account.",
+  },
+};
+
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
+  const { error } = await searchParams;
+  const errorInfo = error ? ERROR_COPY[error] : undefined;
+
+  return (
+    <div className="flex flex-1 items-center justify-center bg-background px-6 py-12">
+      <div className="w-full max-w-[340px] overflow-hidden rounded-card border border-border bg-card">
+        <div className="flex">
+          {THERMOMETER.map((c, i) => (
+            <span key={i} className="h-1.5 flex-1" style={{ background: c }} />
+          ))}
+        </div>
+        <div className="p-6">
+          <h1 className="text-[17px] leading-tight text-foreground">
+            Frozen warehouse
+            <br />
+            launch readiness
+          </h1>
+          <p className="mt-1 mb-5 text-[13px] text-muted-foreground">Sign in to continue</p>
+
+          {errorInfo && (
+            <div className="mb-4 rounded-md bg-accent p-3">
+              <p className="text-[12.5px] font-medium text-accent-foreground">{errorInfo.title}</p>
+              <p className="mt-1 text-[11.5px] leading-relaxed text-accent-foreground">
+                {errorInfo.body}
+              </p>
+            </div>
+          )}
+
+          <form action={signInWithPassword} className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="email" className="text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
+                Work email
+              </Label>
+              <Input id="email" name="email" type="email" placeholder="priya@company.com" required />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="password" className="text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
+                Password
+              </Label>
+              <Input id="password" name="password" type="password" required />
+            </div>
+            <Button type="submit" className="mt-1 w-full">
+              Sign in
+            </Button>
+          </form>
+
+          <p className="mt-3 flex items-center justify-center gap-3 text-center text-[13px] text-muted-foreground">
+            <a href="/forgot-password" className="hover:text-foreground">
+              Forgot your password?
+            </a>
+            <span className="text-line">·</span>
+            <a href="/set-password" className="hover:text-foreground">
+              Set your password
+            </a>
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+#### `src/app/set-password/actions.ts`
+
+```ts
+"use server";
+
+import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
+import { createClient } from "@/lib/supabase/server";
+
+export async function setPassword(formData: FormData) {
+  const fullName = (formData.get("full_name") as string)?.trim();
+  const email = (formData.get("email") as string)?.trim().toLowerCase();
+  const password = formData.get("password") as string;
+  const confirmPassword = formData.get("confirm_password") as string;
+
+  if (!fullName || !email || !password) {
+    redirect("/set-password?error=missing_fields");
+  }
+  if (password !== confirmPassword) {
+    redirect("/set-password?error=password_mismatch");
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: { data: { full_name: fullName } },
+  });
+
+  if (error) {
+    if (error.code === "weak_password") {
+      redirect("/set-password?error=weak_password");
+    }
+    if (error.code === "user_already_exists" || error.code === "email_exists") {
+      redirect("/set-password?error=already_exists");
+    }
+    // The invitation-gate trigger raises a Postgres exception for an
+    // unmatched email; Supabase surfaces that as a generic signup
+    // failure rather than a distinct code, so once weak-password and
+    // duplicate-account are ruled out, "not invited" is the only
+    // realistic remaining cause.
+    redirect("/set-password?error=not_invited");
+  }
+
+  if (data.session) {
+    revalidatePath("/", "layout");
+    redirect("/");
+  }
+
+  redirect("/set-password?success=1");
+}
+```
+
+#### `src/app/set-password/page.tsx`
+
+```tsx
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { setPassword } from "./actions";
+
+const THERMOMETER = ["#DCEAEE", "#E4EBEA", "#EDEAE5", "#F5E7E0", "#FBE4DE", "#F2C7BB", "#E89484", "#C75B4E"];
+
+const ERROR_COPY: Record<string, { title: string; body: string }> = {
+  missing_fields: {
+    title: "Missing information",
+    body: "Fill in every field before submitting.",
+  },
+  not_invited: {
+    title: "This email isn't set up yet",
+    body: "We don't have an invitation for that address. Ask your dashboard admin to add it, then come back with that exact address.",
+  },
+  already_exists: {
+    title: "This email already has an account",
+    body: "Sign in instead, or use Forgot password if that account needs a password set.",
+  },
+  password_mismatch: {
+    title: "Passwords don't match",
+    body: "Type the same password in both fields.",
+  },
+  weak_password: {
+    title: "Choose a stronger password",
+    body: "That password is too easy to guess. Try something longer or less common.",
+  },
+};
+
+export default async function SetPasswordPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string; success?: string }>;
+}) {
+  const { error, success } = await searchParams;
+  const errorInfo = error ? ERROR_COPY[error] : undefined;
+
+  return (
+    <div className="flex flex-1 items-center justify-center bg-background px-6 py-12">
+      <div className="w-full max-w-[340px] overflow-hidden rounded-card border border-border bg-card">
+        <div className="flex">
+          {THERMOMETER.map((c, i) => (
+            <span key={i} className="h-1.5 flex-1" style={{ background: c }} />
+          ))}
+        </div>
+        <div className="p-6">
+          <h1 className="text-[17px] leading-tight text-foreground">Set your password</h1>
+          <p className="mt-1 mb-5 text-[13px] text-muted-foreground">
+            For people invited by email who don&apos;t sign in with Google.
+          </p>
+
+          {success ? (
+            <div className="rounded-md bg-mint p-3">
+              <p className="text-[12.5px] font-medium text-mint-deep">Almost there</p>
+              <p className="mt-1 text-[11.5px] leading-relaxed text-mint-deep">
+                Check your email to confirm your address, then sign in.
+              </p>
+            </div>
+          ) : (
+            <>
+              {errorInfo && (
+                <div className="mb-4 rounded-md bg-accent p-3">
+                  <p className="text-[12.5px] font-medium text-accent-foreground">{errorInfo.title}</p>
+                  <p className="mt-1 text-[11.5px] leading-relaxed text-accent-foreground">{errorInfo.body}</p>
+                </div>
+              )}
+
+              <form action={setPassword} className="flex flex-col gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="full_name" className="text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
+                    Full name
+                  </Label>
+                  <Input id="full_name" name="full_name" type="text" required />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="email" className="text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
+                    Work email
+                  </Label>
+                  <Input id="email" name="email" type="email" placeholder="priya@company.com" required />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="password" className="text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
+                    Password
+                  </Label>
+                  <Input id="password" name="password" type="password" minLength={8} required />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="confirm_password" className="text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
+                    Confirm password
+                  </Label>
+                  <Input id="confirm_password" name="confirm_password" type="password" minLength={8} required />
+                </div>
+                <Button type="submit" className="mt-1 w-full">
+                  Set password
+                </Button>
+              </form>
+            </>
+          )}
+
+          <p className="mt-3 text-center text-[13px] text-muted-foreground">
+            <a href="/login" className="hover:text-foreground">
+              Back to sign in
+            </a>
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+#### `src/components/burn-up-chart.tsx`
+
+```tsx
+"use client";
+
+// PLAN.md §12: the only chart in the product. Two cumulative lines (raised,
+// closed) with the shaded gap between them as the open count, projected
+// forward to the go-live date. Shows real data from the first snag raised
+// (not gated behind a week of history) — today's point always reflects
+// live totals even if the daily snapshot job hasn't run yet today.
+
+import { useState } from "react";
+
+export type Snapshot = {
+  snapshot_date: string;
+  total_raised: number;
+  total_closed: number;
+};
+
+const WIDTH = 620;
+const HEIGHT = 150;
+const PAD_LEFT = 30;
+const PAD_RIGHT = 10;
+const PAD_TOP = 14;
+const PAD_BOTTOM = 20;
+
+function toTime(dateStr: string) {
+  return new Date(dateStr + "T00:00:00").getTime();
+}
+
+function todayStr() {
+  return new Date().toLocaleDateString("en-CA");
+}
+
+function fmtShort(dateStr: string) {
+  return new Date(dateStr + "T00:00:00").toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+}
+
+function buildPath(points: { x: number; y: number }[]) {
+  return points.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+}
+
+export function BurnUpChart({
+  snapshots,
+  goLiveDate,
+  liveTotalRaised,
+  liveTotalClosed,
+}: {
+  snapshots: Snapshot[];
+  goLiveDate: string | null;
+  liveTotalRaised: number;
+  liveTotalClosed: number;
+}) {
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+
+  const today = todayStr();
+  const byDate = new Map(snapshots.map((s) => [s.snapshot_date, s]));
+  // Live totals always win for today's point, even if the cron job hasn't
+  // written today's snapshot row yet.
+  byDate.set(today, { snapshot_date: today, total_raised: liveTotalRaised, total_closed: liveTotalClosed });
+  const sortedRaw = [...byDate.values()].sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date));
+  // Cumulative totals should never decrease day over day — refresh_snag_daily_snapshot()
+  // recomputes from the live snags table rather than keeping a true ever-incrementing
+  // ledger, so a direct DB deletion (test-data cleanup; no such path exists in the UI)
+  // can otherwise show up here as a drop that contradicts the "cumulative" premise the
+  // two lines and their shaded gap depend on. Clamping the display to never decrease
+  // was tried first and was wrong: today's true count sits *below* the stale pre-drop
+  // peak, so a clamp freezes the chart at that fictional peak forever instead of ever
+  // showing it. Truncating to start from the most recent drop is honest instead — it
+  // shows the currently-valid run of history, not a doctored version of the discarded one.
+  let resetAt = 0;
+  for (let i = 1; i < sortedRaw.length; i++) {
+    if (sortedRaw[i].total_raised < sortedRaw[i - 1].total_raised || sortedRaw[i].total_closed < sortedRaw[i - 1].total_closed) {
+      resetAt = i;
+    }
+  }
+  const sorted = sortedRaw.slice(resetAt);
+
+  if (sorted.length === 0 || sorted[sorted.length - 1].total_raised === 0) {
+    return (
+      <div className="flex h-[150px] items-center justify-center rounded-card border border-border bg-card text-[12px] text-muted-foreground">
+        No snags raised yet — the burn-up appears once the first one is.
+      </div>
+    );
+  }
+
+  const firstDate = sorted[0].snapshot_date;
+  const lastDate = sorted[sorted.length - 1].snapshot_date;
+
+  const hasTarget = !!goLiveDate && toTime(goLiveDate) > toTime(lastDate);
+  const xEndDate = hasTarget ? goLiveDate! : lastDate;
+
+  const xStart = toTime(firstDate);
+  const xEnd = toTime(xEndDate);
+  const xSpan = Math.max(1, xEnd - xStart);
+
+  const maxRaised = Math.max(...sorted.map((s) => s.total_raised), 1);
+  const yMax = Math.ceil(maxRaised * 1.15) || 1;
+
+  const x = (dateStr: string) => PAD_LEFT + ((toTime(dateStr) - xStart) / xSpan) * (WIDTH - PAD_LEFT - PAD_RIGHT);
+  const y = (v: number) => HEIGHT - PAD_BOTTOM - (v / yMax) * (HEIGHT - PAD_TOP - PAD_BOTTOM);
+
+  const raisedPoints = sorted.map((s) => ({ x: x(s.snapshot_date), y: y(s.total_raised) }));
+  const closedPoints = sorted.map((s) => ({ x: x(s.snapshot_date), y: y(s.total_closed) }));
+
+  // Weekly tick marks from the first date through today, plus today itself.
+  const weekTicks: string[] = [];
+  for (let t = xStart; t <= toTime(today); t += 7 * 86_400_000) {
+    weekTicks.push(new Date(t).toLocaleDateString("en-CA"));
+  }
+  if (weekTicks[weekTicks.length - 1] !== today) weekTicks.push(today);
+
+  // Simple linear projection: slope from the trailing window of history,
+  // extended to the go-live date.
+  const windowSize = Math.min(7, sorted.length - 1);
+  const trailStart = sorted[sorted.length - 1 - windowSize];
+  const trailEnd = sorted[sorted.length - 1];
+  const daySpan = Math.max(1, (toTime(trailEnd.snapshot_date) - toTime(trailStart.snapshot_date)) / 86_400_000);
+
+  let raisedProjected: { x: number; y: number } | null = null;
+  let closedProjected: { x: number; y: number } | null = null;
+  if (hasTarget && sorted.length > 1) {
+    const targetDays = (toTime(xEndDate) - toTime(trailEnd.snapshot_date)) / 86_400_000;
+    const raisedSlope = (trailEnd.total_raised - trailStart.total_raised) / daySpan;
+    const closedSlope = (trailEnd.total_closed - trailStart.total_closed) / daySpan;
+    raisedProjected = {
+      x: x(xEndDate),
+      y: y(Math.max(trailEnd.total_raised, trailEnd.total_raised + raisedSlope * targetDays)),
+    };
+    closedProjected = {
+      x: x(xEndDate),
+      y: y(Math.max(trailEnd.total_closed, trailEnd.total_closed + closedSlope * targetDays)),
+    };
+  }
+
+  const gapPath =
+    raisedPoints.length > 1
+      ? `${buildPath(raisedPoints)} L${raisedPoints[raisedPoints.length - 1].x.toFixed(1)},${(
+          HEIGHT - PAD_BOTTOM
+        ).toFixed(1)} ${buildPath([...closedPoints].reverse()).replace("M", "L")} Z`
+      : "";
+
+  const todayX = x(today);
+  const hovered = hoverIdx !== null ? sorted[hoverIdx] : null;
+
+  function onMove(e: React.MouseEvent<SVGRectElement>) {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const svgX = ((e.clientX - rect.left) / rect.width) * WIDTH;
+    let closest = 0;
+    let closestDist = Infinity;
+    sorted.forEach((s, i) => {
+      const d = Math.abs(x(s.snapshot_date) - svgX);
+      if (d < closestDist) {
+        closestDist = d;
+        closest = i;
+      }
+    });
+    setHoverIdx(closest);
+  }
+
+  return (
+    <div className="relative rounded-card border border-border bg-card p-3">
+      <div className="mb-1 flex items-baseline justify-between">
+        <span className="text-[9px] uppercase tracking-[0.07em] text-faint">Burn-up</span>
+        <span className="text-[10px] text-muted-foreground">Hover for daily figures</span>
+      </div>
+      <svg
+        viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
+        className="block w-full"
+        role="img"
+        onMouseLeave={() => setHoverIdx(null)}
+      >
+        <title>Burn-up chart</title>
+        <desc>Cumulative raised and closed lines; the shaded gap is the open count.</desc>
+        <g stroke="#F7EAE6">
+          <line x1={PAD_LEFT} y1={y(yMax * 0.33)} x2={WIDTH - PAD_RIGHT} y2={y(yMax * 0.33)} />
+          <line x1={PAD_LEFT} y1={y(yMax * 0.66)} x2={WIDTH - PAD_RIGHT} y2={y(yMax * 0.66)} />
+        </g>
+        {gapPath && <path d={gapPath} fill="#FBE4DE" opacity={0.6} />}
+        <path d={buildPath(raisedPoints)} fill="none" stroke="#C75B4E" strokeWidth={2.5} />
+        <path d={buildPath(closedPoints)} fill="none" stroke="#6E9CA6" strokeWidth={2.5} />
+        {raisedProjected && (
+          <path
+            d={`M${raisedPoints[raisedPoints.length - 1].x},${raisedPoints[raisedPoints.length - 1].y} L${raisedProjected.x},${raisedProjected.y}`}
+            fill="none"
+            stroke="#C75B4E"
+            strokeWidth={2}
+            strokeDasharray="5 4"
+            opacity={0.55}
+          />
+        )}
+        {closedProjected && (
+          <path
+            d={`M${closedPoints[closedPoints.length - 1].x},${closedPoints[closedPoints.length - 1].y} L${closedProjected.x},${closedProjected.y}`}
+            fill="none"
+            stroke="#6E9CA6"
+            strokeWidth={2}
+            strokeDasharray="5 4"
+            opacity={0.55}
+          />
+        )}
+        <line x1={todayX} y1={PAD_TOP} x2={todayX} y2={HEIGHT - PAD_BOTTOM} stroke="#D3C4BE" strokeDasharray="3 4" />
+        <text x={todayX + 4} y={PAD_TOP + 8} fontSize={9} fill="var(--faint)">
+          today
+        </text>
+        <text x={PAD_LEFT + 4} y={raisedPoints[0].y - 4} fontSize={9} fill="#C75B4E">
+          raised
+        </text>
+        <text x={PAD_LEFT + 4} y={closedPoints[0].y + 12} fontSize={9} fill="#6E9CA6">
+          closed
+        </text>
+
+        {hovered && (
+          <g pointerEvents="none">
+            <line
+              x1={x(hovered.snapshot_date)}
+              y1={PAD_TOP}
+              x2={x(hovered.snapshot_date)}
+              y2={HEIGHT - PAD_BOTTOM}
+              stroke="#2E2422"
+              strokeWidth={1}
+              opacity={0.3}
+            />
+            <circle cx={x(hovered.snapshot_date)} cy={y(hovered.total_raised)} r={4} fill="#C75B4E" stroke="#fff" strokeWidth={1.5} />
+            <circle cx={x(hovered.snapshot_date)} cy={y(hovered.total_closed)} r={4} fill="#6E9CA6" stroke="#fff" strokeWidth={1.5} />
+          </g>
+        )}
+
+        <rect
+          x={PAD_LEFT}
+          y={PAD_TOP - 4}
+          width={WIDTH - PAD_LEFT - PAD_RIGHT}
+          height={HEIGHT - PAD_TOP - PAD_BOTTOM + 4}
+          fill="transparent"
+          onMouseMove={onMove}
+          style={{ cursor: "crosshair" }}
+        />
+      </svg>
+
+      {hovered && (
+        <div className="pointer-events-none absolute rounded-md bg-foreground px-2 py-1 text-[10px] leading-relaxed text-background shadow-md"
+          style={{ left: `${(x(hovered.snapshot_date) / WIDTH) * 100}%`, top: 28, transform: "translateX(-50%)" }}
+        >
+          <div className="font-mono">{fmtShort(hovered.snapshot_date)}{hovered.snapshot_date === today ? " (today)" : ""}</div>
+          <div>Raised: {hovered.total_raised} · Closed: {hovered.total_closed}</div>
+        </div>
+      )}
+
+      <div className="mt-1 flex justify-between text-[9px] text-faint">
+        {weekTicks.map((d) => (
+          <span key={d} className={d === today ? "font-medium text-muted-foreground" : undefined}>
+            {fmtShort(d)}
+          </span>
+        ))}
+        {hasTarget && <span>go-live {fmtShort(xEndDate)}</span>}
+      </div>
+    </div>
+  );
+}
+```
+
+#### `src/components/duplicate-check-modal.tsx`
+
+```tsx
+import { Button } from "@/components/ui/button";
+import { STATUS_CHIP, STATUS_LABELS } from "@/lib/snags";
+import type { DuplicateCandidate } from "@/app/(app)/warehouses/[id]/snags/new/actions";
+
+// PLAN.md §7: candidates ranked by description similarity within the same
+// warehouse/location/sub-category, shown before the snag is written.
+export function DuplicateCheckModal({
+  candidates,
+  pending,
+  onCancel,
+  onRaiseAnyway,
+}: {
+  candidates: DuplicateCandidate[];
+  pending: boolean;
+  onCancel: () => void;
+  onRaiseAnyway: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+      <div className="w-full max-w-md rounded-card border border-border bg-card p-4">
+        <h2 className="text-[14px] font-medium text-foreground">Possible duplicate</h2>
+        <p className="mt-0.5 text-[12px] text-muted-foreground">
+          {candidates.length === 1 ? "This looks similar to an" : "These look similar to"} open snag
+          {candidates.length === 1 ? "" : "s"} already raised at this location.
+        </p>
+        <div className="mt-3 flex max-h-64 flex-col gap-2 overflow-y-auto">
+          {candidates.map((c) => (
+            <div key={c.id} className="rounded-md border border-border p-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-mono text-[10.5px] text-faint">#{String(c.serial_no).padStart(3, "0")}</span>
+                <span className={`rounded-chip px-1.5 py-0.5 text-[10px] font-medium ${STATUS_CHIP[c.status]}`}>
+                  {STATUS_LABELS[c.status] ?? c.status}
+                </span>
+              </div>
+              <p className="mt-1 text-[12.5px] text-foreground">{c.description}</p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">Raised by {c.raised_by_name ?? "—"}</p>
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button type="button" variant="outline" disabled={pending} onClick={onCancel}>
+            Cancel — it&apos;s the same issue
+          </Button>
+          <Button type="button" disabled={pending} onClick={onRaiseAnyway}>
+            {pending ? "Raising…" : "Raise anyway"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+#### `src/components/export-button.tsx`
+
+```tsx
+"use client";
+
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { exportSnagsToExcel } from "@/lib/excel";
+import type { SnagRow } from "@/components/snag-table";
+
+export function ExportButton({ snags, warehouseName }: { snags: SnagRow[]; warehouseName: string }) {
+  const [busy, setBusy] = useState(false);
+
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant="outline"
+      disabled={busy}
+      onClick={async () => {
+        setBusy(true);
+        try {
+          await exportSnagsToExcel(snags, warehouseName);
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      {busy ? "Exporting…" : "Export"}
+    </Button>
+  );
+}
+```
+
+#### `src/components/multi-select-filter.tsx`
+
+```tsx
+"use client";
+
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+
+export function MultiSelectFilter({
+  label,
+  options,
+  selected,
+  onChange,
+  className,
+  emptySuffix = ": All",
+  onSelectAll,
+}: {
+  label: string;
+  options: { value: string; label: string }[];
+  selected: string[];
+  onChange: (next: string[]) => void;
+  className?: string;
+  // Table filters read correctly as "Status: All" when nothing's picked —
+  // no filter means every row matches. That's not true everywhere this
+  // component is reused (e.g. an invite form, where nothing picked means
+  // no warehouse tag at all, not "all warehouses") — callers there should
+  // pass "" so the button just reads as a plain placeholder.
+  emptySuffix?: string;
+  // Opt-in "select everything" shortcut, styled and positioned like Clear
+  // rather than as one more checkbox in the list — it's a bulk action on
+  // the selection, not itself a selectable value.
+  onSelectAll?: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState({ top: 0, left: 0, width: 0 });
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // Rendered through a portal (below) rather than as a normal absolutely-
+  // positioned child — this component gets used inside containers that
+  // clip overflow for rounded corners (e.g. the People table), which would
+  // otherwise cut the open dropdown off instead of letting it float over
+  // the page.
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current) return;
+    function updatePosition() {
+      const rect = triggerRef.current!.getBoundingClientRect();
+      // Flip above the trigger when there isn't room below (e.g. the last
+      // row in a table near the bottom of the page) but there's more room
+      // above — panelRef already has its real rendered height at this
+      // point since layout effects run after the portal's DOM is
+      // committed, so this doesn't need a guessed/max height.
+      const panelHeight = panelRef.current?.offsetHeight ?? 0;
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const openUpward = spaceBelow < panelHeight + 8 && rect.top > spaceBelow;
+      const top = openUpward ? rect.top - 4 - panelHeight : rect.bottom + 4;
+      setPosition({ top, left: rect.left, width: rect.width });
+    }
+    updatePosition();
+    window.addEventListener("scroll", updatePosition, true);
+    window.addEventListener("resize", updatePosition);
+    return () => {
+      window.removeEventListener("scroll", updatePosition, true);
+      window.removeEventListener("resize", updatePosition);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      const target = e.target as Node;
+      if (
+        triggerRef.current &&
+        !triggerRef.current.contains(target) &&
+        panelRef.current &&
+        !panelRef.current.contains(target)
+      ) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, []);
+
+  function toggle(value: string) {
+    onChange(selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value]);
+  }
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={`rounded-md border px-2 py-1 text-[11.5px] font-medium ${
+          selected.length > 0
+            ? "border-primary bg-accent text-accent-foreground"
+            : "border-teal bg-frost text-teal-deep"
+        } ${className ?? ""}`}
+      >
+        {label}
+        {selected.length > 0 ? ` (${selected.length})` : emptySuffix}
+      </button>
+      {open &&
+        createPortal(
+          <div
+            ref={panelRef}
+            style={{ top: position.top, left: position.left, minWidth: position.width }}
+            className="fixed z-50 max-h-56 w-44 overflow-y-auto rounded-md border border-border bg-card py-1 shadow-md"
+          >
+            {onSelectAll && selected.length < options.length && (
+              <button
+                type="button"
+                onClick={onSelectAll}
+                className="w-full px-2.5 py-1 text-left text-[11px] text-primary hover:bg-muted"
+              >
+                All
+              </button>
+            )}
+            {selected.length > 0 && (
+              <button
+                type="button"
+                onClick={() => onChange([])}
+                className="w-full px-2.5 py-1 text-left text-[11px] text-primary hover:bg-muted"
+              >
+                Clear
+              </button>
+            )}
+            {options.map((o) => (
+              <label
+                key={o.value}
+                className="flex cursor-pointer items-center gap-2 px-2.5 py-1.5 text-[12px] hover:bg-muted"
+              >
+                <input
+                  type="checkbox"
+                  checked={selected.includes(o.value)}
+                  onChange={() => toggle(o.value)}
+                  className="accent-primary"
+                />
+                {o.label}
+              </label>
+            ))}
+          </div>,
+          document.body
+        )}
+    </>
+  );
+}
+```
+
+#### `src/components/pending-sync-banner.tsx`
+
+```tsx
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { listQueuedSnags } from "@/lib/offline-queue";
+import { syncOfflineQueue } from "@/lib/sync-queue";
+
+export function PendingSyncBanner() {
+  const router = useRouter();
+  const [pending, setPending] = useState(0);
+  const [syncing, setSyncing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const refreshCount = useCallback(async () => {
+    const queue = await listQueuedSnags();
+    setPending(queue.length);
+  }, []);
+
+  const trySync = useCallback(async () => {
+    if (!navigator.onLine) return;
+    setSyncing(true);
+    const result = await syncOfflineQueue();
+    setSyncing(false);
+    setError(result.error);
+    await refreshCount();
+    if (result.synced.length > 0) router.refresh();
+  }, [refreshCount, router]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    refreshCount();
+    trySync();
+    window.addEventListener("online", trySync);
+    return () => window.removeEventListener("online", trySync);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (pending === 0) return null;
+
+  return (
+    <div className="flex items-center gap-2 border-b border-amber bg-amber px-4 py-1.5 text-[12px] text-amber-deep">
+      <span>
+        {pending} snag{pending === 1 ? "" : "s"} queued offline — will sync automatically once you&apos;re back
+        online.
+      </span>
+      <button
+        type="button"
+        onClick={trySync}
+        disabled={syncing}
+        className="ml-auto font-medium underline-offset-2 hover:underline"
+      >
+        {syncing ? "Syncing…" : "Sync now"}
+      </button>
+      {error && <span className="text-destructive">{error}</span>}
+    </div>
+  );
+}
+```
+
+#### `src/components/photo-capture.tsx`
+
+```tsx
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { buildThumbnail, loadImageToCanvas, type PhotoCapture } from "@/lib/media";
+
+// Canvas overlay for circling the defect before save, per PLAN.md §6.
+// The original (pristine) image is always preserved separately from the
+// annotated version.
+export function PhotoCaptureInput({ onChange }: { onChange: (capture: PhotoCapture | null) => void }) {
+  const pristineRef = useRef<HTMLCanvasElement | null>(null);
+  const visibleRef = useRef<HTMLCanvasElement>(null);
+  const draggingRef = useRef<{ x: number; y: number } | null>(null);
+  const [hasImage, setHasImage] = useState(false);
+  const [hasAnnotation, setHasAnnotation] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  // The <canvas> only mounts once hasImage flips true, so the first
+  // draw has to happen in an effect (after commit), not inline in the
+  // file-select handler where the ref is still null.
+  useEffect(() => {
+    if (hasImage) {
+      redraw();
+      emit();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasImage]);
+
+  async function onFileSelected(file: File) {
+    setBusy(true);
+    try {
+      const canvas = await loadImageToCanvas(file);
+      pristineRef.current = canvas;
+      setHasAnnotation(false);
+      setHasImage(true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function redraw() {
+    const pristine = pristineRef.current;
+    const visible = visibleRef.current;
+    if (!pristine || !visible) return;
+    visible.width = pristine.width;
+    visible.height = pristine.height;
+    visible.getContext("2d")!.drawImage(pristine, 0, 0);
+  }
+
+  function drawCircle(x0: number, y0: number, x1: number, y1: number) {
+    redraw();
+    const ctx = visibleRef.current!.getContext("2d")!;
+    const cx = (x0 + x1) / 2;
+    const cy = (y0 + y1) / 2;
+    const rx = Math.abs(x1 - x0) / 2;
+    const ry = Math.abs(y1 - y0) / 2;
+    ctx.strokeStyle = "#C75B4E";
+    ctx.lineWidth = Math.max(3, visibleRef.current!.width / 200);
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, Math.max(rx, 4), Math.max(ry, 4), 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  function toCanvasCoords(e: React.MouseEvent<HTMLCanvasElement>) {
+    const rect = visibleRef.current!.getBoundingClientRect();
+    const scaleX = visibleRef.current!.width / rect.width;
+    const scaleY = visibleRef.current!.height / rect.height;
+    return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
+  }
+
+  async function emit() {
+    const pristine = pristineRef.current;
+    const visible = visibleRef.current;
+    if (!pristine || !visible) {
+      onChange(null);
+      return;
+    }
+    const [original, annotated, thumbnail] = await Promise.all([
+      new Promise<Blob>((res, rej) => pristine.toBlob((b) => (b ? res(b) : rej()), "image/jpeg", 0.85)),
+      new Promise<Blob>((res, rej) => visible.toBlob((b) => (b ? res(b) : rej()), "image/jpeg", 0.85)),
+      buildThumbnail(visible),
+    ]);
+    onChange({ original, annotated, thumbnail });
+  }
+
+  return (
+    <div>
+      {!hasImage ? (
+        <label className="flex h-14 cursor-pointer items-center justify-center rounded-md border border-dashed border-input text-[13px] text-muted-foreground hover:bg-muted">
+          {busy ? "Loading…" : "Take or add a photo"}
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={(e) => e.target.files?.[0] && onFileSelected(e.target.files[0])}
+          />
+        </label>
+      ) : (
+        <div>
+          <canvas
+            ref={visibleRef}
+            className="w-full cursor-crosshair rounded-md border border-border"
+            onMouseDown={(e) => {
+              draggingRef.current = toCanvasCoords(e);
+            }}
+            onMouseMove={(e) => {
+              if (!draggingRef.current) return;
+              const { x, y } = toCanvasCoords(e);
+              drawCircle(draggingRef.current.x, draggingRef.current.y, x, y);
+            }}
+            onMouseUp={async () => {
+              if (draggingRef.current) {
+                setHasAnnotation(true);
+                await emit();
+              }
+              draggingRef.current = null;
+            }}
+          />
+          <div className="mt-1.5 flex items-center gap-2 text-[11.5px]">
+            <span className="text-muted-foreground">Drag on the photo to circle the defect.</span>
+            {hasAnnotation && (
+              <button
+                type="button"
+                className="text-primary"
+                onClick={async () => {
+                  redraw();
+                  setHasAnnotation(false);
+                  await emit();
+                }}
+              >
+                Clear circle
+              </button>
+            )}
+            <button
+              type="button"
+              className="ml-auto text-destructive"
+              onClick={() => {
+                pristineRef.current = null;
+                setHasImage(false);
+                setHasAnnotation(false);
+                onChange(null);
+              }}
+            >
+              Remove
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PhotoChip({ thumbnail, onRemove }: { thumbnail: Blob; onRemove: () => void }) {
+  const [url] = useState(() => URL.createObjectURL(thumbnail));
+  useEffect(() => () => URL.revokeObjectURL(url), [url]);
+  return (
+    <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-md border border-border">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={url} alt="" className="h-full w-full object-cover" />
+      <button
+        type="button"
+        onClick={onRemove}
+        className="absolute right-0 top-0 flex h-4 w-4 items-center justify-center rounded-bl-md bg-destructive text-[10px] text-white"
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
+// Wraps the single-shot editor above to build a list. PhotoCaptureInput's
+// onChange fires repeatedly while one photo is being annotated (each drag
+// re-emits the updated blobs), so appending straight from onChange would
+// duplicate entries — this tracks the in-progress photo as a draft and only
+// commits it to the list on an explicit "Add" tap, then remounts a fresh
+// picker (via key) for the next one.
+export function MultiPhotoCaptureInput({ onChange }: { onChange: (captures: PhotoCapture[]) => void }) {
+  const [captures, setCaptures] = useState<PhotoCapture[]>([]);
+  const [draft, setDraft] = useState<PhotoCapture | null>(null);
+  const [pickerKey, setPickerKey] = useState(0);
+
+  function addDraft() {
+    if (!draft) return;
+    const next = [...captures, draft];
+    setCaptures(next);
+    onChange(next);
+    setDraft(null);
+    setPickerKey((k) => k + 1);
+  }
+
+  function removeCapture(index: number) {
+    const next = captures.filter((_, i) => i !== index);
+    setCaptures(next);
+    onChange(next);
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      {captures.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {captures.map((c, i) => (
+            <PhotoChip key={i} thumbnail={c.thumbnail} onRemove={() => removeCapture(i)} />
+          ))}
+        </div>
+      )}
+      <PhotoCaptureInput key={pickerKey} onChange={setDraft} />
+      {draft && (
+        <button
+          type="button"
+          onClick={addDraft}
+          className="self-start text-[11.5px] font-medium text-primary hover:underline"
+        >
+          + Add this photo
+        </button>
+      )}
+    </div>
+  );
+}
+```
+
+#### `src/components/role-people-picker.tsx`
+
+```tsx
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { ROLE_COLOR_CLASS, type MemberRole } from "@/lib/roles";
+
+type Person = { id: string; full_name: string | null; email: string; default_role?: string | null };
+
+function displayName(p: Person) {
+  return p.full_name ?? p.email;
+}
+
+// Searchable multi-select combobox: selected people show as colored chips
+// (colored by role, per the shared ROLE_COLOR_CLASS mapping), with a
+// dropdown search box for adding more.
+export function RolePeoplePicker({
+  role,
+  label,
+  people,
+  selected,
+  onChange,
+  lockedIds = [],
+  onRemoveLocked,
+}: {
+  role: MemberRole;
+  label: string;
+  people: Person[];
+  selected: string[];
+  onChange: (next: string[]) => void;
+  /** Already-a-member ids shown as locked chips (add-only flows unless onRemoveLocked is given). */
+  lockedIds?: string[];
+  /** When provided, locked chips get a small × to remove that person from this role. */
+  onRemoveLocked?: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+  const colorClass = ROLE_COLOR_CLASS[role];
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setQuery("");
+      }
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, []);
+
+  function toggle(id: string) {
+    onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
+  }
+
+  const available = people
+    .filter((p) => !selected.includes(p.id))
+    .filter((p) => displayName(p).toLowerCase().includes(query.toLowerCase()))
+    .sort((a, b) => {
+      const aMatch = a.default_role === role ? 0 : 1;
+      const bMatch = b.default_role === role ? 0 : 1;
+      if (aMatch !== bMatch) return aMatch - bMatch;
+      return displayName(a).localeCompare(displayName(b));
+    });
+
+  return (
+    <div ref={containerRef} className="relative">
+      <div className="mb-1.5 text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">{label}</div>
+      <div
+        className="flex min-h-9 flex-wrap items-center gap-1.5 rounded-md border border-input bg-background px-2 py-1.5"
+        onClick={() => setOpen(true)}
+      >
+        {selected.map((id) => {
+          const p = people.find((x) => x.id === id);
+          if (!p) return null;
+          const locked = lockedIds.includes(id);
+          return locked ? (
+            <span key={id} className={`flex items-center gap-1 rounded-pill border px-2 py-0.5 text-[11px] ${colorClass} ${onRemoveLocked ? "" : "opacity-70"}`}>
+              {displayName(p)}
+              {onRemoveLocked && (
+                <button
+                  type="button"
+                  aria-label={`Remove ${displayName(p)} from ${label}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemoveLocked(id);
+                  }}
+                  className="text-current opacity-60 hover:opacity-100"
+                >
+                  ×
+                </button>
+              )}
+            </span>
+          ) : (
+            <button
+              key={id}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                toggle(id);
+              }}
+              className={`rounded-pill border px-2 py-0.5 text-[11px] ${colorClass}`}
+            >
+              {displayName(p)} ×
+            </button>
+          );
+        })}
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onFocus={() => setOpen(true)}
+          placeholder={selected.length === 0 ? "Search or select…" : ""}
+          className="min-w-[80px] flex-1 bg-transparent text-[12.5px] outline-none placeholder:text-faint"
+        />
+      </div>
+      {open && (
+        <div className="absolute z-20 mt-1 max-h-52 w-full overflow-y-auto rounded-md border border-border bg-card shadow-md">
+          {available.length === 0 ? (
+            <div className="px-2.5 py-2 text-[11.5px] text-muted-foreground">No matches</div>
+          ) : (
+            available.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => {
+                  toggle(p.id);
+                  setQuery("");
+                }}
+                className="flex w-full items-center px-2.5 py-1.5 text-left text-[12px] hover:bg-muted"
+              >
+                {displayName(p)}
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+#### `src/components/snag-compose.tsx`
+
+```tsx
+"use client";
+
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { MultiPhotoCaptureInput } from "@/components/photo-capture";
+import { MultiVideoCaptureInput } from "@/components/video-capture";
+import { createClient } from "@/lib/supabase/client";
+import { uploadAttachment, type PhotoCapture, type VideoCapture } from "@/lib/media";
+import { postSnagUpdate, closeSnagDirectly, verifySnagClosure } from "@/app/(app)/warehouses/[id]/snag-actions";
+
+async function attachDraftMedia(opts: {
+  warehouseId: string;
+  snagId: string;
+  updateId: string;
+  currentUserId: string;
+  photos: PhotoCapture[];
+  videos: VideoCapture[];
+}): Promise<{ error: string | null }> {
+  const supabase = createClient();
+  for (let i = 0; i < opts.photos.length; i++) {
+    const r = await uploadAttachment(supabase, {
+      warehouseId: opts.warehouseId,
+      snagId: opts.snagId,
+      updateId: opts.updateId,
+      mediaType: "image",
+      file: opts.photos[i].annotated,
+      original: opts.photos[i].original,
+      thumbnail: opts.photos[i].thumbnail,
+      fileName: `snag-photo-${i + 1}.jpg`,
+      uploaderId: opts.currentUserId,
+    });
+    if (r.error) return r;
+  }
+  for (let i = 0; i < opts.videos.length; i++) {
+    const r = await uploadAttachment(supabase, {
+      warehouseId: opts.warehouseId,
+      snagId: opts.snagId,
+      updateId: opts.updateId,
+      mediaType: "video",
+      file: opts.videos[i].file,
+      thumbnail: opts.videos[i].thumbnail,
+      fileName: `snag-video-${i + 1}.mp4`,
+      uploaderId: opts.currentUserId,
+    });
+    if (r.error) return r;
+  }
+  return { error: null };
+}
+
+// Reporters raise defects, so their compose box gets the "warm" role badge;
+// resolvers drive them to close, so theirs gets the "cool" one — the same
+// warm=problem / cool=fix thermal thesis the rest of the palette already
+// uses, applied to who's speaking rather than what severity something is.
+function StatusControls({
+  etc,
+  setEtc,
+  nextStatus,
+  setNextStatus,
+}: {
+  etc: string;
+  setEtc: (v: string) => void;
+  nextStatus: string;
+  setNextStatus: (v: string) => void;
+}) {
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-2">
+      <label className="flex items-center gap-1 text-[11px] text-muted-foreground">
+        ETC
+        <input
+          type="date"
+          value={etc}
+          onChange={(e) => setEtc(e.target.value)}
+          className="rounded-md border border-input bg-card px-1.5 py-0.5 text-[11px]"
+        />
+      </label>
+      <select
+        value={nextStatus}
+        onChange={(e) => setNextStatus(e.target.value)}
+        className="rounded-md border border-input bg-card px-1.5 py-0.5 text-[11px]"
+      >
+        <option value="">Keep status</option>
+        <option value="wip">Move to WIP</option>
+        <option value="ready_to_close">Ticket closed, verify</option>
+      </select>
+    </div>
+  );
+}
+
+export function SnagComposeArea({
+  warehouseId,
+  snagId,
+  status,
+  currentUserId,
+  hasReporterTag,
+  hasResolverTag,
+  isDashboardAdmin,
+}: {
+  warehouseId: string;
+  snagId: string;
+  status: string;
+  currentUserId: string;
+  hasReporterTag: boolean;
+  hasResolverTag: boolean;
+  isDashboardAdmin: boolean;
+}) {
+  const isPureAdmin = isDashboardAdmin && !hasReporterTag && !hasResolverTag;
+  const isDualReal = hasReporterTag && hasResolverTag;
+  const router = useRouter();
+
+  const [body, setBody] = useState("");
+  const [photos, setPhotos] = useState<PhotoCapture[]>([]);
+  const [videos, setVideos] = useState<VideoCapture[]>([]);
+  const [mediaKey, setMediaKey] = useState(0);
+  const [etc, setEtc] = useState("");
+  const [nextStatus, setNextStatus] = useState("");
+  // For someone tagged both reporter and resolver on this warehouse — which
+  // hat they're posting under this message. Not shown at all for a
+  // single-role person or a pure (untagged) admin, who each only have one
+  // shape of box.
+  const [actingAs, setActingAs] = useState<"reporter" | "resolver">(hasReporterTag ? "reporter" : "resolver");
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  if (!hasReporterTag && !hasResolverTag && !isDashboardAdmin) return null;
+
+  function resetDraft() {
+    setBody("");
+    setPhotos([]);
+    setVideos([]);
+    setEtc("");
+    setNextStatus("");
+    setMediaKey((k) => k + 1);
+  }
+
+  async function afterAction(result: { updateId: string | null; error: string | null }) {
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    if (result.updateId && (photos.length > 0 || videos.length > 0)) {
+      const r = await attachDraftMedia({ warehouseId, snagId, updateId: result.updateId, currentUserId, photos, videos });
+      if (r.error) {
+        setError(`Posted, but an attachment failed to upload: ${r.error}`);
+        return;
+      }
+      // The attachment upload happens client-side after postSnagUpdate's own
+      // revalidatePath already ran, so without this the new photos/videos
+      // wouldn't show up in the feed until some later, unrelated refresh —
+      // the text bubble would appear immediately but its attachments
+      // wouldn't, even for the person who just sent them.
+      router.refresh();
+    }
+    setError(null);
+    resetDraft();
+  }
+
+  function send() {
+    if (!body.trim()) {
+      setError("Add a comment before sending.");
+      return;
+    }
+    const as = isPureAdmin ? "resolver" : isDualReal ? actingAs : hasResolverTag ? "resolver" : "reporter";
+    startTransition(async () => {
+      const result = await postSnagUpdate(
+        warehouseId,
+        snagId,
+        body,
+        as,
+        as === "resolver" ? etc || null : null,
+        as === "resolver" ? nextStatus || null : null
+      );
+      await afterAction(result);
+    });
+  }
+
+  function close() {
+    startTransition(async () => {
+      const result = await closeSnagDirectly(warehouseId, snagId, body || null);
+      await afterAction(result);
+    });
+  }
+
+  function verify(approved: boolean) {
+    startTransition(async () => {
+      const result = await verifySnagClosure(warehouseId, snagId, approved, body || null);
+      await afterAction(result);
+    });
+  }
+
+  const showResolverControls =
+    isPureAdmin || (isDualReal && actingAs === "resolver") || (!isDualReal && !isPureAdmin && hasResolverTag);
+  const showReporterControls =
+    isPureAdmin || (isDualReal && actingAs === "reporter") || (!isDualReal && !isPureAdmin && hasReporterTag);
+
+  return (
+    <div className="rounded-md border border-border bg-background p-2.5">
+      {isPureAdmin && (
+        <p className="mb-1.5 text-[10px] uppercase tracking-[0.07em] text-faint">Commenting as Dashboard Admin</p>
+      )}
+      {isDualReal && (
+        <div className="mb-1.5 inline-flex rounded-md border border-border p-0.5 text-[11px]">
+          <button
+            type="button"
+            onClick={() => setActingAs("reporter")}
+            className={`rounded px-2 py-0.5 ${actingAs === "reporter" ? "bg-blush text-red-deep" : "text-muted-foreground"}`}
+          >
+            Commenting as Reporter
+          </button>
+          <button
+            type="button"
+            onClick={() => setActingAs("resolver")}
+            className={`rounded px-2 py-0.5 ${actingAs === "resolver" ? "bg-frost text-teal-deep" : "text-muted-foreground"}`}
+          >
+            Commenting as Resolver
+          </button>
+        </div>
+      )}
+
+      <textarea
+        value={body}
+        onChange={(e) => setBody(e.target.value)}
+        rows={2}
+        placeholder="Add a comment"
+        className="w-full rounded-md border border-input bg-card px-2 py-1.5 text-[12.5px] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+      />
+
+      <div key={mediaKey} className="mt-1.5 flex flex-col gap-1.5 sm:flex-row">
+        <div className="flex-1">
+          <MultiPhotoCaptureInput onChange={setPhotos} />
+        </div>
+        <div className="flex-1">
+          <MultiVideoCaptureInput onChange={setVideos} />
+        </div>
+      </div>
+
+      {showResolverControls && (
+        <StatusControls etc={etc} setEtc={setEtc} nextStatus={nextStatus} setNextStatus={setNextStatus} />
+      )}
+
+      <div className="mt-1.5 flex flex-wrap items-center gap-2">
+        <Button size="sm" disabled={pending || !body.trim()} onClick={send}>
+          {pending ? "Sending…" : "Send"}
+        </Button>
+
+        {showReporterControls &&
+          (status === "ready_to_close" ? (
+            <>
+              <Button size="sm" variant="outline" disabled={pending} onClick={() => verify(false)}>
+                Reject — reopen
+              </Button>
+              <Button size="sm" disabled={pending} onClick={() => verify(true)}>
+                Confirm closed
+              </Button>
+            </>
+          ) : status !== "closed" ? (
+            <Button size="sm" variant="outline" disabled={pending} onClick={close}>
+              Close ticket
+            </Button>
+          ) : null)}
+      </div>
+      {error && <p className="mt-1 text-[11px] text-destructive">{error}</p>}
+    </div>
+  );
+}
+```
+
+#### `src/components/snag-row.tsx`
+
+```tsx
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { TableCell, TableRow } from "@/components/ui/table";
+import {
+  CATEGORY_LABELS,
+  LOCATION_LABELS,
+  SCOPE_LABELS,
+  SEVERITY_CHIP,
+  SEVERITY_LABELS,
+  STATUS_CHIP,
+  STATUS_LABELS,
+  SUB_CATEGORY_LABELS,
+  ageingClass,
+  ageingDays,
+  isOverdue,
+} from "@/lib/snags";
+import type { SnagRow as SnagRowData } from "@/components/snag-table";
+import { SnagComposeArea } from "@/components/snag-compose";
+import { cn } from "@/lib/utils";
+import { STICKY_SNO_CLASS, STICKY_DATE_CLASS, STICKY_DESC_CLASS } from "@/lib/table-sticky";
+
+export type UpdateRow = {
+  id: string;
+  body: string;
+  author_id: string;
+  author_side: "reporter" | "resolver" | "admin";
+  created_at: string;
+  author: { full_name: string | null; email: string } | null;
+};
+
+export type AttachmentRow = {
+  id: string;
+  update_id: string | null;
+  media_type: string;
+  thumbnail_url: string;
+  file_url: string;
+};
+
+export type ActivityRow = {
+  id: string;
+  action: string;
+  field: string | null;
+  old_value: string | null;
+  new_value: string | null;
+  created_at: string;
+  actor: { full_name: string | null; email: string } | null;
+};
+
+function describeActivity(a: ActivityRow): string {
+  switch (a.action) {
+    case "raise":
+      return "raised this snag";
+    case "status_change":
+      return `moved status from ${STATUS_LABELS[a.old_value ?? ""] ?? a.old_value ?? "—"} to ${
+        STATUS_LABELS[a.new_value ?? ""] ?? a.new_value ?? "—"
+      }`;
+    case "etc_update":
+      return a.old_value
+        ? `updated ETC from ${fmtDate(a.old_value)} to ${a.new_value ? fmtDate(a.new_value) : "—"}`
+        : `set ETC to ${a.new_value ? fmtDate(a.new_value) : "—"}`;
+    case "verify_closure":
+      return "closed this snag";
+    case "reject_closure":
+      return "reopened this snag";
+    case "duplicate_suppressed":
+      return "raised this snag despite a possible duplicate match";
+    case "correct_date_raised":
+      return `corrected the raised date from ${a.old_value ? fmtDate(a.old_value) : "—"} to ${
+        a.new_value ? fmtDate(a.new_value) : "—"
+      }`;
+    default:
+      return a.action.replaceAll("_", " ");
+  }
+}
+
+function AttachmentThumbs({ attachments }: { attachments: AttachmentRow[] }) {
+  if (attachments.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {attachments.map((a) => (
+        <a
+          key={a.id}
+          href={a.file_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="relative block h-14 w-14 overflow-hidden rounded-md border border-border"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={a.thumbnail_url} alt="" className="h-full w-full object-cover" />
+          {a.media_type === "video" && (
+            <span className="absolute inset-0 flex items-center justify-center bg-black/25 text-[16px] text-white">
+              ▶
+            </span>
+          )}
+        </a>
+      ))}
+    </div>
+  );
+}
+
+function fmtDate(d: string) {
+  return new Date(d + "T00:00:00").toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+}
+
+// Time before date, per feedback — "14:57 · 12 Aug" reads as a log entry
+// timestamp, matching how the format is used elsewhere in the feed.
+function fmtTimeDate(iso: string) {
+  const d = new Date(iso);
+  const time = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  const date = d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+  return `${time} · ${date}`;
+}
+
+const SIDE_LABEL: Record<string, string> = {
+  reporter: "Reporter",
+  resolver: "Resolver",
+  admin: "Dashboard Admin",
+};
+
+// A message shows the author's actual current operational role(s) on this
+// warehouse (e.g. "HVAC Engineer") when they're tagged with one — real role
+// always wins over any bucket label, since the bucket is about which side
+// of the thread a message sits on, not a description of the person. Next,
+// "Dashboard Admin" if they hold no tag here but are a real admin (this
+// matters most for the raise bubble, which always sits on the reporter
+// side even when an admin bypassed to raise it — the badge should still
+// say what they actually are). The generic reporter/resolver bucket is
+// only a last resort, for someone with neither a current tag nor admin
+// status (e.g. fully removed from the org, message kept for the record).
+function roleTextFor(
+  side: "reporter" | "resolver" | "admin",
+  authorId: string,
+  rolesByUserId: Record<string, string[]>,
+  adminUserIds: string[]
+) {
+  const roles = rolesByUserId[authorId];
+  if (roles && roles.length > 0) return roles.join(", ");
+  if (adminUserIds.includes(authorId)) return "Dashboard Admin";
+  return SIDE_LABEL[side];
+}
+
+// Reporters raise defects (the problem), resolvers drive them to close (the
+// fix) — reusing the palette's own warm/cool thermal thesis for who's
+// speaking, not just severity, keeps the two sides visually distinct
+// without introducing a new accent. The message box itself carries the same
+// tint now, not just the name badge.
+const SIDE_BADGE_CLASS: Record<string, string> = {
+  reporter: "bg-blush text-red-deep",
+  resolver: "bg-frost text-teal-deep",
+  admin: "bg-line-soft text-foreground",
+};
+
+const SIDE_BOX_CLASS: Record<string, string> = {
+  reporter: "border-blush bg-blush",
+  resolver: "border-frost bg-frost",
+  admin: "border-line-soft bg-line-soft",
+};
+
+const SIDE_JUSTIFY_CLASS: Record<string, string> = {
+  reporter: "justify-start",
+  resolver: "justify-end",
+  admin: "justify-center",
+};
+
+const SIDE_ITEMS_CLASS: Record<string, string> = {
+  reporter: "items-start",
+  resolver: "items-end",
+  admin: "items-center",
+};
+
+function ChatBubble({
+  side,
+  authorName,
+  roleText,
+  body,
+  attachments,
+  timestamp,
+}: {
+  side: "reporter" | "resolver" | "admin";
+  authorName: string;
+  roleText: string;
+  body: string;
+  attachments: AttachmentRow[];
+  timestamp: string;
+}) {
+  // A row wrapper positions the bubble via justify-content, with the bubble
+  // itself sized to its content (capped at 85%) as a flex-row child — a
+  // max-w column div with mx-auto/mr-auto looked right for reporter/resolver
+  // by coincidence (they hug an edge either way) but silently mis-centered
+  // admin's bubble, since a flex-col item stretches to fill the cross axis
+  // by default and auto-margins had no slack left to distribute.
+  return (
+    <div className={cn("flex", SIDE_JUSTIFY_CLASS[side])}>
+      <div className={cn("flex max-w-[85%] flex-col gap-0.5", SIDE_ITEMS_CLASS[side])}>
+        <div className="flex flex-wrap items-center gap-1.5 text-[10.5px]">
+          <span className="font-mono text-faint">{timestamp}</span>
+          <span className="text-muted-foreground">·</span>
+          <span className="font-medium text-foreground">{authorName}</span>
+          <span className={cn("rounded-chip px-1.5 py-0.5 text-[9px] font-medium", SIDE_BADGE_CLASS[side])}>
+            {roleText}
+          </span>
+        </div>
+        <div
+          className={cn(
+            "whitespace-normal rounded-md border px-2.5 py-1.5 text-[12px] text-foreground",
+            SIDE_BOX_CLASS[side]
+          )}
+        >
+          {body}
+          {attachments.length > 0 && (
+            <div className="mt-1.5">
+              <AttachmentThumbs attachments={attachments} />
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SystemLine({ actorName, text, timestamp }: { actorName: string; text: string; timestamp: string }) {
+  return (
+    <div className="text-center text-[10.5px] text-muted-foreground">
+      <span className="font-mono text-faint">{timestamp}</span> · {actorName} {text}
+    </div>
+  );
+}
+
+type FeedItem =
+  | {
+      kind: "message";
+      id: string;
+      side: "reporter" | "resolver" | "admin";
+      authorName: string;
+      roleText: string;
+      body: string;
+      attachments: AttachmentRow[];
+      createdAt: string;
+    }
+  | { kind: "system"; id: string; actorName: string; text: string; createdAt: string };
+
+function buildFeed(
+  s: SnagRowData,
+  updates: UpdateRow[],
+  snagPhotos: AttachmentRow[],
+  attachmentsByUpdate: Map<string, AttachmentRow[]>,
+  activity: ActivityRow[],
+  rolesByUserId: Record<string, string[]>,
+  adminUserIds: string[]
+): FeedItem[] {
+  const items: FeedItem[] = [];
+
+  // The raise itself is always the thread's opening message — it always
+  // comes from the reporter side, even when a Dashboard Admin bypassing
+  // without a reporter tag is the one who clicked it.
+  const raiseActivity = activity.find((a) => a.action === "raise");
+  items.push({
+    kind: "message",
+    id: `raise-${s.id}`,
+    side: "reporter",
+    authorName: s.raised_by_profile?.full_name ?? s.raised_by_profile?.email ?? "Someone",
+    roleText: roleTextFor("reporter", s.raised_by, rolesByUserId, adminUserIds),
+    body: s.description,
+    attachments: snagPhotos,
+    createdAt: raiseActivity?.created_at ?? `${s.date_raised}T00:00:00`,
+  });
+
+  for (const u of updates) {
+    items.push({
+      kind: "message",
+      id: u.id,
+      side: u.author_side,
+      authorName: u.author?.full_name ?? u.author?.email ?? "Someone",
+      roleText: roleTextFor(u.author_side, u.author_id, rolesByUserId, adminUserIds),
+      body: u.body,
+      attachments: attachmentsByUpdate.get(u.id) ?? [],
+      createdAt: u.created_at,
+    });
+  }
+
+  for (const a of activity) {
+    if (a.action === "raise") continue;
+    items.push({
+      kind: "system",
+      id: a.id,
+      actorName: a.actor?.full_name ?? a.actor?.email ?? "Someone",
+      text: describeActivity(a),
+      createdAt: a.created_at,
+    });
+  }
+
+  items.sort((x, y) => new Date(x.createdAt).getTime() - new Date(y.createdAt).getTime());
+  return items;
+}
+
+export function SnagRow({
+  snag: s,
+  updates,
+  attachments,
+  activity,
+  warehouseId,
+  hasReporterTag,
+  hasResolverTag,
+  isDashboardAdmin,
+  rolesByUserId,
+  adminUserIds,
+  currentUserId,
+}: {
+  snag: SnagRowData;
+  updates: UpdateRow[];
+  attachments: AttachmentRow[];
+  activity: ActivityRow[];
+  warehouseId: string;
+  hasReporterTag: boolean;
+  hasResolverTag: boolean;
+  isDashboardAdmin: boolean;
+  rolesByUserId: Record<string, string[]>;
+  adminUserIds: string[];
+  currentUserId: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  // Measures the table's own scroll container so the panel below can match
+  // its exact visible width — confined to the screen and dynamic across
+  // breakpoints/sidebar-collapse, not a guessed fixed pixel cap.
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [panelWidth, setPanelWidth] = useState<number | null>(null);
+  const snagPhotos = attachments.filter((a) => a.update_id === null);
+  const attachmentsByUpdate = new Map<string, AttachmentRow[]>();
+  for (const a of attachments) {
+    if (a.update_id) attachmentsByUpdate.set(a.update_id, [...(attachmentsByUpdate.get(a.update_id) ?? []), a]);
+  }
+  const days = ageingDays(s.date_raised, s.closed_at);
+  const overdue = isOverdue(s.etc_date, s.status);
+  const subCategory =
+    s.sub_category === "others" && s.sub_category_other
+      ? s.sub_category_other
+      : SUB_CATEGORY_LABELS[s.sub_category] ?? s.sub_category;
+  const latest = updates[updates.length - 1];
+
+  // Expanding scrolls the table back to the frozen columns so the panel
+  // opens on screen — the panel itself then stays put via position:sticky
+  // (see the wrapper below) however far the table gets scrolled after that.
+  function toggleExpanded(e: React.MouseEvent<HTMLTableRowElement>) {
+    const container = (e.currentTarget as HTMLElement).closest<HTMLElement>('[data-slot="table-container"]');
+    setExpanded((v) => {
+      const next = !v;
+      if (next && container) container.scrollLeft = 0;
+      return next;
+    });
+  }
+
+  // container.clientWidth is the scroll container's *visible* width — it
+  // already accounts for the sidebar's current state, page padding, and the
+  // viewport size, so tracking it (via ResizeObserver, for window resizes
+  // and sidebar expand/collapse alike) gives the panel the exact width of
+  // the screen area actually available, not an approximation of it.
+  useEffect(() => {
+    if (!expanded) return;
+    const container = panelRef.current?.closest<HTMLElement>('[data-slot="table-container"]');
+    if (!container) return;
+    const update = () => setPanelWidth(container.clientWidth);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [expanded]);
+
+  const feed = buildFeed(s, updates, snagPhotos, attachmentsByUpdate, activity, rolesByUserId, adminUserIds);
+
+  return (
+    <>
+      <TableRow className="group cursor-pointer" onClick={toggleExpanded}>
+        <TableCell className={cn(STICKY_SNO_CLASS, "font-mono text-[11px] text-muted-foreground")}>
+          {String(s.serial_no).padStart(3, "0")}
+        </TableCell>
+        <TableCell className={cn(STICKY_DATE_CLASS, "whitespace-nowrap font-mono text-[11px] text-muted-foreground")}>
+          {fmtDate(s.date_raised)}
+        </TableCell>
+        <TableCell className={cn(STICKY_DESC_CLASS, "text-[12.5px] text-foreground")}>
+          {s.description}
+        </TableCell>
+        <TableCell className="max-w-[130px] truncate whitespace-nowrap text-[12px]">
+          {s.raised_by_profile?.full_name ?? s.raised_by_profile?.email ?? "—"}
+        </TableCell>
+        <TableCell className="whitespace-nowrap text-[12px] text-muted-foreground">
+          {CATEGORY_LABELS[s.category] ?? s.category}
+        </TableCell>
+        <TableCell className="whitespace-nowrap text-[12px] text-muted-foreground">{subCategory}</TableCell>
+        <TableCell className="whitespace-nowrap text-[12px] text-muted-foreground">
+          {LOCATION_LABELS[s.location] ?? s.location}
+        </TableCell>
+        <TableCell className="whitespace-nowrap text-[12px] text-muted-foreground">
+          {SCOPE_LABELS[s.scope] ?? s.scope}
+        </TableCell>
+        <TableCell className="text-center">
+          <span className={`rounded-chip px-1.5 py-0.5 text-[10px] font-medium ${SEVERITY_CHIP[s.severity]}`}>
+            {SEVERITY_LABELS[s.severity] ?? s.severity}
+          </span>
+        </TableCell>
+        <TableCell className="text-center">
+          <span className={`rounded-chip px-1.5 py-0.5 text-[10px] font-medium ${STATUS_CHIP[s.status]}`}>
+            {STATUS_LABELS[s.status] ?? s.status}
+          </span>
+        </TableCell>
+        <TableCell className="w-[380px] min-w-[380px] max-w-[380px] whitespace-normal break-words text-[11px]">
+          {latest ? (
+            <>
+              <div className="text-[11.5px] text-foreground">{latest.body}</div>
+              <div className="font-mono text-[9.5px] text-faint">
+                {updates.length} update{updates.length === 1 ? "" : "s"}
+              </div>
+            </>
+          ) : (
+            <span className="text-faint">No updates yet</span>
+          )}
+        </TableCell>
+        <TableCell className={`whitespace-nowrap font-mono text-[11px] ${overdue ? "text-red" : "text-muted-foreground"}`}>
+          {s.etc_date ? fmtDate(s.etc_date) : "not set"}
+        </TableCell>
+        <TableCell className={`whitespace-nowrap font-mono text-[11px] ${ageingClass(days)}`}>{days}d</TableCell>
+      </TableRow>
+      {expanded && (
+        <TableRow>
+          <TableCell colSpan={13} className="bg-background p-0">
+            {/* Sticks to the left edge of the table's own scroll container
+                as it's scrolled horizontally — a colSpan cell can't itself
+                be sticky (position:sticky doesn't work on a cell spanning
+                the full row width), but a plain block inside a wide cell
+                can. Width is measured off that same container (see the
+                ResizeObserver above) so the panel always matches the
+                actually-visible screen area instead of a guessed cap. */}
+            <div
+              ref={panelRef}
+              className="sticky left-0 z-10 flex w-[90vw] flex-col gap-2.5 border-x-2 border-border bg-background px-3 py-3 shadow-[inset_0_1px_0_0_var(--card)]"
+              style={panelWidth ? { width: panelWidth } : undefined}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <p className="text-[9px] font-medium uppercase tracking-[0.07em] text-faint">
+                Snag #{s.serial_no} — updates
+              </p>
+              {feed.map((item) =>
+                item.kind === "message" ? (
+                  <ChatBubble
+                    key={item.id}
+                    side={item.side}
+                    authorName={item.authorName}
+                    roleText={item.roleText}
+                    body={item.body}
+                    attachments={item.attachments}
+                    timestamp={fmtTimeDate(item.createdAt)}
+                  />
+                ) : (
+                  <SystemLine
+                    key={item.id}
+                    actorName={item.actorName}
+                    text={item.text}
+                    timestamp={fmtTimeDate(item.createdAt)}
+                  />
+                )
+              )}
+              {s.status !== "closed" && (
+                <SnagComposeArea
+                  warehouseId={warehouseId}
+                  snagId={s.id}
+                  status={s.status}
+                  currentUserId={currentUserId}
+                  hasReporterTag={hasReporterTag}
+                  hasResolverTag={hasResolverTag}
+                  isDashboardAdmin={isDashboardAdmin}
+                />
+              )}
+            </div>
+          </TableCell>
+        </TableRow>
+      )}
+    </>
+  );
+}
+```
+
+#### `src/components/snag-table.tsx`
+
+```tsx
+"use client";
+
+import { useMemo, useState } from "react";
+import { ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import {
+  Table,
+  TableBody,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { SnagRow, type UpdateRow, type AttachmentRow, type ActivityRow } from "@/components/snag-row";
+import { cn } from "@/lib/utils";
+import { STICKY_SNO_CLASS, STICKY_DATE_CLASS, STICKY_DESC_CLASS } from "@/lib/table-sticky";
+import {
+  CATEGORY_LABELS,
+  LOCATION_LABELS,
+  SCOPE_LABELS,
+  SEVERITY_LABELS,
+  STATUS_LABELS,
+  SUB_CATEGORY_LABELS,
+  ageingDays,
+} from "@/lib/snags";
+
+export type SnagRow = {
+  id: string;
+  serial_no: number;
+  date_raised: string;
+  description: string;
+  category: string;
+  sub_category: string;
+  sub_category_other: string | null;
+  location: string;
+  scope: string;
+  severity: string;
+  status: string;
+  etc_date: string | null;
+  closed_at: string | null;
+  raised_by: string;
+  raised_by_profile: { full_name: string | null; email: string } | null;
+};
+
+const HEADERS = [
+  "S.No", "Raised", "Description", "Raised by", "Category", "Sub-category",
+  "Location", "Scope", "Severity", "Status", "Update", "ETC", "Age",
+];
+
+type SortKey =
+  | "serial_no" | "date_raised" | "description" | "raised_by" | "category"
+  | "sub_category" | "location" | "scope" | "severity" | "status" | "update"
+  | "etc_date" | "age";
+type SortDir = "asc" | "desc";
+
+const HEADER_SORT_KEY: Record<string, SortKey> = {
+  "S.No": "serial_no",
+  "Raised": "date_raised",
+  "Description": "description",
+  "Raised by": "raised_by",
+  "Category": "category",
+  "Sub-category": "sub_category",
+  "Location": "location",
+  "Scope": "scope",
+  "Severity": "severity",
+  "Status": "status",
+  "Update": "update",
+  "ETC": "etc_date",
+  "Age": "age",
+};
+
+// SEVERITY_LABELS/STATUS_LABELS are already declared high→low and
+// open→closed, so their key order doubles as the rank a sort should use —
+// no separate rank table to keep in sync.
+const SEVERITY_RANK = Object.fromEntries(Object.keys(SEVERITY_LABELS).map((k, i) => [k, i]));
+const STATUS_RANK = Object.fromEntries(Object.keys(STATUS_LABELS).map((k, i) => [k, i]));
+
+function sortValue(s: SnagRow, key: SortKey, updates: UpdateRow[]): string | number | null {
+  switch (key) {
+    case "serial_no":
+      return s.serial_no;
+    case "date_raised":
+      return s.date_raised;
+    case "description":
+      return s.description.toLowerCase();
+    case "raised_by":
+      return (s.raised_by_profile?.full_name ?? s.raised_by_profile?.email ?? "").toLowerCase();
+    case "category":
+      return (CATEGORY_LABELS[s.category] ?? s.category).toLowerCase();
+    case "sub_category":
+      return (
+        s.sub_category === "others" && s.sub_category_other
+          ? s.sub_category_other
+          : SUB_CATEGORY_LABELS[s.sub_category] ?? s.sub_category
+      ).toLowerCase();
+    case "location":
+      return (LOCATION_LABELS[s.location] ?? s.location).toLowerCase();
+    case "scope":
+      return (SCOPE_LABELS[s.scope] ?? s.scope).toLowerCase();
+    case "severity":
+      return SEVERITY_RANK[s.severity] ?? 99;
+    case "status":
+      return STATUS_RANK[s.status] ?? 99;
+    case "update": {
+      const latest = updates[updates.length - 1];
+      return latest ? latest.created_at : null;
+    }
+    case "etc_date":
+      return s.etc_date;
+    case "age":
+      return ageingDays(s.date_raised, s.closed_at);
+  }
+}
+
+function SortIcon({ dir }: { dir: SortDir | null }) {
+  if (dir === "asc") return <ArrowUp className="size-3" />;
+  if (dir === "desc") return <ArrowDown className="size-3" />;
+  return <ArrowUpDown className="size-3 opacity-40" />;
+}
+
+export function SnagTable({
+  snags,
+  updatesBySnag,
+  attachmentsBySnag,
+  activityBySnag,
+  warehouseId,
+  hasReporterTag,
+  hasResolverTag,
+  isDashboardAdmin,
+  rolesByUserId,
+  adminUserIds,
+  currentUserId,
+}: {
+  snags: SnagRow[];
+  updatesBySnag: Record<string, UpdateRow[]>;
+  attachmentsBySnag: Record<string, AttachmentRow[]>;
+  activityBySnag: Record<string, ActivityRow[]>;
+  warehouseId: string;
+  hasReporterTag: boolean;
+  hasResolverTag: boolean;
+  isDashboardAdmin: boolean;
+  rolesByUserId: Record<string, string[]>;
+  adminUserIds: string[];
+  currentUserId: string;
+}) {
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir | null>(null);
+
+  // Third click on the same column resets to the table's normal order
+  // (serial_no descending, as fetched) rather than cycling forever.
+  function toggleSort(key: SortKey) {
+    if (sortKey !== key) {
+      setSortKey(key);
+      setSortDir("asc");
+    } else if (sortDir === "asc") {
+      setSortDir("desc");
+    } else {
+      setSortKey(null);
+      setSortDir(null);
+    }
+  }
+
+  const sortedSnags = useMemo(() => {
+    if (!sortKey || !sortDir) return snags;
+    const withKeys = snags.map((s) => ({ s, v: sortValue(s, sortKey, updatesBySnag[s.id] ?? []) }));
+    withKeys.sort((a, b) => {
+      // Nulls (e.g. no ETC set, no updates yet) always sort last,
+      // regardless of direction, so they don't jump to the top on desc.
+      if (a.v === null) return b.v === null ? 0 : 1;
+      if (b.v === null) return -1;
+      if (a.v < b.v) return sortDir === "asc" ? -1 : 1;
+      if (a.v > b.v) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+    return withKeys.map((x) => x.s);
+  }, [snags, updatesBySnag, sortKey, sortDir]);
+
+  if (snags.length === 0) {
+    return (
+      <div className="rounded-card border border-border bg-card p-6 text-center text-[13px] text-muted-foreground">
+        No snags match this filter.
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto rounded-card border border-border bg-card pb-2">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            {HEADERS.map((h) => {
+              const key = HEADER_SORT_KEY[h];
+              const dir = sortKey === key ? sortDir : null;
+              return (
+                <TableHead
+                  key={h}
+                  className={cn(
+                    (h === "Severity" || h === "Status") && "text-center",
+                    // Sticky cells paint their own opaque bg-card to hide
+                    // content scrolling underneath — override it back to the
+                    // header row's fill so they don't show up as a lighter
+                    // patch against the rest of the header.
+                    h === "S.No" && cn(STICKY_SNO_CLASS, "bg-line"),
+                    h === "Raised" && cn(STICKY_DATE_CLASS, "bg-line"),
+                    h === "Description" && cn(STICKY_DESC_CLASS, "bg-line"),
+                    // Wraps onto multiple lines in the body instead of
+                    // truncating, so a fixed width here just bounds the
+                    // column rather than clipping the update text.
+                    h === "Update" && "w-[380px] min-w-[380px] max-w-[380px]",
+                    // Caps long names/emails so one long value doesn't blow
+                    // out the column's width relative to the rest of the row.
+                    h === "Raised by" && "max-w-[130px]"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1",
+                      (h === "Severity" || h === "Status") && "justify-center"
+                    )}
+                  >
+                    {h}
+                    <button
+                      type="button"
+                      onClick={() => toggleSort(key)}
+                      aria-label={`Sort by ${h}`}
+                      className="rounded p-0.5 text-faint hover:bg-muted hover:text-foreground"
+                    >
+                      <SortIcon dir={dir} />
+                    </button>
+                  </span>
+                </TableHead>
+              );
+            })}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {sortedSnags.map((s) => (
+            <SnagRow
+              key={s.id}
+              snag={s}
+              updates={updatesBySnag[s.id] ?? []}
+              attachments={attachmentsBySnag[s.id] ?? []}
+              activity={activityBySnag[s.id] ?? []}
+              warehouseId={warehouseId}
+              hasReporterTag={hasReporterTag}
+              hasResolverTag={hasResolverTag}
+              isDashboardAdmin={isDashboardAdmin}
+              rolesByUserId={rolesByUserId}
+              adminUserIds={adminUserIds}
+              currentUserId={currentUserId}
+            />
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+```
+
+#### `src/components/team-block.tsx`
+
+```tsx
+"use client";
+
+import { useState } from "react";
+import { MEMBER_ROLES, ROLE_COLOR_CLASS, roleLabel } from "@/lib/roles";
+
+type Member = { role: string; full_name: string | null; email: string };
+
+export function TeamBlock({ members }: { members: Member[] }) {
+  const [expanded, setExpanded] = useState(false);
+
+  const byRole = new Map<string, Member[]>();
+  for (const m of members) {
+    byRole.set(m.role, [...(byRole.get(m.role) ?? []), m]);
+  }
+  const totalCount = members.length;
+
+  if (totalCount === 0) {
+    return (
+      <div className="rounded-card border border-border bg-card p-3">
+        <div className="mb-1 text-[9px] uppercase tracking-[0.07em] text-faint">Team</div>
+        <p className="text-[12px] text-muted-foreground">No one tagged to this warehouse yet.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative rounded-card border border-border bg-card p-3">
+      <div className="mb-2 text-[9px] uppercase tracking-[0.07em] text-faint">Team</div>
+      {!expanded ? (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {MEMBER_ROLES.filter((r) => byRole.has(r.value)).map((r) => (
+            <span
+              key={r.value}
+              className={`rounded-pill border px-2 py-0.5 text-[11px] ${ROLE_COLOR_CLASS[r.value]}`}
+            >
+              {r.label} · {byRole.get(r.value)!.length}
+            </span>
+          ))}
+          <button
+            type="button"
+            onClick={() => setExpanded(true)}
+            className="pl-1 text-[12px] text-muted-foreground underline-offset-2 hover:underline"
+          >
+            Show all {totalCount}
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2 pr-6">
+          <button
+            type="button"
+            aria-label="Close"
+            onClick={() => setExpanded(false)}
+            className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            ×
+          </button>
+          {MEMBER_ROLES.filter((r) => byRole.has(r.value)).map((r) => (
+            <div key={r.value} className={`rounded-md border px-2.5 py-1.5 ${ROLE_COLOR_CLASS[r.value]}`}>
+              <div className="text-[10.5px] font-medium opacity-80">{roleLabel(r.value)}</div>
+              <div className="flex flex-wrap gap-1.5">
+                {byRole.get(r.value)!.map((m, i) => (
+                  <span key={i} className="text-[12px]">
+                    {m.full_name ?? m.email}
+                    {i < byRole.get(r.value)!.length - 1 ? "," : ""}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+#### `src/components/thermometer.tsx`
+
+```tsx
+import type { ReadinessColor } from "@/lib/readiness";
+
+// Ten fixed bands, frost -> coral -> red (DESIGN.md "signature: the
+// readiness thermometer"). Fixed scale so warehouses compare against each
+// other, not against themselves.
+const BANDS = [
+  "#DCEAEE", "#E1EBEC", "#E8ECEA", "#EFEBE6", "#F5E9E2",
+  "#FBE4DE", "#F6D4CB", "#F0BFB2", "#E89484", "#D9756A",
+];
+
+const MARKER_COLOR: Record<ReadinessColor, string> = {
+  red: "#C75B4E",
+  amber: "#B98A5E",
+  green: "#6E9CA6",
+  grey: "#A8938D",
+};
+
+export function Thermometer({
+  color,
+  position,
+}: {
+  color: ReadinessColor;
+  position: number | null;
+}) {
+  if (color === "grey" || position === null) {
+    return (
+      <div>
+        <div className="mb-[3px] flex gap-[2px]">
+          <span className="h-[7px] flex-1 rounded-[2px] bg-line-soft" />
+        </div>
+        <div className="mb-2.5 h-[10px] text-[10px] text-faint">
+          Set a go-live date to track readiness
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="mb-[3px] flex gap-[2px]">
+        {BANDS.map((c, i) => (
+          <span
+            key={i}
+            className="h-[7px] flex-1"
+            style={{
+              background: c,
+              borderRadius: i === 0 ? "2px 0 0 2px" : i === BANDS.length - 1 ? "0 2px 2px 0" : undefined,
+            }}
+          />
+        ))}
+      </div>
+      <div className="relative mb-2.5 h-[10px]">
+        <span
+          className="absolute -translate-x-1/2 text-[9px] leading-none"
+          style={{ left: `${position}%`, color: MARKER_COLOR[color] }}
+        >
+          ▲
+        </span>
+      </div>
+    </div>
+  );
+}
+```
+
+#### `src/components/ui/alert.tsx`
+
+```tsx
+import * as React from "react"
+import { cva, type VariantProps } from "class-variance-authority"
+
+import { cn } from "@/lib/utils"
+
+const alertVariants = cva(
+  "group/alert relative grid w-full gap-0.5 rounded-lg border px-2.5 py-2 text-left text-sm has-data-[slot=alert-action]:relative has-data-[slot=alert-action]:pr-18 has-[>svg]:grid-cols-[auto_1fr] has-[>svg]:gap-x-2 *:[svg]:row-span-2 *:[svg]:translate-y-0.5 *:[svg]:text-current *:[svg:not([class*='size-'])]:size-4",
+  {
+    variants: {
+      variant: {
+        default: "bg-card text-card-foreground",
+        destructive:
+          "bg-card text-destructive *:data-[slot=alert-description]:text-destructive/90 *:[svg]:text-current",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+    },
+  }
+)
+
+function Alert({
+  className,
+  variant,
+  ...props
+}: React.ComponentProps<"div"> & VariantProps<typeof alertVariants>) {
+  return (
+    <div
+      data-slot="alert"
+      role="alert"
+      className={cn(alertVariants({ variant }), className)}
+      {...props}
+    />
+  )
+}
+
+function AlertTitle({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="alert-title"
+      className={cn(
+        "font-medium group-has-[>svg]/alert:col-start-2 [&_a]:underline [&_a]:underline-offset-3 [&_a]:hover:text-foreground",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+function AlertDescription({
+  className,
+  ...props
+}: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="alert-description"
+      className={cn(
+        "text-sm text-balance text-muted-foreground md:text-pretty [&_a]:underline [&_a]:underline-offset-3 [&_a]:hover:text-foreground [&_p:not(:last-child)]:mb-4",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+function AlertAction({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="alert-action"
+      className={cn("absolute top-2 right-2", className)}
+      {...props}
+    />
+  )
+}
+
+export { Alert, AlertTitle, AlertDescription, AlertAction }
+```
+
+#### `src/components/ui/badge.tsx`
+
+```tsx
+import { mergeProps } from "@base-ui/react/merge-props"
+import { useRender } from "@base-ui/react/use-render"
+import { cva, type VariantProps } from "class-variance-authority"
+
+import { cn } from "@/lib/utils"
+
+const badgeVariants = cva(
+  "group/badge inline-flex h-5 w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-4xl border border-transparent px-2 py-0.5 text-xs font-medium whitespace-nowrap transition-all focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3!",
+  {
+    variants: {
+      variant: {
+        default: "bg-primary text-primary-foreground [a]:hover:bg-primary/80",
+        secondary:
+          "bg-secondary text-secondary-foreground [a]:hover:bg-secondary/80",
+        destructive:
+          "bg-destructive/10 text-destructive focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:focus-visible:ring-destructive/40 [a]:hover:bg-destructive/20",
+        outline:
+          "border-border text-foreground [a]:hover:bg-muted [a]:hover:text-muted-foreground",
+        ghost:
+          "hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted/50",
+        link: "text-primary underline-offset-4 hover:underline",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+    },
+  }
+)
+
+function Badge({
+  className,
+  variant = "default",
+  render,
+  ...props
+}: useRender.ComponentProps<"span"> & VariantProps<typeof badgeVariants>) {
+  return useRender({
+    defaultTagName: "span",
+    props: mergeProps<"span">(
+      {
+        className: cn(badgeVariants({ variant }), className),
+      },
+      props
+    ),
+    render,
+    state: {
+      slot: "badge",
+      variant,
+    },
+  })
+}
+
+export { Badge, badgeVariants }
+```
+
+#### `src/components/ui/button.tsx`
+
+```tsx
+import { Button as ButtonPrimitive } from "@base-ui/react/button"
+import { cva, type VariantProps } from "class-variance-authority"
+
+import { cn } from "@/lib/utils"
+
+const buttonVariants = cva(
+  "group/button inline-flex shrink-0 items-center justify-center rounded-lg border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  {
+    variants: {
+      variant: {
+        default: "bg-primary text-primary-foreground hover:bg-primary/80",
+        outline:
+          "border-teal bg-frost text-teal-deep hover:bg-frost/70 hover:text-teal-deep aria-expanded:bg-frost aria-expanded:text-teal-deep dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
+        secondary:
+          "bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
+        ghost:
+          "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50",
+        destructive:
+          "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
+        link: "text-primary underline-offset-4 hover:underline",
+      },
+      size: {
+        default:
+          "h-8 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
+        xs: "h-6 gap-1 rounded-[min(var(--radius-md),10px)] px-2 text-xs in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
+        sm: "h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
+        lg: "h-9 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
+        icon: "size-8",
+        "icon-xs":
+          "size-6 rounded-[min(var(--radius-md),10px)] in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-3",
+        "icon-sm":
+          "size-7 rounded-[min(var(--radius-md),12px)] in-data-[slot=button-group]:rounded-lg",
+        "icon-lg": "size-9",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+      size: "default",
+    },
+  }
+)
+
+function Button({
+  className,
+  variant = "default",
+  size = "default",
+  ...props
+}: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
+  return (
+    <ButtonPrimitive
+      data-slot="button"
+      className={cn(buttonVariants({ variant, size, className }))}
+      {...props}
+    />
+  )
+}
+
+export { Button, buttonVariants }
+```
+
+#### `src/components/ui/input.tsx`
+
+```tsx
+import * as React from "react"
+import { Input as InputPrimitive } from "@base-ui/react/input"
+
+import { cn } from "@/lib/utils"
+
+function Input({ className, type, ...props }: React.ComponentProps<"input">) {
+  return (
+    <InputPrimitive
+      type={type}
+      data-slot="input"
+      className={cn(
+        "h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none file:inline-flex file:h-6 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 md:text-sm dark:bg-input/30 dark:disabled:bg-input/80 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+export { Input }
+```
+
+#### `src/components/ui/label.tsx`
+
+```tsx
+"use client"
+
+import * as React from "react"
+
+import { cn } from "@/lib/utils"
+
+function Label({ className, ...props }: React.ComponentProps<"label">) {
+  return (
+    <label
+      data-slot="label"
+      className={cn(
+        "flex items-center gap-2 text-sm leading-none font-medium select-none group-data-[disabled=true]:pointer-events-none group-data-[disabled=true]:opacity-50 peer-disabled:cursor-not-allowed peer-disabled:opacity-50",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+export { Label }
+```
+
+#### `src/components/ui/select.tsx`
+
+```tsx
+"use client"
+
+import * as React from "react"
+import { Select as SelectPrimitive } from "@base-ui/react/select"
+
+import { cn } from "@/lib/utils"
+import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react"
+
+const Select = SelectPrimitive.Root
+
+function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
+  return (
+    <SelectPrimitive.Group
+      data-slot="select-group"
+      className={cn("scroll-my-1 p-1", className)}
+      {...props}
+    />
+  )
+}
+
+function SelectValue({ className, ...props }: SelectPrimitive.Value.Props) {
+  return (
+    <SelectPrimitive.Value
+      data-slot="select-value"
+      className={cn("flex flex-1 text-left", className)}
+      {...props}
+    />
+  )
+}
+
+function SelectTrigger({
+  className,
+  size = "default",
+  children,
+  ...props
+}: SelectPrimitive.Trigger.Props & {
+  size?: "sm" | "default"
+}) {
+  return (
+    <SelectPrimitive.Trigger
+      data-slot="select-trigger"
+      data-size={size}
+      className={cn(
+        "flex w-fit items-center justify-between gap-1.5 rounded-lg border border-input bg-transparent py-2 pr-2 pl-2.5 text-sm whitespace-nowrap transition-colors outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 data-placeholder:text-muted-foreground data-[size=default]:h-8 data-[size=sm]:h-7 data-[size=sm]:rounded-[min(var(--radius-md),10px)] *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-1.5 dark:bg-input/30 dark:hover:bg-input/50 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        className
+      )}
+      {...props}
+    >
+      {children}
+      <SelectPrimitive.Icon
+        render={
+          <ChevronDownIcon className="pointer-events-none size-4 text-muted-foreground" />
+        }
+      />
+    </SelectPrimitive.Trigger>
+  )
+}
+
+function SelectContent({
+  className,
+  children,
+  side = "bottom",
+  sideOffset = 4,
+  align = "center",
+  alignOffset = 0,
+  alignItemWithTrigger = true,
+  ...props
+}: SelectPrimitive.Popup.Props &
+  Pick<
+    SelectPrimitive.Positioner.Props,
+    "align" | "alignOffset" | "side" | "sideOffset" | "alignItemWithTrigger"
+  >) {
+  return (
+    <SelectPrimitive.Portal>
+      <SelectPrimitive.Positioner
+        side={side}
+        sideOffset={sideOffset}
+        align={align}
+        alignOffset={alignOffset}
+        alignItemWithTrigger={alignItemWithTrigger}
+        className="isolate z-50"
+      >
+        <SelectPrimitive.Popup
+          data-slot="select-content"
+          data-align-trigger={alignItemWithTrigger}
+          className={cn("relative isolate z-50 max-h-(--available-height) w-(--anchor-width) min-w-36 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-lg bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10 duration-100 data-[align-trigger=true]:animate-none data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95", className )}
+          {...props}
+        >
+          <SelectScrollUpButton />
+          <SelectPrimitive.List>{children}</SelectPrimitive.List>
+          <SelectScrollDownButton />
+        </SelectPrimitive.Popup>
+      </SelectPrimitive.Positioner>
+    </SelectPrimitive.Portal>
+  )
+}
+
+function SelectLabel({
+  className,
+  ...props
+}: SelectPrimitive.GroupLabel.Props) {
+  return (
+    <SelectPrimitive.GroupLabel
+      data-slot="select-label"
+      className={cn("px-1.5 py-1 text-xs text-muted-foreground", className)}
+      {...props}
+    />
+  )
+}
+
+function SelectItem({
+  className,
+  children,
+  ...props
+}: SelectPrimitive.Item.Props) {
+  return (
+    <SelectPrimitive.Item
+      data-slot="select-item"
+      className={cn(
+        "relative flex w-full cursor-default items-center gap-1.5 rounded-md py-1 pr-8 pl-1.5 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground not-data-[variant=destructive]:focus:**:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
+        className
+      )}
+      {...props}
+    >
+      <SelectPrimitive.ItemText className="flex flex-1 shrink-0 gap-2 whitespace-nowrap">
+        {children}
+      </SelectPrimitive.ItemText>
+      <SelectPrimitive.ItemIndicator
+        render={
+          <span className="pointer-events-none absolute right-2 flex size-4 items-center justify-center" />
+        }
+      >
+        <CheckIcon className="pointer-events-none" />
+      </SelectPrimitive.ItemIndicator>
+    </SelectPrimitive.Item>
+  )
+}
+
+function SelectSeparator({
+  className,
+  ...props
+}: SelectPrimitive.Separator.Props) {
+  return (
+    <SelectPrimitive.Separator
+      data-slot="select-separator"
+      className={cn("pointer-events-none -mx-1 my-1 h-px bg-border", className)}
+      {...props}
+    />
+  )
+}
+
+function SelectScrollUpButton({
+  className,
+  ...props
+}: React.ComponentProps<typeof SelectPrimitive.ScrollUpArrow>) {
+  return (
+    <SelectPrimitive.ScrollUpArrow
+      data-slot="select-scroll-up-button"
+      className={cn(
+        "top-0 z-10 flex w-full cursor-default items-center justify-center bg-popover py-1 [&_svg:not([class*='size-'])]:size-4",
+        className
+      )}
+      {...props}
+    >
+      <ChevronUpIcon
+      />
+    </SelectPrimitive.ScrollUpArrow>
+  )
+}
+
+function SelectScrollDownButton({
+  className,
+  ...props
+}: React.ComponentProps<typeof SelectPrimitive.ScrollDownArrow>) {
+  return (
+    <SelectPrimitive.ScrollDownArrow
+      data-slot="select-scroll-down-button"
+      className={cn(
+        "bottom-0 z-10 flex w-full cursor-default items-center justify-center bg-popover py-1 [&_svg:not([class*='size-'])]:size-4",
+        className
+      )}
+      {...props}
+    >
+      <ChevronDownIcon
+      />
+    </SelectPrimitive.ScrollDownArrow>
+  )
+}
+
+export {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectScrollDownButton,
+  SelectScrollUpButton,
+  SelectSeparator,
+  SelectTrigger,
+  SelectValue,
+}
+```
+
+#### `src/components/ui/table.tsx`
+
+```tsx
+"use client"
+
+import * as React from "react"
+
+import { cn } from "@/lib/utils"
+
+function Table({ className, ...props }: React.ComponentProps<"table">) {
+  return (
+    <div
+      data-slot="table-container"
+      className="relative w-full overflow-x-auto"
+    >
+      <table
+        data-slot="table"
+        className={cn("w-full caption-bottom text-sm", className)}
+        {...props}
+      />
+    </div>
+  )
+}
+
+function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
+  return (
+    <thead
+      data-slot="table-header"
+      className={cn("bg-line [&_tr]:border-b", className)}
+      {...props}
+    />
+  )
+}
+
+function TableBody({ className, ...props }: React.ComponentProps<"tbody">) {
+  return (
+    <tbody
+      data-slot="table-body"
+      className={cn("[&_tr:last-child]:border-0", className)}
+      {...props}
+    />
+  )
+}
+
+function TableFooter({ className, ...props }: React.ComponentProps<"tfoot">) {
+  return (
+    <tfoot
+      data-slot="table-footer"
+      className={cn(
+        "border-t bg-muted/50 font-medium [&>tr]:last:border-b-0",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
+  return (
+    <tr
+      data-slot="table-row"
+      className={cn(
+        "border-b transition-colors hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+function TableHead({ className, ...props }: React.ComponentProps<"th">) {
+  return (
+    <th
+      data-slot="table-head"
+      className={cn(
+        "h-10 px-2 text-left align-middle text-[9px] font-semibold uppercase tracking-[0.07em] whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+function TableCell({ className, ...props }: React.ComponentProps<"td">) {
+  return (
+    <td
+      data-slot="table-cell"
+      className={cn(
+        "p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+function TableCaption({
+  className,
+  ...props
+}: React.ComponentProps<"caption">) {
+  return (
+    <caption
+      data-slot="table-caption"
+      className={cn("mt-4 text-sm text-muted-foreground", className)}
+      {...props}
+    />
+  )
+}
+
+export {
+  Table,
+  TableHeader,
+  TableBody,
+  TableFooter,
+  TableHead,
+  TableRow,
+  TableCell,
+  TableCaption,
+}
+```
+
+#### `src/components/video-capture.tsx`
+
+```tsx
+"use client";
+
+import { useState } from "react";
+import {
+  MAX_VIDEO_BYTES,
+  MAX_VIDEO_SECONDS,
+  extractVideoThumbnail,
+  type VideoCapture,
+} from "@/lib/media";
+
+// Hard size/duration cap enforced client-side before upload begins,
+// per PLAN.md §6.
+export function VideoCaptureInput({ onChange }: { onChange: (capture: VideoCapture | null) => void }) {
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function onFileSelected(file: File) {
+    setError(null);
+    if (file.size > MAX_VIDEO_BYTES) {
+      setError(`Video is too large (max ${Math.round(MAX_VIDEO_BYTES / 1024 / 1024)}MB).`);
+      return;
+    }
+    setBusy(true);
+    try {
+      const { thumbnail, durationSeconds } = await extractVideoThumbnail(file);
+      if (durationSeconds > MAX_VIDEO_SECONDS) {
+        setError(`Video is too long (max ${MAX_VIDEO_SECONDS}s, this is ${Math.round(durationSeconds)}s).`);
+        return;
+      }
+      setFileName(file.name);
+      onChange({ file, thumbnail, durationSeconds });
+    } catch {
+      setError("Could not read that video file.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div>
+      {!fileName ? (
+        <label className="flex h-14 cursor-pointer items-center justify-center rounded-md border border-dashed border-input text-[13px] text-muted-foreground hover:bg-muted">
+          {busy ? "Checking…" : "Attach a video"}
+          <input
+            type="file"
+            accept="video/*"
+            className="hidden"
+            onChange={(e) => e.target.files?.[0] && onFileSelected(e.target.files[0])}
+          />
+        </label>
+      ) : (
+        <div className="flex items-center justify-between rounded-md border border-border px-2.5 py-1.5 text-[12px]">
+          <span className="truncate text-foreground">{fileName}</span>
+          <button
+            type="button"
+            className="ml-2 shrink-0 text-destructive"
+            onClick={() => {
+              setFileName(null);
+              onChange(null);
+            }}
+          >
+            Remove
+          </button>
+        </div>
+      )}
+      {error && <p className="mt-1 text-[11px] text-destructive">{error}</p>}
+    </div>
+  );
+}
+
+// Wraps the single-shot picker above to build a list, mirroring
+// MultiPhotoCaptureInput's draft-then-commit pattern (see there for why —
+// video doesn't need it for the same reason since there's no re-editing
+// loop, but the two stay symmetric so multi-attach behaves the same way
+// for both media types).
+export function MultiVideoCaptureInput({ onChange }: { onChange: (captures: VideoCapture[]) => void }) {
+  const [captures, setCaptures] = useState<VideoCapture[]>([]);
+  const [draft, setDraft] = useState<VideoCapture | null>(null);
+  const [pickerKey, setPickerKey] = useState(0);
+
+  function addDraft() {
+    if (!draft) return;
+    const next = [...captures, draft];
+    setCaptures(next);
+    onChange(next);
+    setDraft(null);
+    setPickerKey((k) => k + 1);
+  }
+
+  function removeCapture(index: number) {
+    const next = captures.filter((_, i) => i !== index);
+    setCaptures(next);
+    onChange(next);
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      {captures.length > 0 && (
+        <div className="flex flex-col gap-1">
+          {captures.map((c, i) => (
+            <div
+              key={i}
+              className="flex items-center justify-between rounded-md border border-border px-2.5 py-1.5 text-[12px]"
+            >
+              <span className="text-foreground">{Math.round(c.durationSeconds)}s video</span>
+              <button type="button" className="text-destructive" onClick={() => removeCapture(i)}>
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <VideoCaptureInput key={pickerKey} onChange={setDraft} />
+      {draft && (
+        <button
+          type="button"
+          onClick={addDraft}
+          className="self-start text-[11.5px] font-medium text-primary hover:underline"
+        >
+          + Add this video
+        </button>
+      )}
+    </div>
+  );
+}
+```
+
+#### `src/components/warehouse-card.tsx`
+
+```tsx
+import Link from "next/link";
+import { Thermometer } from "@/components/thermometer";
+import {
+  daysUntil,
+  readinessColor,
+  type WarehouseReadiness,
+} from "@/lib/readiness";
+import { cn, CARD_HOVER } from "@/lib/utils";
+
+const BADGE_CLASS: Record<string, string> = {
+  red: "bg-blush text-red-deep border-blush",
+  amber: "bg-amber text-amber-deep border-amber",
+  green: "bg-mint text-mint-deep border-mint",
+  grey: "bg-line-soft text-muted-foreground border-line-soft",
+};
+
+function badgeText(w: WarehouseReadiness, color: string, days: number | null) {
+  if (color === "grey") return "No date";
+  if (color === "red" && w.open_high_count > 0) return `${w.open_high_count} high`;
+  if (color === "red") return "Overdue";
+  if (color === "green") return "On track";
+  return days !== null ? `${days} ${days === 1 ? "day" : "days"}` : "";
+}
+
+export function WarehouseCard({ w }: { w: WarehouseReadiness }) {
+  const color = readinessColor(w);
+  const days = daysUntil(w.go_live_date);
+  const openPct = w.total_raised > 0 ? Math.round((w.open_count / w.total_raised) * 100) : 0;
+  const position = w.total_raised > 0 ? Math.min(98, Math.max(2, openPct)) : null;
+
+  return (
+    <Link
+      href={`/warehouses/${w.id}`}
+      className={cn(CARD_HOVER, "block rounded-card border border-border bg-card p-3.5")}
+      style={color === "red" ? { borderColor: "#EFC6BC" } : undefined}
+    >
+      <div className="flex items-center justify-between">
+        <span className="text-[13.5px] font-medium text-foreground">{w.name}</span>
+        <span className={`rounded-pill border px-2.5 py-0.5 text-[10.5px] ${BADGE_CLASS[color]}`}>
+          {badgeText(w, color, days)}
+        </span>
+      </div>
+      <div className="font-mono mb-2.5 mt-0.5 text-[10px] text-faint">
+        {w.go_live_date
+          ? `GO-LIVE ${new Date(w.go_live_date + "T00:00:00").toLocaleDateString("en-GB", {
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+            }).toUpperCase()}${days !== null ? ` · ${days} DAYS` : ""}`
+          : "GO-LIVE NOT SET"}
+      </div>
+      <Thermometer color={color} position={position} />
+      <div className="flex gap-4.5">
+        <div>
+          <div className={cn("font-mono text-[20px] leading-none", color === "red" && "text-red")}>
+            {w.open_count}
+          </div>
+          <div className="text-[9px] text-faint">open</div>
+        </div>
+        <div>
+          <div className="font-mono text-[20px] leading-none">{w.total_raised}</div>
+          <div className="text-[9px] text-faint">raised</div>
+        </div>
+        <div>
+          <div className="font-mono text-[20px] leading-none">{openPct}%</div>
+          <div className="text-[9px] text-faint">open</div>
+        </div>
+      </div>
+    </Link>
+  );
+}
+```
+
+#### `src/lib/excel.ts`
+
+```ts
+import ExcelJS from "exceljs";
+import {
+  CATEGORY_LABELS,
+  LOCATION_LABELS,
+  SCOPE_LABELS,
+  SEVERITY_LABELS,
+  STATUS_LABELS,
+  SUB_CATEGORY_LABELS,
+  ageingDays,
+  isOverdue,
+} from "@/lib/snags";
+import type { SnagRow } from "@/components/snag-table";
+
+function downloadBuffer(buffer: ArrayBuffer, fileName: string) {
+  const blob = new Blob([buffer], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function reverseLookup(labels: Record<string, string>, input: string): string | null {
+  const needle = input.trim().toLowerCase();
+  const entry = Object.entries(labels).find(([, label]) => label.toLowerCase() === needle);
+  return entry ? entry[0] : null;
+}
+
+// PLAN.md §8: current filtered view to .xlsx, all columns plus ageing and
+// the overdue flag.
+export async function exportSnagsToExcel(snags: SnagRow[], warehouseName: string) {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("Snags");
+
+  sheet.columns = [
+    { header: "S.No", key: "serial_no", width: 8 },
+    { header: "Date Raised", key: "date_raised", width: 13 },
+    { header: "Raised By", key: "raised_by", width: 22 },
+    { header: "Description", key: "description", width: 45 },
+    { header: "Category", key: "category", width: 10 },
+    { header: "Sub-category", key: "sub_category", width: 14 },
+    { header: "Location", key: "location", width: 16 },
+    { header: "Scope", key: "scope", width: 10 },
+    { header: "Severity", key: "severity", width: 10 },
+    { header: "Status", key: "status", width: 13 },
+    { header: "ETC", key: "etc_date", width: 13 },
+    { header: "Ageing (days)", key: "ageing", width: 13 },
+    { header: "Overdue", key: "overdue", width: 10 },
+  ];
+  sheet.getRow(1).font = { bold: true };
+
+  for (const s of snags) {
+    const subCategory =
+      s.sub_category === "others" && s.sub_category_other
+        ? s.sub_category_other
+        : SUB_CATEGORY_LABELS[s.sub_category] ?? s.sub_category;
+    sheet.addRow({
+      serial_no: s.serial_no,
+      date_raised: s.date_raised,
+      raised_by: s.raised_by_profile?.full_name ?? s.raised_by_profile?.email ?? "",
+      description: s.description,
+      category: CATEGORY_LABELS[s.category] ?? s.category,
+      sub_category: subCategory,
+      location: LOCATION_LABELS[s.location] ?? s.location,
+      scope: SCOPE_LABELS[s.scope] ?? s.scope,
+      severity: SEVERITY_LABELS[s.severity] ?? s.severity,
+      status: STATUS_LABELS[s.status] ?? s.status,
+      etc_date: s.etc_date ?? "",
+      ageing: ageingDays(s.date_raised, s.closed_at),
+      overdue: isOverdue(s.etc_date, s.status) ? "Yes" : "No",
+    });
+  }
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  downloadBuffer(buffer as ArrayBuffer, `${warehouseName.replace(/[^\w-]+/g, "_")}-snags.xlsx`);
+}
+
+const IMPORT_HEADERS = [
+  "Description",
+  "Category",
+  "Sub-category",
+  "Sub-category Other",
+  "Location",
+  "Scope",
+  "Severity",
+] as const;
+
+export async function downloadImportTemplate() {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("Import");
+
+  sheet.columns = IMPORT_HEADERS.map((h) => ({ header: h, key: h, width: h === "Description" ? 45 : 20 }));
+  sheet.getRow(1).font = { bold: true };
+
+  sheet.addRow({
+    Description: "Evaporator fan not coming back on after defrost cycle",
+    Category: "HVAC",
+    "Sub-category": "ODU",
+    "Sub-category Other": "",
+    Location: "Frozen chamber",
+    Scope: "Infra",
+    Severity: "High",
+  });
+
+  const notesRow = sheet.addRow({
+    Description: "↑ Example row — delete before importing.",
+    Category: `Valid: ${Object.values(CATEGORY_LABELS).join(" / ")}`,
+    "Sub-category": `Valid: ${Object.values(SUB_CATEGORY_LABELS).join(" / ")}`,
+    "Sub-category Other": "Required only when Sub-category is Others",
+    Location: `Valid: ${Object.values(LOCATION_LABELS).join(" / ")}`,
+    Scope: `Valid: ${Object.values(SCOPE_LABELS).join(" / ")}`,
+    Severity: `Valid: ${Object.values(SEVERITY_LABELS).join(" / ")}. High means this stops the warehouse launching.`,
+  });
+  notesRow.font = { italic: true, color: { argb: "FF8A7A75" } };
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  downloadBuffer(buffer as ArrayBuffer, "snag-import-template.xlsx");
+}
+
+export type ImportRow = {
+  rowNumber: number;
+  description: string;
+  category: string;
+  subCategory: string;
+  subCategoryOther: string | null;
+  location: string;
+  scope: string;
+  severity: string;
+};
+
+export type ImportRowError = { rowNumber: number; message: string };
+
+export async function parseImportFile(
+  file: File
+): Promise<{ rows: ImportRow[]; errors: ImportRowError[] }> {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(await file.arrayBuffer());
+  const sheet = workbook.worksheets[0];
+
+  const rows: ImportRow[] = [];
+  const errors: ImportRowError[] = [];
+
+  sheet.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) return; // header
+    const [description, categoryLabel, subCategoryLabel, subCategoryOther, locationLabel, scopeLabel, severityLabel] =
+      [1, 2, 3, 4, 5, 6, 7].map((i) => String(row.getCell(i).value ?? "").trim());
+
+    if (!description && !categoryLabel && !subCategoryLabel) return; // blank row
+
+    // Skip the example/notes rows the template ships with.
+    if (description.startsWith("↑ Example row")) return;
+
+    if (!description) {
+      errors.push({ rowNumber, message: "Description is required." });
+      return;
+    }
+
+    const category = reverseLookup(CATEGORY_LABELS, categoryLabel);
+    if (!category) {
+      errors.push({ rowNumber, message: `"${categoryLabel}" is not a valid Category.` });
+      return;
+    }
+    const subCategory = reverseLookup(SUB_CATEGORY_LABELS, subCategoryLabel);
+    if (!subCategory) {
+      errors.push({ rowNumber, message: `"${subCategoryLabel}" is not a valid Sub-category.` });
+      return;
+    }
+    if (subCategory === "others" && !subCategoryOther) {
+      errors.push({ rowNumber, message: "Sub-category Other is required when Sub-category is Others." });
+      return;
+    }
+    const location = reverseLookup(LOCATION_LABELS, locationLabel);
+    if (!location) {
+      errors.push({ rowNumber, message: `"${locationLabel}" is not a valid Location.` });
+      return;
+    }
+    const scope = reverseLookup(SCOPE_LABELS, scopeLabel);
+    if (!scope) {
+      errors.push({ rowNumber, message: `"${scopeLabel}" is not a valid Scope.` });
+      return;
+    }
+    const severity = reverseLookup(SEVERITY_LABELS, severityLabel);
+    if (!severity) {
+      errors.push({ rowNumber, message: `"${severityLabel}" is not a valid Severity.` });
+      return;
+    }
+
+    rows.push({
+      rowNumber,
+      description,
+      category,
+      subCategory,
+      subCategoryOther: subCategory === "others" ? subCategoryOther : null,
+      location,
+      scope,
+      severity,
+    });
+  });
+
+  return { rows, errors };
+}
+```
+
+#### `src/lib/media.ts`
+
+```ts
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+const MAX_DIMENSION = 1600;
+const THUMB_DIMENSION = 320;
+export const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
+export const MAX_VIDEO_SECONDS = 60;
+
+export type PhotoCapture = {
+  original: Blob;
+  annotated: Blob;
+  thumbnail: Blob;
+};
+
+export type VideoCapture = {
+  file: Blob;
+  thumbnail: Blob;
+  durationSeconds: number;
+};
+
+function canvasToBlob(canvas: HTMLCanvasElement, type = "image/jpeg", quality = 0.85): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("canvas export failed"))), type, quality);
+  });
+}
+
+function scaledSize(width: number, height: number, maxDim: number) {
+  const scale = Math.min(1, maxDim / Math.max(width, height));
+  return { width: Math.round(width * scale), height: Math.round(height * scale) };
+}
+
+// Client-side compression: resize to a sane max dimension and re-encode.
+// Matters more than usual here — uploads happen over warehouse wifi from a
+// phone in a cold chamber (PLAN.md §6).
+export async function loadImageToCanvas(file: File, maxDim = MAX_DIMENSION) {
+  const bitmap = await createImageBitmap(file);
+  const { width, height } = scaledSize(bitmap.width, bitmap.height, maxDim);
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d")!;
+  ctx.drawImage(bitmap, 0, 0, width, height);
+  bitmap.close();
+  return canvas;
+}
+
+export async function buildThumbnail(canvas: HTMLCanvasElement) {
+  const { width, height } = scaledSize(canvas.width, canvas.height, THUMB_DIMENSION);
+  const thumb = document.createElement("canvas");
+  thumb.width = width;
+  thumb.height = height;
+  thumb.getContext("2d")!.drawImage(canvas, 0, 0, width, height);
+  return canvasToBlob(thumb, "image/jpeg", 0.7);
+}
+
+export async function extractVideoThumbnail(file: File): Promise<{ thumbnail: Blob; durationSeconds: number }> {
+  const url = URL.createObjectURL(file);
+  try {
+    const video = document.createElement("video");
+    video.src = url;
+    video.muted = true;
+    await new Promise<void>((resolve, reject) => {
+      video.onloadedmetadata = () => resolve();
+      video.onerror = () => reject(new Error("could not read video metadata"));
+    });
+    video.currentTime = Math.min(0.5, video.duration / 2);
+    await new Promise<void>((resolve) => {
+      video.onseeked = () => resolve();
+    });
+    const { width, height } = scaledSize(video.videoWidth, video.videoHeight, THUMB_DIMENSION);
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    canvas.getContext("2d")!.drawImage(video, 0, 0, width, height);
+    const thumbnail = await canvasToBlob(canvas, "image/jpeg", 0.7);
+    return { thumbnail, durationSeconds: video.duration };
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+function randomId() {
+  return crypto.randomUUID().slice(0, 8);
+}
+
+export async function uploadAttachment(
+  supabase: SupabaseClient,
+  opts: {
+    warehouseId: string;
+    snagId: string;
+    updateId?: string | null;
+    mediaType: "image" | "video";
+    file: Blob;
+    original?: Blob;
+    thumbnail: Blob;
+    fileName: string;
+    uploaderId: string;
+  }
+): Promise<{ error: string | null }> {
+  const base = `${opts.warehouseId}/${opts.snagId}/${randomId()}`;
+  const ext = opts.mediaType === "image" ? "jpg" : "mp4";
+
+  const uploads: Promise<{ error: Error | null }>[] = [
+    supabase.storage.from("attachments").upload(`${base}.${ext}`, opts.file, {
+      contentType: opts.mediaType === "image" ? "image/jpeg" : "video/mp4",
+    }),
+    supabase.storage.from("attachments").upload(`${base}-thumb.jpg`, opts.thumbnail, {
+      contentType: "image/jpeg",
+    }),
+  ];
+  if (opts.original) {
+    uploads.push(
+      supabase.storage.from("attachments").upload(`${base}-original.jpg`, opts.original, {
+        contentType: "image/jpeg",
+      })
+    );
+  }
+
+  const results = await Promise.all(uploads);
+  const failed = results.find((r) => r.error);
+  if (failed?.error) {
+    return { error: failed.error.message };
+  }
+
+  const { error } = await supabase.from("attachments").insert({
+    snag_id: opts.snagId,
+    update_id: opts.updateId ?? null,
+    media_type: opts.mediaType,
+    file_url: `${base}.${ext}`,
+    original_url: opts.original ? `${base}-original.jpg` : null,
+    thumbnail_url: `${base}-thumb.jpg`,
+    file_name: opts.fileName,
+    uploaded_by: opts.uploaderId,
+  });
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  return { error: null };
+}
+```
+
+#### `src/lib/offline-queue.ts`
+
+```ts
+// Offline-first raise queue (PLAN.md §5.7). The client generates the snag's
+// id locally since serial_no can only be allocated server-side at sync time
+// — the UI shows "pending" until the RPC call actually lands.
+
+const DB_NAME = "snag-offline-queue";
+const STORE = "pending-snags";
+
+export type QueuedSnag = {
+  localId: string;
+  warehouseId: string;
+  warehouseName: string;
+  description: string;
+  category: string;
+  subCategory: string;
+  subCategoryOther: string | null;
+  location: string;
+  scope: string;
+  severity: string;
+  photos: { annotated: Blob; original: Blob; thumbnail: Blob }[];
+  createdAt: number;
+};
+
+function openDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      req.result.createObjectStore(STORE, { keyPath: "localId" });
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+export async function enqueueSnag(item: QueuedSnag): Promise<void> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, "readwrite");
+    tx.objectStore(STORE).put(item);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function listQueuedSnags(): Promise<QueuedSnag[]> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, "readonly");
+    const req = tx.objectStore(STORE).getAll();
+    req.onsuccess = () => resolve(req.result as QueuedSnag[]);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+export async function removeQueuedSnag(localId: string): Promise<void> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, "readwrite");
+    tx.objectStore(STORE).delete(localId);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+```
+
+#### `src/lib/readiness.ts`
+
+```ts
+// Launch-readiness gate thresholds (PLAN.md §5.2.1). Named constants so a
+// future per-org settings screen can replace these without touching the
+// formula itself.
+export const OPEN_PCT_THRESHOLD = 0.25;
+export const NEAR_LAUNCH_DAYS = 14;
+
+export type WarehouseReadiness = {
+  id: string;
+  name: string;
+  go_live_date: string | null;
+  total_raised: number;
+  open_count: number;
+  open_high_count: number;
+};
+
+export type ReadinessColor = "red" | "amber" | "green" | "grey";
+
+export function daysUntil(dateStr: string | null): number | null {
+  if (!dateStr) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(dateStr + "T00:00:00");
+  return Math.round((target.getTime() - today.getTime()) / 86_400_000);
+}
+
+export function readinessColor(w: WarehouseReadiness): ReadinessColor {
+  if (!w.go_live_date) return "grey";
+
+  const days = daysUntil(w.go_live_date)!;
+  const openPct = w.total_raised > 0 ? w.open_count / w.total_raised : 0;
+
+  if (w.open_high_count > 0 || (days < 0 && w.open_count > 0)) return "red";
+  if (openPct > OPEN_PCT_THRESHOLD || (days < NEAR_LAUNCH_DAYS && w.open_count > 0)) return "amber";
+  return "green";
+}
+
+// Dated warehouses first (soonest go-live first), then undated ones ordered
+// by open-snag count descending — an undated site with heavy open work needs
+// a date more urgently than a light one (PLAN.md §5.2.2).
+export function sortByLaunchProximity(warehouses: WarehouseReadiness[]): WarehouseReadiness[] {
+  const dated = warehouses
+    .filter((w) => w.go_live_date)
+    .sort((a, b) => a.go_live_date!.localeCompare(b.go_live_date!));
+  const undated = warehouses
+    .filter((w) => !w.go_live_date)
+    .sort((a, b) => b.open_count - a.open_count);
+  return [...dated, ...undated];
+}
+
+export function nextToLaunch(warehouses: WarehouseReadiness[]): WarehouseReadiness | null {
+  const candidates = warehouses
+    .filter((w) => w.go_live_date && w.open_count > 0)
+    .sort((a, b) => a.go_live_date!.localeCompare(b.go_live_date!));
+  return candidates[0] ?? null;
+}
+```
+
+#### `src/lib/roles.ts`
+
+```ts
+export const MEMBER_ROLES = [
+  { value: "operations", label: "Operations" },
+  { value: "hvac_engineer", label: "HVAC Engineer" },
+  { value: "program_manager_infra", label: "Program Manager (Infra)" },
+  { value: "pmc", label: "PMC" },
+  { value: "pmo", label: "PMO" },
+  { value: "warehouse_admin", label: "Warehouse Admin" },
+] as const;
+
+export type MemberRole = (typeof MEMBER_ROLES)[number]["value"];
+
+// Dashboard Admin is a global flag (profiles.is_dashboard_admin), not a
+// warehouse_members.role value — this sentinel exists only so the invite
+// form can offer it in the same picker as the 6 operational roles. Never
+// write it to a default_role/role column; createInvitation branches on it
+// instead (grant_dashboard_admin: true, default_role: null).
+export const DASHBOARD_ADMIN_VALUE = "dashboard_admin";
+
+export const INVITE_ROLE_OPTIONS = [
+  ...MEMBER_ROLES,
+  { value: DASHBOARD_ADMIN_VALUE, label: "Dashboard Admin" },
+] as const;
+
+export function roleLabel(role: string | null | undefined) {
+  return INVITE_ROLE_OPTIONS.find((r) => r.value === role)?.label ?? role ?? "—";
+}
+
+// Single source of truth for role color-coding: each of the 6 roles keeps
+// the same distinct color everywhere it's shown (team block, warehouse
+// pickers, user management, etc.) — a coherent mapping, not per-screen.
+export const ROLE_COLOR_CLASS: Record<string, string> = {
+  operations: "bg-frost text-teal-deep border-frost",
+  hvac_engineer: "bg-sky text-teal-deep border-sky",
+  program_manager_infra: "bg-mint text-mint-deep border-mint",
+  pmc: "bg-amber text-amber-deep border-amber",
+  pmo: "bg-blush text-red-deep border-blush",
+  warehouse_admin: "bg-line-soft text-foreground border-line",
+};
+
+// PLAN.md §2.1: reporters raise snags, resolvers drive them to close.
+// Typed as string[] (not MemberRole[]) since these are checked against
+// loosely-typed values coming back from the database client. Must match
+// private.is_reporter()/is_resolver() in Postgres exactly — those are the
+// functions actually enforcing this everywhere it matters (RLS, RPCs);
+// these arrays only drive which controls the UI shows.
+export const REPORTER_ROLES: string[] = ["operations", "hvac_engineer", "warehouse_admin"];
+export const RESOLVER_ROLES: string[] = ["program_manager_infra", "pmc", "pmo"];
+```
+
+#### `src/lib/snags.ts`
+
+```ts
+export const CATEGORY_LABELS: Record<string, string> = {
+  hvac: "HVAC",
+  ops: "Ops",
+};
+
+export const SUB_CATEGORY_LABELS: Record<string, string> = {
+  odu: "ODU",
+  idu: "IDU",
+  puff_panel: "Puff panel",
+  plc: "PLC",
+  door: "Door",
+  floor: "Floor",
+  piping: "Piping",
+  racks: "Racks",
+  electrical: "Electrical",
+  iot_sensors: "IoT sensors",
+  others: "Others",
+};
+
+export const LOCATION_LABELS: Record<string, string> = {
+  frozen_chamber: "Frozen chamber",
+  ante_room: "Ante room",
+  odu_area: "ODU area",
+  ambient_area: "WH ambient area",
+};
+
+export const SCOPE_LABELS: Record<string, string> = {
+  oem: "OEM",
+  infra: "Infra",
+  admin: "Admin",
+};
+
+export const SEVERITY_LABELS: Record<string, string> = {
+  high: "High",
+  medium: "Medium",
+  low: "Low",
+};
+
+export const STATUS_LABELS: Record<string, string> = {
+  open: "Open",
+  wip: "WIP",
+  ready_to_close: "Verify",
+  closed: "Closed",
+};
+
+export const SEVERITY_CHIP: Record<string, string> = {
+  high: "bg-blush text-red-deep",
+  medium: "bg-amber text-amber-deep",
+  low: "bg-frost text-teal-deep",
+};
+
+export const STATUS_CHIP: Record<string, string> = {
+  open: "bg-blush text-red-deep",
+  wip: "bg-sky text-teal-deep",
+  ready_to_close: "bg-mint text-mint-deep",
+  closed: "bg-line-soft text-muted-foreground",
+};
+
+// Matches the Phase 0 view's semantics exactly: coalesce(closed_at::date,
+// current_date) - date_raised. A pure calendar-day difference, not
+// real-time hours — a snag raised this morning reads 0d all day, not 1d.
+export function ageingDays(dateRaised: string, closedAt: string | null): number {
+  const start = new Date(dateRaised + "T00:00:00");
+  const endDateStr = closedAt ? closedAt.slice(0, 10) : new Date().toLocaleDateString("en-CA");
+  const end = new Date(endDateStr + "T00:00:00");
+  return Math.max(0, Math.round((end.getTime() - start.getTime()) / 86_400_000));
+}
+
+// No exact banding is specified in PLAN.md beyond "colour-banded" — using
+// under a week / one-to-two weeks / beyond as a reasonable default scale.
+export function ageingClass(days: number): string {
+  if (days >= 14) return "text-red";
+  if (days >= 7) return "text-amber-deep";
+  return "text-muted-foreground";
+}
+
+export function isOverdue(etcDate: string | null, status: string): boolean {
+  if (!etcDate || status === "closed") return false;
+  return new Date(etcDate + "T00:00:00").getTime() < new Date().setHours(0, 0, 0, 0);
+}
+```
+
+#### `src/lib/supabase/client.ts`
+
+```ts
+import { createBrowserClient } from "@supabase/ssr";
+
+export function createClient() {
+  return createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
+  );
+}
+```
+
+#### `src/lib/supabase/proxy.ts`
+
+```ts
+import { createServerClient } from "@supabase/ssr";
+import { NextResponse, type NextRequest } from "next/server";
+
+export async function updateSession(request: NextRequest) {
+  let supabaseResponse = NextResponse.next({ request });
+
+  // With Fluid compute, don't put this client in a global environment
+  // variable. Always create a new one on each request.
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet, headers) {
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+          supabaseResponse = NextResponse.next({ request });
+          cookiesToSet.forEach(({ name, value, options }) =>
+            supabaseResponse.cookies.set(name, value, options)
+          );
+          Object.entries(headers).forEach(([key, value]) =>
+            supabaseResponse.headers.set(key, value)
+          );
+        },
+      },
+    }
+  );
+
+  // Do not run code between createServerClient and getClaims() — it's what
+  // actually validates the JWT signature; getSession() alone is not enough
+  // to trust in server-side code.
+  const { data } = await supabase.auth.getClaims();
+  const user = data?.claims;
+
+  const isPublicPath =
+    request.nextUrl.pathname.startsWith("/login") ||
+    request.nextUrl.pathname.startsWith("/auth") ||
+    request.nextUrl.pathname.startsWith("/forgot-password") ||
+    request.nextUrl.pathname.startsWith("/set-password");
+
+  if (!user && !isPublicPath) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    return NextResponse.redirect(url);
+  }
+
+  return supabaseResponse;
+}
+```
+
+#### `src/lib/supabase/server.ts`
+
+```ts
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
+
+export async function createClient() {
+  const cookieStore = await cookies();
+
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            );
+          } catch {
+            // Called from a Server Component. Safe to ignore because the
+            // proxy is what actually refreshes the session on every request.
+          }
+        },
+      },
+    }
+  );
+}
+```
+
+#### `src/lib/sync-queue.ts`
+
+```ts
+import { createClient } from "@/lib/supabase/client";
+import { uploadAttachment } from "@/lib/media";
+import { listQueuedSnags, removeQueuedSnag, type QueuedSnag } from "@/lib/offline-queue";
+
+// Flushes the offline queue: raises each snag with its client-generated id
+// (raise_snag accepts p_id for exactly this), then uploads its photo if any.
+// Stops at the first item that fails so a warehouse-membership or network
+// error doesn't silently drop the rest of the queue out of order.
+export async function syncOfflineQueue(): Promise<{ synced: string[]; error: string | null }> {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { synced: [], error: null };
+
+  const queue = await listQueuedSnags();
+  const synced: string[] = [];
+
+  for (const item of queue) {
+    const result = await syncOne(supabase, item, user.id);
+    if (result.error) {
+      return { synced, error: `${item.description.slice(0, 40)}…: ${result.error}` };
+    }
+    await removeQueuedSnag(item.localId);
+    synced.push(item.localId);
+  }
+
+  return { synced, error: null };
+}
+
+async function syncOne(
+  supabase: ReturnType<typeof createClient>,
+  item: QueuedSnag,
+  uploaderId: string
+): Promise<{ error: string | null }> {
+  const { data, error } = await supabase
+    .rpc("raise_snag", {
+      p_warehouse_id: item.warehouseId,
+      p_description: item.description,
+      p_category: item.category,
+      p_sub_category: item.subCategory,
+      p_sub_category_other: item.subCategoryOther,
+      p_location: item.location,
+      p_scope: item.scope,
+      p_severity: item.severity,
+      p_id: item.localId,
+    })
+    .select()
+    .single();
+
+  if (error) return { error: error.message };
+
+  const snagId = (data as { id: string }).id;
+
+  for (let i = 0; i < item.photos.length; i++) {
+    const upload = await uploadAttachment(supabase, {
+      warehouseId: item.warehouseId,
+      snagId,
+      mediaType: "image",
+      file: item.photos[i].annotated,
+      original: item.photos[i].original,
+      thumbnail: item.photos[i].thumbnail,
+      fileName: `snag-photo-${i + 1}.jpg`,
+      uploaderId,
+    });
+    if (upload.error) return { error: upload.error };
+  }
+
+  return { error: null };
+}
+```
+
+#### `src/lib/table-sticky.ts`
+
+```ts
+// S.No, Date, and Description stay pinned to the left edge of the snag
+// table while the rest of the columns scroll underneath them —
+// snag-table.tsx (header) and snag-row.tsx (body cells) apply these so the
+// columns line up. Widths are fixed pixels (60/70/290 = 420px), which
+// lands around 35% of the table on typical viewport widths.
+//
+// Pinning is desktop-only, gated at 832px (sm's 640px + 30%, arbitrary
+// min-[832px]: variant rather than the sm: token itself, so this doesn't
+// shift every other sm: breakpoint in the app) — below that it's not worth
+// the squeeze against the rest of the row, so the `sticky`/`left-*`/`z-10`
+// classes are all min-[832px]:-prefixed; the columns simply scroll with
+// everything else under that width.
+//
+// table-layout:auto only really enforces *pixel* width/min-width/max-width
+// on a cell — percentage widths on cells get treated as loose hints and
+// silently shrink to content size, which drifts the left-offsets below out
+// of sync with actual rendered widths (confirmed by testing: %-based
+// min/max-width computed correctly but the rendered box ignored them).
+// Pixel values don't have that problem, so use those even though the
+// "35%" ask is nominally a proportion.
+// Sticky cells must stay fully opaque in every state, hover included —
+// they sit visually on top of that same row's non-sticky cells once the
+// table is scrolled right, and the row's own hover state is bg-muted/50
+// (translucent). Matching that with an equally translucent hover here
+// would let the scrolled-under content show through behind the frozen
+// columns. color-mix computes the same visible tint as an *opaque* color
+// instead, so nothing bleeds through no matter how far the row is scrolled.
+const STICKY_HOVER =
+  "bg-card group-hover:bg-[color-mix(in_oklch,var(--muted),var(--card)_50%)]"
+export const STICKY_SNO_CLASS = `min-[832px]:sticky min-[832px]:left-0 min-[832px]:z-10 w-[60px] min-w-[60px] max-w-[60px] ${STICKY_HOVER}`
+export const STICKY_DATE_CLASS = `min-[832px]:sticky min-[832px]:left-[60px] min-[832px]:z-10 w-[70px] min-w-[70px] max-w-[70px] ${STICKY_HOVER}`
+export const STICKY_DESC_CLASS = `min-[832px]:sticky min-[832px]:left-[130px] min-[832px]:z-10 w-[290px] min-w-[290px] max-w-[290px] whitespace-normal break-words ${STICKY_HOVER}`
+```
+
+#### `src/lib/utils.ts`
+
+```ts
+import { clsx, type ClassValue } from "clsx"
+import { twMerge } from "tailwind-merge"
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
+}
+
+// Shared hover-lift treatment for card-style tiles (dashboard summary
+// cards, warehouse cards, readiness tiles) so the pop-out feel is
+// consistent everywhere it's applied.
+export const CARD_HOVER = "transition-all duration-150 ease-out hover:-translate-y-0.5 hover:shadow-md"
+```
+
+#### `src/proxy.ts`
+
+```ts
+import { type NextRequest } from "next/server";
+import { updateSession } from "@/lib/supabase/proxy";
+
+export async function proxy(request: NextRequest) {
+  return await updateSession(request);
+}
+
+export const config = {
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+  ],
+};
+```
+
