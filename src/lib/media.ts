@@ -1,5 +1,3 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
-
 const MAX_DIMENSION = 1600;
 const THUMB_DIMENSION = 320;
 export const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
@@ -78,12 +76,12 @@ export async function extractVideoThumbnail(file: File): Promise<{ thumbnail: Bl
   }
 }
 
-function randomId() {
-  return crypto.randomUUID().slice(0, 8);
-}
-
+// The first argument is kept for call-site compatibility (callers pass their
+// client instance) but is unused — the upload + attachments insert now happen
+// server-side in /api/attachments, which re-runs the same membership check the
+// old RLS policy did.
 export async function uploadAttachment(
-  supabase: SupabaseClient,
+  _client: unknown,
   opts: {
     warehouseId: string;
     snagId: string;
@@ -96,45 +94,21 @@ export async function uploadAttachment(
     uploaderId: string;
   }
 ): Promise<{ error: string | null }> {
-  const base = `${opts.warehouseId}/${opts.snagId}/${randomId()}`;
-  const ext = opts.mediaType === "image" ? "jpg" : "mp4";
+  const form = new FormData();
+  form.set("warehouseId", opts.warehouseId);
+  form.set("snagId", opts.snagId);
+  if (opts.updateId) form.set("updateId", opts.updateId);
+  form.set("mediaType", opts.mediaType);
+  form.set("fileName", opts.fileName);
+  form.set("file", opts.file);
+  form.set("thumbnail", opts.thumbnail);
+  if (opts.original) form.set("original", opts.original);
 
-  const uploads: Promise<{ error: Error | null }>[] = [
-    supabase.storage.from("attachments").upload(`${base}.${ext}`, opts.file, {
-      contentType: opts.mediaType === "image" ? "image/jpeg" : "video/mp4",
-    }),
-    supabase.storage.from("attachments").upload(`${base}-thumb.jpg`, opts.thumbnail, {
-      contentType: "image/jpeg",
-    }),
-  ];
-  if (opts.original) {
-    uploads.push(
-      supabase.storage.from("attachments").upload(`${base}-original.jpg`, opts.original, {
-        contentType: "image/jpeg",
-      })
-    );
+  try {
+    const res = await fetch("/api/attachments", { method: "POST", body: form });
+    const json = await res.json().catch(() => ({ error: res.statusText }));
+    return { error: json.error ?? null };
+  } catch (e) {
+    return { error: (e as Error).message };
   }
-
-  const results = await Promise.all(uploads);
-  const failed = results.find((r) => r.error);
-  if (failed?.error) {
-    return { error: failed.error.message };
-  }
-
-  const { error } = await supabase.from("attachments").insert({
-    snag_id: opts.snagId,
-    update_id: opts.updateId ?? null,
-    media_type: opts.mediaType,
-    file_url: `${base}.${ext}`,
-    original_url: opts.original ? `${base}-original.jpg` : null,
-    thumbnail_url: `${base}-thumb.jpg`,
-    file_name: opts.fileName,
-    uploaded_by: opts.uploaderId,
-  });
-
-  if (error) {
-    return { error: error.message };
-  }
-
-  return { error: null };
 }

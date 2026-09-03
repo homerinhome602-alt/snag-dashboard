@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/data/server";
 import { WarehouseCard } from "@/components/warehouse-card";
 import { daysUntil, nextToLaunch, sortByLaunchProximity, type WarehouseReadiness } from "@/lib/readiness";
 import { cn, CARD_HOVER } from "@/lib/utils";

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { MultiPhotoCaptureInput } from "@/components/photo-capture";
 import { MultiVideoCaptureInput } from "@/components/video-capture";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/data/client";
 import { uploadAttachment, type PhotoCapture, type VideoCapture } from "@/lib/media";
 import { postSnagUpdate, closeSnagDirectly, verifySnagClosure } from "@/app/(app)/warehouses/[id]/snag-actions";
 

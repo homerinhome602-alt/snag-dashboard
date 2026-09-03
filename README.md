@@ -1,36 +1,67 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Frozen Warehouse Launch Readiness
 
-## Getting Started
+Snag-tracking for cold-storage warehouse commissioning. Reporters (HVAC / Operations /
+Warehouse Admin) raise defects found while a warehouse is being built and pulled to
+temperature; resolvers (Program Manager (Infra) / PMC / PMO) drive them closed before
+go-live. A readiness thermometer and burn-up chart per warehouse show whether opening
+day is at risk.
 
-First, run the development server:
+Next.js 16 (App Router) · TypeScript · Tailwind 4 · shadcn/ui on `@base-ui/react` ·
+self-hosted PostgreSQL 17 (`pg`) · `exceljs` for import/export.
+
+> Originally built on Supabase; migrated to a self-hosted Postgres with hand-rolled
+> auth and filesystem storage on 3 Sep 2026. See **`CLAUDE.md` → Architecture**.
+
+## Setup
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+# 1. Database — Postgres 17 + pg_cron on port 5433
+brew install postgresql@17 pg_cron
+#    edit /opt/homebrew/var/postgresql@17/postgresql.conf:
+#      port = 5433
+#      shared_preload_libraries = 'pg_cron'
+#      cron.database_name = 'snagdash'
+brew services start postgresql@17
+
+# 2. Schema + the committed sample data (3 users, 4 warehouses, 10 snags, images)
+db/build.sh --with-data     # or just `db/build.sh` for an empty database
+
+# 3. Env
+cp .env.example .env.local  # then fill in AUTH_SECRET etc. — see below
+
+# 4. Run
+npm install
+npm run dev                 # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### `.env.local`
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| var | purpose |
+|---|---|
+| `DATABASE_URL` | `postgresql://authenticator@localhost:5433/snagdash` |
+| `AUTH_SECRET` | signs the session cookie **and** attachment signed-URLs (rotating logs everyone out) |
+| `STORAGE_DIR` | where the `attachments` bucket lives on disk |
+| `AUTH_AUTOCONFIRM` | `true` in dev — new sign-ups skip email confirmation |
+| `MAIL_PROVIDER` | `console` in dev — reset/confirm links are logged, not emailed |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Scripts
 
-## Learn More
+| | |
+|---|---|
+| `npm run dev` / `build` / `start` | Next.js |
+| `npm run lint` | ESLint |
+| `db/build.sh [--with-data]` | rebuild the `snagdash` schema from `db/*.sql` |
 
-To learn more about Next.js, take a look at the following resources:
+## Layout
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```
+db/                     schema SQL + build.sh  (see db/README.md)
+src/lib/data/           createClient() / updateSession() — same surface as the old Supabase client
+src/lib/db/             pg pool + per-request role/JWT-claims scoping
+src/lib/pgrest/         the supabase-js-shaped query/rpc builder over pg
+src/lib/auth/           session cookie, bcrypt, GoTrue-shaped methods, dev mailer
+src/lib/storage/        filesystem bucket + HMAC signed URLs
+src/app/api/            /me, /rpc, /attachments  (the client's only DB path)
+src/app/(app)/          the authenticated app
+PLAN.md / DESIGN.md     behaviour + schema / visual spec
+```

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/data/server";
 import { Button } from "@/components/ui/button";
 import { SnagTable, type SnagRow } from "@/components/snag-table";
 import type { UpdateRow, AttachmentRow, ActivityRow } from "@/components/snag-row";

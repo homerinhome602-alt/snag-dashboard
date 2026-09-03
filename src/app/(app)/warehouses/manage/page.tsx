@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/data/server";
 import { WarehouseCodeManager } from "./warehouse-code-manager";
 import type { WarehouseActivityRow } from "./warehouse-row";
 

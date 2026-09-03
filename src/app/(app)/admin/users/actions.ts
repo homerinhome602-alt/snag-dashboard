@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/data/server";
 import type { MemberRole } from "@/lib/roles";
 import { DASHBOARD_ADMIN_VALUE, roleLabel } from "@/lib/roles";
 

@@ -1,5 +1,5 @@
 import { notFound, redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/data/server";
 import { REPORTER_ROLES } from "@/lib/roles";
 import { ImportForm } from "./import-form";
 

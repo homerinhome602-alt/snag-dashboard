@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/data/client";
 import { uploadAttachment } from "@/lib/media";
 import { listQueuedSnags, removeQueuedSnag, type QueuedSnag } from "@/lib/offline-queue";
 

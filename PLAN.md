@@ -2,9 +2,11 @@
 
 **Domain:** Frozen / cold-storage warehouse launches
 **Status:** **Built.** All ten phases shipped — see §14 for what landed and where the build diverged from this plan.
-**Stack (as built):** Next.js App Router + TypeScript + Tailwind + shadcn/ui · Supabase (Auth / Postgres / Storage)
+**Stack (as built):** Next.js App Router + TypeScript + Tailwind + shadcn/ui · self-hosted PostgreSQL 17 (`pg`) · hand-rolled auth · filesystem storage
 
-> This document is both the specification and the record. Sections marked **as built** were reconciled against the running code and database on 9 Aug 2026, most recently a full line-by-line audit against the live schema, RLS policies, and every route/component on 18 Aug 2026 (the round that found and fixed the §5.4/5.5 warehouse-management staleness and the previously-undocumented `warehouse_activity` table). Where the build diverged from the original plan, the divergence is described rather than quietly overwritten — the reasoning matters more than the tidiness.
+> This document is both the specification and the record. Sections marked **as built** were reconciled against the running code and database on 9 Aug 2026, most recently a full line-by-line audit on 18 Aug 2026. Where the build diverged from the original plan, the divergence is described rather than quietly overwritten.
+>
+> **⚠ Migrated off Supabase — 3 Sep 2026.** GoTrue (auth), PostgREST, and Supabase Storage were removed; the database is now a local Postgres. The *schema* (§3, §4, §15) is unchanged and still authoritative — it lives in `db/*.sql`. The *application-layer* description below and in §16 predates the migration: the request path, auth, and storage now work as described in `CLAUDE.md` → "Architecture", not as written here. §0 is updated; the rest of the prose is not yet reconciled.
 
 ---
 
@@ -18,8 +20,9 @@ Everything required to stand this app up from nothing, so a rebuild doesn't have
 |---|---|---|
 | `next` | 16.3.0 | App Router framework. **Not the Next.js in most training data** — breaking changes; middleware is renamed `proxy` (`src/proxy.ts`, matched by `AGENTS.md`'s standing instruction to read `node_modules/next/dist/docs/` before writing Next-specific code) |
 | `react` / `react-dom` | 19.2.8 | |
-| `@supabase/supabase-js` | ^2.112.2 | DB/Auth/Storage client |
-| `@supabase/ssr` | ^0.12.4 | Cookie-based session helpers for `lib/supabase/{client,server,proxy}.ts` |
+| `pg` | ^8.23 | PostgreSQL client — the whole data layer (`lib/db`, `lib/pgrest`) |
+| `jose` | ^6.2 | Signs/verifies the session-cookie JWT (`lib/auth`) |
+| `bcryptjs` | ^3.0 | Password hashing — verifies the migrated GoTrue `$2a$` hashes |
 | `@base-ui/react` | ^1.7.0 | Headless primitives underlying `components/ui/*` (Select, etc.) |
 | `shadcn` | ^4.16.2 | CLI/registry the `ui/` primitives were generated from |
 | `tailwindcss` | ^4 (devDependency) | Utility CSS; v4's CSS-first config, no `tailwind.config.js` — tokens live in `globals.css`'s `@theme` block |
@@ -29,21 +32,26 @@ Everything required to stand this app up from nothing, so a rebuild doesn't have
 | `exceljs` | ^4.4.0 | Import/export (§8) |
 | `tw-animate-css` | ^1.4.0 | Animation utility classes |
 
-**Environment variables** (`.env.local`, gitignored) — exactly two, both used identically in `lib/supabase/client.ts`, `server.ts`, and `proxy.ts`:
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+**Environment variables** (`.env.local`, gitignored) — see `.env.example`:
+- `DATABASE_URL` — `postgresql://authenticator@localhost:5433/snagdash`
+- `AUTH_SECRET` — signs the session cookie **and** attachment signed-URLs
+- `STORAGE_DIR` — filesystem location of the `attachments` bucket
+- `AUTH_AUTOCONFIRM` (`true` locally), `MAIL_PROVIDER` (`console` locally)
+- `SUPABASE_*`, if present, are migration-tooling only and unread by the app.
 
-**`.mcp.json`** (committed, not secret) holds only the Supabase project ref, wiring up the `mcp__supabase__*` tools for whoever's developing — `{"mcpServers":{"supabase":{"type":"http","url":"https://mcp.supabase.com/mcp?project_ref=<ref>&features=..."}}}`.
+**`.mcp.json`** is empty (`{"mcpServers":{}}`) — the Supabase MCP is gone.
 
-**Postgres extensions actually used** (the project has dozens of Supabase's default-available extensions listed as installable; these are the ones actually `installed_version`-active and load-bearing):
+**Database:** self-hosted PostgreSQL 17 on port 5433, database `snagdash`, rebuilt from `db/*.sql` via `db/build.sh` (see `db/README.md`). The app connects as the unprivileged `authenticator` role and `SET LOCAL ROLE`s into `anon` / `authenticated` / `service_role` per request, so RLS applies (`CLAUDE.md` → Architecture).
+
+**Postgres extensions** (in the `extensions` schema, so functions with `search_path=''` call `extensions.gen_random_uuid()` / `extensions.similarity()`):
 - `pgcrypto` — `gen_random_uuid()`, every table's PK default
 - `pg_trgm` — `extensions.similarity()`, duplicate detection (§7)
-- `pg_cron` — the daily snapshot job (§12.1)
-- `uuid-ossp` — installed alongside `pgcrypto`, not directly called by any function in this schema (`gen_random_uuid()` from `pgcrypto` is what's actually used)
+- `pg_cron` — the daily snapshot job (§12.1); needs `shared_preload_libraries='pg_cron'` + `cron.database_name='snagdash'`
+- `uuid-ossp` — installed for parity, not called
 
-**Supabase Storage:** one bucket, `attachments` — **private** (not public), 50MB (`52428800` bytes) file size limit, `allowed_mime_types` restricted to `image/jpeg`, `image/png`, `image/webp`, `video/mp4`, `video/webm`, `video/quicktime`. Objects are served via signed URL (§6), never a public bucket URL. Path convention: `{warehouse_id}/{snag_id}/{8-char-random-id}[.ext | -thumb.jpg | -original.jpg]` — the storage INSERT policy parses `warehouse_id` back out of the path's first folder segment to run the same reporter/resolver/admin check the `attachments` table's own INSERT policy runs (§4.1), so the two must stay in sync if the path convention ever changes.
+**Storage:** one bucket, `attachments`, on the local filesystem under `STORAGE_DIR`. Enforced in `src/app/api/attachments/route.ts` (not a DB policy): 50 MB limit, mime allowlist `image/jpeg|png|webp`, `video/mp4|webm|quicktime`. Served only via HMAC-signed URL from `src/app/api/attachments/[...path]/route.ts`. Path convention unchanged: `{warehouse_id}/{snag_id}/{8-char-random-id}[.ext | -thumb.jpg | -original.jpg]` — segment 1 is still parsed back out for the `attachments` table's own INSERT policy (§4.1).
 
-**Migrations are Supabase-project-only, not version-controlled** — see the CLAUDE.md gotcha. `mcp__supabase__list_migrations` (or `npx supabase migration list`) is the only reliable inventory; the count keeps climbing, so this document doesn't try to track it. **§15 is the fallback if that tool isn't available** — a literal, verified snapshot of every table, function, view, trigger, and RLS policy as deployed, enough to reproduce the schema from nothing without needing to inspect the live project at all.
+**Schema source of truth is `db/*.sql`** (was: Supabase-project migrations). §15 remains a literal snapshot of it — enough to reproduce from nothing. There is no migration-history table; edit `db/10_schema.sql` (or add a numbered file) and re-run `db/build.sh`.
 
 **Root layout** (`src/app/layout.tsx`) — `next.config.ts` is untouched default (no custom config at all). Exact `<head>` metadata: title `"Frozen Warehouse Launch Readiness"`, description `"Snag tracking and launch readiness for frozen warehouse commissioning"`. The three `next/font/google` calls, exact weights loaded (see DESIGN.md's Type section for the Instrument Sans weight discrepancy this implies): `Instrument_Sans({ variable: "--font-display", subsets: ["latin"], weight: ["500"] })`, `Inter({ variable: "--font-body", subsets: ["latin"], weight: ["400", "500"] })`, `IBM_Plex_Mono({ variable: "--font-data", subsets: ["latin"], weight: ["400", "500"] })`.
 
@@ -147,7 +155,7 @@ The plan originally scoped reads to membership. Partway through the build this w
 ## 3. Schema
 
 ### 3.1 `profiles`
-Extends Supabase `auth.users`, created on first sign-in.
+Extends the `auth.users` table (a local shim since the Supabase migration — `db/01_auth_storage_shim.sql`), created on first sign-in by the `handle_new_user()` trigger.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -440,10 +448,10 @@ Keep these in a non-exposed schema with explicit `auth.uid()` checks in the body
 
 The original plan specified Google sign-in as primary with password as a fallback for contractors without a Google account. **Google sign-in was built, then tried live and reverted** — password is the only auth method in the app today. Two distinct pages cover the two cases, both gated by `invitations`:
 
-- **`/set-password`** (first-time signup) — full name + email + password + confirm password → `supabase.auth.signUp()`. This fires `handle_new_user()` (§3.2, §4), the trigger that checks `invitations` for a matching email and creates the `profiles` row — **no matching invitation → the signup itself fails**, surfaced by `setPassword()` (`app/set-password/actions.ts`) as an inferred `not_invited` error (Supabase doesn't return a distinct error code for a trigger exception, so the action rules out weak-password and already-exists first, then assumes not-invited by elimination).
+- **`/set-password`** (first-time signup) — full name + email + password + confirm password → `supabase.auth.signUp()` (now `src/lib/auth/service.ts`, which inserts an `auth.users` row). This fires `handle_new_user()` (§3.2, §4), the trigger that checks `invitations` for a matching email and creates the `profiles` row — **no matching invitation → the insert fails on the trigger's exception**, surfaced by `setPassword()` (`app/set-password/actions.ts`) as an inferred `not_invited` error (weak-password and already-exists are ruled out first, then not-invited by elimination). With `AUTH_AUTOCONFIRM=true` (local) the signup also issues a session immediately.
 - **`/login`** (returning users) — email + password → `signInWithPassword()`. Failure redirects to `/login?error=invalid_credentials`.
 - **`/forgot-password`** → `/auth/update-password`, via `/auth/confirm` (a `route.ts` handler that calls `verifyOtp()` on the emailed token, then redirects). Always shows the same "check your email" message regardless of whether the address exists — Supabase never reveals that. **Known gap:** the Supabase-side "Reset Password" email template still uses the default `{{ .ConfirmationURL }}` rather than being repointed at `/auth/confirm`, so the emailed link doesn't actually work yet — a one-time dashboard edit outside this codebase's reach (see the CLAUDE.md gotcha for the exact template string needed).
-- Session state: `@supabase/ssr` cookies, refreshed on every request by `src/proxy.ts` (Next.js 16 renamed middleware to "proxy" — `AGENTS.md`) calling `updateSession()` (`lib/supabase/proxy.ts`), which gates every route except `/login`, `/auth/*`, `/forgot-password`, `/set-password` by requiring `getClaims()` to return a user — redirecting to `/login` otherwise. `getClaims()`, not `getSession()`, is deliberate: it's the call that actually verifies the JWT signature server-side.
+- Session state: a signed JWT in an httpOnly cookie (`src/lib/auth/session.ts`, jose HS256, `AUTH_SECRET`), verified on every request by `src/proxy.ts` (Next.js 16 renamed middleware to "proxy" — `AGENTS.md`) calling `updateSession()` (`lib/data/proxy.ts` → `lib/auth/jwt.ts`), which gates every route except `/login`, `/auth/*`, `/forgot-password`, `/set-password`, `/api/*` by requiring a valid session — redirecting to `/login` otherwise. Server code reads it via `getClaims()` (unchanged call surface).
 
 Because the gate is the email address, a user invited as `x@company.com` must sign in with exactly that address — a personal Gmail will not match. The User Management screen should say so.
 
@@ -758,12 +766,12 @@ Every client-side validation message, empty-state string, input placeholder, and
 
 ## 6. Media handling
 
-**Backend: Supabase Storage.** One service, sharing the same auth and RLS as the data. ImageKit stays available if delivery performance later justifies putting it in front.
+**Backend: local filesystem** (was Supabase Storage until the 3 Sep 2026 migration). Files under `STORAGE_DIR`; upload + authorization in `src/app/api/attachments/route.ts`, served via HMAC-signed URL from `src/app/api/attachments/[...path]/route.ts`. ImageKit stays available if delivery performance later justifies putting it in front.
 
 - **Photo annotation before save** — canvas overlay for circling the defect; original preserved in `original_url` alongside the annotated version
 - **Client-side compression before upload** — resize to a sane max dimension and re-encode. This matters more than usual: uploads happen over warehouse wifi, from a phone, in a −25 °C chamber
 - **Video** needs a hard size cap and a max duration, enforced client-side before upload begins
-- Thumbnails generated client-side on upload, since Supabase Storage does not transform media
+- Thumbnails generated client-side on upload (the storage backend does not transform media)
 - Storage buckets are private; the app serves signed URLs
 
 **As built — exact numbers** (`lib/media.ts`):
@@ -857,7 +865,7 @@ The snapshot job moves to Phase 0 deliberately — see §12.1. Everything else c
 | Role model | **Per warehouse.** `default_role` on the invitation is a hint; `warehouse_members.role` is authoritative. Dashboard Admin is the only global role |
 | Login | **Password only** (§5.1) — gated by the invitation list. Google sign-in was built, tried live, then reverted |
 | Sub-category | **No filtering** — all eleven always available under both categories |
-| Media storage | **Supabase Storage**, private buckets, signed URLs, client-side compression |
+| Media storage | **local filesystem** (`STORAGE_DIR`), private, HMAC signed URLs, client-side compression — was Supabase Storage pre-migration |
 | Serial number | Auto, per warehouse, atomic counter |
 | Status | Resolvers drive to `ready_to_close`; **any tagged reporter** verifies closure — or closes directly from any status (§3.9) |
 | Visibility | Scoped to warehouse membership; Dashboard Admin reads everything (§2.3) |
@@ -934,7 +942,7 @@ The chart derives entirely from this table, which keeps it a cheap indexed read 
 
 ## 14. Implementation status — as built
 
-All ten phases shipped, then many further rounds of live feedback and fixes. Migration count keeps climbing — `mcp__supabase__list_migrations` (or `supabase migration list` against a pulled-down copy) is the source of truth; this document does not try to enumerate them or keep a running count.
+All ten phases shipped, then many further rounds of live feedback and fixes, then the 3 Sep 2026 migration off Supabase. The schema source of truth is now `db/*.sql` in the repo (rebuilt via `db/build.sh`); there is no migration-history table.
 
 | Phase | Commit | State |
 |---|---|---|
@@ -997,7 +1005,7 @@ None of this changes the data model (except where noted in §14.1); it came out 
 - **No soft delete for warehouses** (§5.5).
 - **Category and scope are deferred on mobile**, so they are nullable for mobile-raised snags. The "finish this snag" prompt back at a desk was never built.
 - **Notifications** were never started — overdue ETC is visible in the UI but nothing reaches the person who can act on it. The chat thread (§5.7.1) has the same gap: no live push, so a new message from the other side is only seen on your own next action or reload, not in real time.
-- **Password-reset email deliverability depends on a one-time Supabase dashboard step.** The "Reset Password" email template still needs its link changed to `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery&next=/auth/update-password`, since the default template points at Supabase's hosted verify page, which can't set a session cookie on this app's own domain. Supabase's built-in email sending is also heavily rate-limited — fine for testing, not for production volume.
+- **Password-reset email now depends on a real `MAIL_PROVIDER`.** `resetPasswordForEmail()` (`src/lib/auth/service.ts`) builds a `/auth/confirm?token_hash=…&type=recovery&next=/auth/update-password` link and hands it to `sendMail()` (`src/lib/auth/email.ts`). Locally `MAIL_PROVIDER=console` just logs the link; shipping this needs the `sendMail()` body wired to a real provider (Resend / SES / nodemailer). The old one-time Supabase dashboard template edit no longer applies.
 - **"Deactivate" in User Management does not currently revoke access — found 18 Aug 2026, not yet applied.** `set_user_active()` writes `profiles.is_active`, but nothing reads it: not `private.is_dashboard_admin()`, not `private.is_warehouse_member()`, not `private.has_warehouse_role()` (which `is_reporter`/`is_resolver` both call), no RLS policy anywhere, no auth/proxy gate. Confirmed by searching every function body and every policy in the schema for `is_active` — `set_user_active` is the only hit. A deactivated person can still sign in and use every capability they had before; only the status badge changes. A fix was drafted — gate those three primitive functions on `is_active` (they're what every RLS policy and RPC route through, so this cascades everywhere at once) and add a self-deactivation guard to `set_user_active` (there's exactly one active Dashboard Admin today; without the guard they could lock themselves out with no one left to undo it) — but applying it was declined for this pass. The SQL is in this session's transcript if picked back up later.
 - **Not everything about a person is tracked, even after `people_activity` (§3.4b) closed two of the gaps — found 18 Aug 2026.** Still nothing logs deactivating/reactivating a person (`set_user_active`, same function as the gap above), and there's no action at all yet — so nothing to log — for removing a warehouse tag or for changing an already-signed-in person's Dashboard Admin status.
 - **`/set-password`'s subtitle still references Google sign-in — found 19 Aug 2026, not fixed.** See §5.1's exact-copy table. Leftover from before Google auth was reverted; reads as if Google is still an option elsewhere, which it isn't anywhere in the app.

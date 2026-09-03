@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { MultiPhotoCaptureInput } from "@/components/photo-capture";
 import { DuplicateCheckModal } from "@/components/duplicate-check-modal";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/data/client";
 import { uploadAttachment, type PhotoCapture } from "@/lib/media";
 import { enqueueSnag } from "@/lib/offline-queue";
 import {
