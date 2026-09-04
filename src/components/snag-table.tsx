@@ -45,6 +45,19 @@ const HEADERS = [
   "Location", "Scope", "Severity", "Status", "Update", "ETC", "Age",
 ];
 
+// Display label overrides — the array values above stay as the internal keys
+// (sort keys, sticky-column checks); this only changes what the header shows.
+const HEADER_LABEL: Record<string, string> = {
+  Description: "Description of SNAG issue",
+};
+
+// On phones (< md) only the essentials stay in the table; the rest live in the
+// row's expanded panel. Applied to both the header cell and the body cell.
+const MOBILE_HIDDEN = new Set([
+  "Raised", "Raised by", "Category", "Sub-category", "Location", "Scope", "Update", "ETC", "Age",
+]);
+const mobileHideClass = (h: string) => (MOBILE_HIDDEN.has(h) ? "hidden md:table-cell" : "");
+
 type SortKey =
   | "serial_no" | "date_raised" | "description" | "raised_by" | "category"
   | "sub_category" | "location" | "scope" | "severity" | "status" | "update"
@@ -125,6 +138,7 @@ export function SnagTable({
   hasReporterTag,
   hasResolverTag,
   isDashboardAdmin,
+  canManage,
   rolesByUserId,
   adminUserIds,
   currentUserId,
@@ -137,6 +151,7 @@ export function SnagTable({
   hasReporterTag: boolean;
   hasResolverTag: boolean;
   isDashboardAdmin: boolean;
+  canManage: boolean;
   rolesByUserId: Record<string, string[]>;
   adminUserIds: string[];
   currentUserId: string;
@@ -193,6 +208,7 @@ export function SnagTable({
                 <TableHead
                   key={h}
                   className={cn(
+                    mobileHideClass(h),
                     (h === "Severity" || h === "Status") && "text-center",
                     // Sticky cells paint their own opaque bg-card to hide
                     // content scrolling underneath — override it back to the
@@ -216,11 +232,11 @@ export function SnagTable({
                       (h === "Severity" || h === "Status") && "justify-center"
                     )}
                   >
-                    {h}
+                    {HEADER_LABEL[h] ?? h}
                     <button
                       type="button"
                       onClick={() => toggleSort(key)}
-                      aria-label={`Sort by ${h}`}
+                      aria-label={`Sort by ${HEADER_LABEL[h] ?? h}`}
                       className="rounded p-0.5 text-faint hover:bg-muted hover:text-foreground"
                     >
                       <SortIcon dir={dir} />
@@ -243,6 +259,7 @@ export function SnagTable({
               hasReporterTag={hasReporterTag}
               hasResolverTag={hasResolverTag}
               isDashboardAdmin={isDashboardAdmin}
+              canManage={canManage}
               rolesByUserId={rolesByUserId}
               adminUserIds={adminUserIds}
               currentUserId={currentUserId}

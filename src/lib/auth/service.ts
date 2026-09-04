@@ -49,6 +49,20 @@ export async function signUp(params: {
   error: AuthError;
 }> {
   const email = params.email.trim().toLowerCase();
+
+  // Explicit invitation gate — only an email on the invitations list may set a
+  // password. handle_new_user() enforces this too (defense in depth), but
+  // checking here fails fast with a definite reason instead of parsing a
+  // trigger exception. Runs as service_role since invitations is admin-RLS.
+  const invited = await withServiceRole((c) =>
+    c
+      .query("select 1 from public.invitations where lower(email) = $1 limit 1", [email])
+      .then((r) => (r.rowCount ?? 0) > 0)
+  );
+  if (!invited) {
+    return { data: { user: null, session: null }, error: { message: "Not invited", code: "not_invited" } };
+  }
+
   const id = randomUUID();
   const pwHash = await hashPassword(params.password);
   const meta = { ...(params.options?.data ?? {}), email_verified: AUTOCONFIRM };
@@ -117,7 +131,7 @@ export async function getUser(): Promise<{ data: { user: { id: string; email: st
 export async function resetPasswordForEmail(
   email: string,
   opts?: { redirectTo?: string }
-): Promise<{ data: Record<string, never>; error: AuthError }> {
+): Promise<{ data: { devLink?: string }; error: AuthError }> {
   const normalized = email.trim().toLowerCase();
   const tok = token();
   const updated = await withServiceRole((c) =>
@@ -130,14 +144,18 @@ export async function resetPasswordForEmail(
   );
 
   // Never reveal whether the address exists.
-  if (updated) {
-    const redirect = opts?.redirectTo ?? "http://localhost:3000/auth/update-password";
-    const origin = new URL(redirect).origin;
-    const next = new URL(redirect).pathname || "/auth/update-password";
-    const link = `${origin}/auth/confirm?token_hash=${tok}&type=recovery&next=${encodeURIComponent(next)}`;
-    await sendMail(passwordResetMail(normalized, link));
-  }
-  return { data: {}, error: null };
+  if (!updated) return { data: {}, error: null };
+
+  const redirect = opts?.redirectTo ?? "http://localhost:3000/auth/update-password";
+  const origin = new URL(redirect).origin;
+  const next = new URL(redirect).pathname || "/auth/update-password";
+  const link = `${origin}/auth/confirm?token_hash=${tok}&type=recovery&next=${encodeURIComponent(next)}`;
+  await sendMail(passwordResetMail(normalized, link));
+
+  // With MAIL_PROVIDER=console there is no real mailbox — hand the link back so
+  // the /forgot-password screen can show it for local testing.
+  const devLink = (process.env.MAIL_PROVIDER ?? "console") === "console" ? link : undefined;
+  return { data: { devLink }, error: null };
 }
 
 // ---- verifyOtp (used by /auth/confirm) --------------------------------

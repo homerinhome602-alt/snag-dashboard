@@ -67,15 +67,20 @@ export default async function LoginPage({
             </Button>
           </form>
 
-          <p className="mt-3 flex items-center justify-center gap-3 text-center text-[13px] text-muted-foreground">
-            <a href="/forgot-password" className="hover:text-foreground">
+          <div className="mt-4 flex flex-col gap-2">
+            <a
+              href="/forgot-password"
+              className="rounded-md bg-accent px-3 py-2 text-center text-[12.5px] font-semibold text-accent-foreground hover:bg-accent/80"
+            >
               Forgot your password?
             </a>
-            <span className="text-line">·</span>
-            <a href="/set-password" className="hover:text-foreground">
-              Set your password
+            <a
+              href="/set-password"
+              className="rounded-md bg-muted px-3 py-2 text-center text-[12.5px] font-semibold text-foreground hover:bg-muted/70"
+            >
+              For new users, set your password
             </a>
-          </p>
+          </div>
         </div>
       </div>
     </div>

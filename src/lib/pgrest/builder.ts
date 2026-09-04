@@ -23,6 +23,7 @@ const EMBED_FK: Record<string, string> = {
   "warehouse_members.profile": "user_id",
   "warehouse_members.warehouse": "warehouse_id",
   "snags.raised_by_profile": "raised_by",
+  "warehouse_asset_activity.actor": "actor_id",
 };
 
 type Embed = { alias: string; target: string; cols: string[] };

@@ -31,11 +31,9 @@ export async function setPassword(formData: FormData) {
     if (error.code === "user_already_exists" || error.code === "email_exists") {
       redirect("/set-password?error=already_exists");
     }
-    // The invitation-gate trigger raises a Postgres exception for an
-    // unmatched email; Supabase surfaces that as a generic signup
-    // failure rather than a distinct code, so once weak-password and
-    // duplicate-account are ruled out, "not invited" is the only
-    // realistic remaining cause.
+    // signUp() checks the invitations list explicitly before creating anything
+    // (the handle_new_user trigger also enforces it) — a non-invited email
+    // comes back here as not_invited.
     redirect("/set-password?error=not_invited");
   }
 

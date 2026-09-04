@@ -144,7 +144,7 @@ export default async function UserManagementPage() {
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Role</TableHead>
-              <TableHead>Warehouse</TableHead>
+              <TableHead className="hidden sm:table-cell">Warehouse</TableHead>
               <TableHead className="text-center">Status</TableHead>
               <TableHead className="text-right">Change status</TableHead>
             </TableRow>

@@ -73,7 +73,7 @@ export function RolePeoplePicker({
           if (!p) return null;
           const locked = lockedIds.includes(id);
           return locked ? (
-            <span key={id} className={`flex items-center gap-1 rounded-pill border px-2 py-0.5 text-[11px] ${colorClass} ${onRemoveLocked ? "" : "opacity-70"}`}>
+            <span key={id} className={`flex items-center gap-1 rounded-pill border px-2 py-1.5 text-[11px] sm:py-0.5 ${colorClass} ${onRemoveLocked ? "" : "opacity-70"}`}>
               {displayName(p)}
               {onRemoveLocked && (
                 <button
@@ -97,7 +97,7 @@ export function RolePeoplePicker({
                 e.stopPropagation();
                 toggle(id);
               }}
-              className={`rounded-pill border px-2 py-0.5 text-[11px] ${colorClass}`}
+              className={`rounded-pill border px-2 py-1.5 text-[11px] sm:py-0.5 ${colorClass}`}
             >
               {displayName(p)} ×
             </button>

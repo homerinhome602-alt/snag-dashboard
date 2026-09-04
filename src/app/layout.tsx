@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Instrument_Sans, Inter, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -23,6 +23,13 @@ const plexMono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "Frozen Warehouse Launch Readiness",
   description: "Snag tracking and launch readiness for frozen warehouse commissioning",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  // matches --ground; pinch-zoom stays enabled (no maximumScale)
+  themeColor: "#FFF9F7",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

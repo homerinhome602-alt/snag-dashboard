@@ -14,6 +14,12 @@ import { GoLiveHistoryInfo, type GoLiveChange } from "./go-live-history-info";
 import { SnagFilters } from "./snag-filters";
 import { SearchBox } from "./search-box";
 import { RaisedBanner } from "./raised-banner";
+import {
+  HandoverDocuments,
+  type HandoverDocRow,
+  type HandoverHistoryEntry,
+} from "./handover-documents";
+import { ChamberDetails, type ChamberRow } from "./chamber-details";
 import { parseMulti } from "./filter-utils";
 import { cn, CARD_HOVER } from "@/lib/utils";
 
@@ -55,6 +61,10 @@ export default async function WarehouseDetailPage({
     { data: me },
     { data: allProfiles },
     { data: goLiveChanges },
+    { data: docTypes },
+    { data: whDocs },
+    { data: chamberDataRows },
+    { data: handoverActivity },
   ] = await Promise.all([
     supabase
       .from("warehouse_readiness")
@@ -72,12 +82,30 @@ export default async function WarehouseDetailPage({
       .eq("warehouse_id", id)
       .order("snapshot_date"),
     supabase.from("profiles").select("is_dashboard_admin").eq("id", uid ?? "").maybeSingle(),
-    supabase.from("profiles").select("id, is_dashboard_admin"),
+    supabase.from("profiles").select("id, is_dashboard_admin, full_name, email"),
     supabase
       .from("warehouse_activity")
       .select("id, old_value, new_value, created_at, actor:profiles(full_name, email)")
       .eq("warehouse_id", id)
       .eq("action", "go_live_date_change")
+      .order("created_at", { ascending: false }),
+    supabase.from("handover_document_types").select("id, name, sort_order").order("sort_order"),
+    supabase
+      .from("warehouse_handover_documents")
+      .select("doc_type_id, file_url, file_name, checked, uploaded_by, checked_by")
+      .eq("warehouse_id", id),
+    supabase
+      .from("warehouse_chambers")
+      .select(
+        "id, chamber_name, machine_count, machine_capacity_kw, odu_model, idu_model, controller_model, updated_by"
+      )
+      .eq("warehouse_id", id)
+      .order("created_at"),
+    supabase
+      .from("warehouse_asset_activity")
+      .select("id, action, ref_label, detail, created_at, actor:profiles(full_name, email)")
+      .eq("warehouse_id", id)
+      .eq("area", "handover_document")
       .order("created_at", { ascending: false }),
   ]);
 
@@ -90,10 +118,15 @@ export default async function WarehouseDetailPage({
   // Real membership, not bypass-merged — the chat compose box needs to tell
   // "genuinely tagged both reporter and resolver" apart from "admin with no
   // tag at all," which an isReporter/isResolver OR'd with admin can't do.
+  // Reporter/Resolver are labels only now — any tagged member can do every snag
+  // task. The real tags are still tracked (they set the person's default side in
+  // the chat feed), but they no longer gate anything.
   const hasReporterTag = (membership ?? []).some((m) => REPORTER_ROLES.includes(m.role));
   const hasResolverTag = (membership ?? []).some((m) => RESOLVER_ROLES.includes(m.role));
-  const isReporter = hasReporterTag || isDashboardAdmin;
-  const isResolver = hasResolverTag || isDashboardAdmin;
+  const isMember = (membership ?? []).length > 0;
+  const canManage = isMember || isDashboardAdmin;
+  const isReporter = canManage;
+  const isResolver = canManage;
   const daysToGoLive = daysUntil(w.go_live_date);
   const team = (teamRows ?? []).map((t) => ({
     role: t.role,
@@ -116,6 +149,52 @@ export default async function WarehouseDetailPage({
   // separately from rolesByUserId since admin status is global, not scoped
   // to this warehouse's membership rows.
   const adminUserIds = (allProfiles ?? []).filter((p) => p.is_dashboard_admin).map((p) => p.id);
+
+  // ── Handover documents + Machine/Controller details ───────────────────────
+  const profileName = new Map<string, string>(
+    (allProfiles ?? []).map((p) => [p.id, (p.full_name as string | null) || (p.email as string)])
+  );
+  const docByType = new Map(
+    (whDocs ?? []).map((d) => [d.doc_type_id as string, d])
+  );
+  const docPaths = (whDocs ?? []).map((d) => d.file_url).filter(Boolean) as string[];
+  const { data: docSignedUrls } = docPaths.length
+    ? await supabase.storage.from("attachments").createSignedUrls(docPaths, 3600)
+    : { data: [] as { path: string | null; signedUrl: string }[] | null };
+  const docUrlByPath = new Map((docSignedUrls ?? []).map((s) => [s.path, s.signedUrl]));
+
+  const handoverRows: HandoverDocRow[] = (docTypes ?? []).map((t) => {
+    const d = docByType.get(t.id as string);
+    return {
+      docTypeId: t.id as string,
+      name: t.name as string,
+      fileName: (d?.file_name as string | null) ?? null,
+      downloadUrl: d?.file_url ? docUrlByPath.get(d.file_url) ?? null : null,
+    };
+  });
+
+  const handoverHistory: HandoverHistoryEntry[] = (handoverActivity ?? []).map((a) => ({
+    id: a.id as string,
+    action: a.action as string,
+    docName: (a.ref_label as string | null) ?? null,
+    fileName: (a.detail as string | null) ?? null,
+    at: a.created_at as string,
+    by:
+      (a.actor as { full_name: string | null; email: string } | null)?.full_name ||
+      (a.actor as { full_name: string | null; email: string } | null)?.email ||
+      "Someone",
+  }));
+
+  const chamberRows: ChamberRow[] = (chamberDataRows ?? []).map((c) => ({
+    id: c.id as string,
+    chamber_name: c.chamber_name as string,
+    machine_count: (c.machine_count as number | null) ?? null,
+    machine_capacity_kw: (c.machine_capacity_kw as number | null) ?? null,
+    odu_model: (c.odu_model as string | null) ?? null,
+    idu_model: (c.idu_model as string | null) ?? null,
+    controller_model: (c.controller_model as string | null) ?? null,
+    updatedByName: c.updated_by ? profileName.get(c.updated_by as string) ?? null : null,
+  }));
 
   let query = supabase
     .from("snags")
@@ -198,8 +277,8 @@ export default async function WarehouseDetailPage({
 
   return (
     <div className="mx-auto w-full max-w-screen-2xl px-4 py-6 sm:px-6 sm:py-8 lg:px-[50px]">
-      <div className="mb-3 flex items-baseline justify-between">
-        <h1 className="text-[17px] font-medium tracking-[-0.015em] text-foreground">{w.name}</h1>
+      <div className="mb-3 flex flex-col gap-1.5 sm:flex-row sm:items-baseline sm:justify-between">
+        <h1 className="text-[21px] font-semibold tracking-[-0.015em] text-foreground">{w.name}</h1>
         {isResolver ? (
           <div className="flex items-baseline gap-1.5 text-[13.5px] text-foreground">
             <span className="text-muted-foreground">Go-live date:</span>
@@ -228,17 +307,30 @@ export default async function WarehouseDetailPage({
               key={tile.label}
               className={cn(
                 CARD_HOVER,
-                "rounded-md border p-2.5 hover:bg-blush",
+                "flex items-center gap-2.5 rounded-md border p-2.5 hover:bg-blush",
                 tile.highlight ? "border-blush bg-blush" : "border-border bg-card"
               )}
             >
-              <div className={`font-mono text-[19px] ${tile.highlight ? "text-red-deep" : ""}`}>{tile.value}</div>
-              <div className={`text-[9px] ${tile.highlight ? "text-red-deep" : "text-faint"}`}>{tile.label}</div>
+              <div
+                className={`font-mono text-[28px] leading-none ${tile.highlight ? "text-red-deep" : ""}`}
+              >
+                {tile.value}
+              </div>
+              <div
+                className={`text-[11px] leading-[1.2] ${tile.highlight ? "text-red-deep" : "text-faint"}`}
+              >
+                {tile.label}
+              </div>
             </div>
           ))}
-          <div className={cn(CARD_HOVER, "col-span-2 rounded-md border border-border bg-card p-2.5 hover:bg-blush")}>
-            <div className="font-mono text-[19px]">{daysToGoLive ?? "—"}</div>
-            <div className="text-[9px] text-faint">Days left for launch</div>
+          <div
+            className={cn(
+              CARD_HOVER,
+              "col-span-2 flex items-center gap-2.5 rounded-md border border-border bg-card p-2.5 hover:bg-blush"
+            )}
+          >
+            <div className="font-mono text-[28px] leading-none">{daysToGoLive ?? "—"}</div>
+            <div className="text-[11px] leading-[1.2] text-faint">Days left for launch</div>
           </div>
         </div>
         <BurnUpChart snapshots={snapshots ?? []} goLiveDate={w.go_live_date} liveTotalRaised={w.total_raised} liveTotalClosed={w.total_raised - w.open_count} />
@@ -277,10 +369,25 @@ export default async function WarehouseDetailPage({
         hasReporterTag={hasReporterTag}
         hasResolverTag={hasResolverTag}
         isDashboardAdmin={isDashboardAdmin}
+        canManage={canManage}
         rolesByUserId={rolesByUserId}
         adminUserIds={adminUserIds}
         currentUserId={uid ?? ""}
       />
+
+      <div className="mt-3 grid grid-cols-1 gap-2.5">
+        <HandoverDocuments
+          warehouseId={id}
+          canEdit={hasReporterTag || hasResolverTag || isDashboardAdmin}
+          rows={handoverRows}
+          history={handoverHistory}
+        />
+        <ChamberDetails
+          warehouseId={id}
+          canEdit={hasReporterTag || hasResolverTag || isDashboardAdmin}
+          chambers={chamberRows}
+        />
+      </div>
 
       <div className="mt-3">
         <TeamBlock members={team} />

@@ -52,7 +52,7 @@ export function PersonRow({
         <TableCell className="text-[13px] text-foreground">{row.name}</TableCell>
         <TableCell className="text-[13px]">{row.role}</TableCell>
         <TableCell
-          className="whitespace-normal text-[12.5px] text-muted-foreground"
+          className="hidden whitespace-normal text-[12.5px] text-muted-foreground sm:table-cell"
           onClick={(e) => e.stopPropagation()}
         >
           {row.warehouseNames.length === 0 ? (

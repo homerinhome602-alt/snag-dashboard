@@ -88,7 +88,7 @@ export function MultiSelectFilter({
         ref={triggerRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className={`rounded-md border px-2 py-1 text-[11.5px] font-medium ${
+        className={`rounded-md border px-2 py-2 text-[11.5px] font-medium sm:py-1 ${
           selected.length > 0
             ? "border-primary bg-accent text-accent-foreground"
             : "border-teal bg-frost text-teal-deep"
@@ -108,7 +108,7 @@ export function MultiSelectFilter({
               <button
                 type="button"
                 onClick={onSelectAll}
-                className="w-full px-2.5 py-1 text-left text-[11px] text-primary hover:bg-muted"
+                className="w-full px-2.5 py-2 text-left text-[11px] text-primary sm:py-1 hover:bg-muted"
               >
                 All
               </button>
@@ -117,7 +117,7 @@ export function MultiSelectFilter({
               <button
                 type="button"
                 onClick={() => onChange([])}
-                className="w-full px-2.5 py-1 text-left text-[11px] text-primary hover:bg-muted"
+                className="w-full px-2.5 py-2 text-left text-[11px] text-primary sm:py-1 hover:bg-muted"
               >
                 Clear
               </button>
@@ -125,7 +125,7 @@ export function MultiSelectFilter({
             {options.map((o) => (
               <label
                 key={o.value}
-                className="flex cursor-pointer items-center gap-2 px-2.5 py-1.5 text-[12px] hover:bg-muted"
+                className="flex cursor-pointer items-center gap-2 px-2.5 py-2 text-[12px] sm:py-1.5 hover:bg-muted"
               >
                 <input
                   type="checkbox"

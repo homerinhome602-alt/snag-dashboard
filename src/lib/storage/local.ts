@@ -19,6 +19,20 @@ export const ALLOWED_MIME = new Set([
   "video/quicktime",
 ]);
 
+// Handover documents — wider set (PDF / Office / images).
+export const ALLOWED_DOC_MIME = new Set([
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "text/csv",
+  "text/plain",
+]);
+
 function safeKey(key: string): string {
   const norm = path.posix.normalize(key);
   if (norm.startsWith("..") || path.isAbsolute(norm)) throw new Error("invalid object key");

@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,6 +12,7 @@ export default async function ForgotPasswordPage({
   searchParams: Promise<{ sent?: string; error?: string }>;
 }) {
   const { sent, error } = await searchParams;
+  const devResetLink = sent ? (await cookies()).get("dev_reset_link")?.value : undefined;
 
   return (
     <div className="flex flex-1 items-center justify-center bg-background px-6 py-12">
@@ -36,11 +38,30 @@ export default async function ForgotPasswordPage({
           )}
 
           {sent ? (
-            <div className="rounded-md bg-mint p-3">
-              <p className="text-[12.5px] font-medium text-mint-deep">Check your email</p>
-              <p className="mt-1 text-[11.5px] leading-relaxed text-mint-deep">
-                If an account exists for that address, a reset link is on its way.
-              </p>
+            <div className="flex flex-col gap-3">
+              <div className="rounded-md bg-mint p-3">
+                <p className="text-[12.5px] font-medium text-mint-deep">Check your email</p>
+                <p className="mt-1 text-[11.5px] leading-relaxed text-mint-deep">
+                  If an account exists for that address, a reset link is on its way.
+                </p>
+              </div>
+              {devResetLink && (
+                <div className="rounded-md border border-border bg-muted/40 p-3">
+                  <p className="text-[10.5px] font-medium uppercase tracking-[0.07em] text-faint">
+                    Dev mode — no mailbox
+                  </p>
+                  <p className="mt-1 text-[11.5px] text-muted-foreground">
+                    Email isn&apos;t configured (<code>MAIL_PROVIDER=console</code>). Use this link to
+                    set a new password:
+                  </p>
+                  <a
+                    href={devResetLink}
+                    className="mt-1.5 block break-all text-[11.5px] text-coral hover:underline"
+                  >
+                    {devResetLink}
+                  </a>
+                </div>
+              )}
             </div>
           ) : (
             <form action={requestPasswordReset} className="flex flex-col gap-3">

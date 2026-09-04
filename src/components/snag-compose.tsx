@@ -7,7 +7,12 @@ import { MultiPhotoCaptureInput } from "@/components/photo-capture";
 import { MultiVideoCaptureInput } from "@/components/video-capture";
 import { createClient } from "@/lib/data/client";
 import { uploadAttachment, type PhotoCapture, type VideoCapture } from "@/lib/media";
-import { postSnagUpdate, closeSnagDirectly, verifySnagClosure } from "@/app/(app)/warehouses/[id]/snag-actions";
+import {
+  postSnagUpdate,
+  closeSnagDirectly,
+  verifySnagClosure,
+  reopenSnag,
+} from "@/app/(app)/warehouses/[id]/snag-actions";
 
 async function attachDraftMedia(opts: {
   warehouseId: string;
@@ -95,6 +100,7 @@ export function SnagComposeArea({
   hasReporterTag,
   hasResolverTag,
   isDashboardAdmin,
+  canManage,
 }: {
   warehouseId: string;
   snagId: string;
@@ -103,9 +109,9 @@ export function SnagComposeArea({
   hasReporterTag: boolean;
   hasResolverTag: boolean;
   isDashboardAdmin: boolean;
+  canManage: boolean;
 }) {
   const isPureAdmin = isDashboardAdmin && !hasReporterTag && !hasResolverTag;
-  const isDualReal = hasReporterTag && hasResolverTag;
   const router = useRouter();
 
   const [body, setBody] = useState("");
@@ -114,15 +120,16 @@ export function SnagComposeArea({
   const [mediaKey, setMediaKey] = useState(0);
   const [etc, setEtc] = useState("");
   const [nextStatus, setNextStatus] = useState("");
-  // For someone tagged both reporter and resolver on this warehouse — which
-  // hat they're posting under this message. Not shown at all for a
-  // single-role person or a pure (untagged) admin, who each only have one
-  // shape of box.
-  const [actingAs, setActingAs] = useState<"reporter" | "resolver">(hasReporterTag ? "reporter" : "resolver");
+  // Reporter / Resolver no longer gate anything — any tagged member can do
+  // every task. The person's own role fixes which side of the chat feed their
+  // message sits on (resolver-only → right, everyone else → left); there is no
+  // longer a user-facing choice.
+  const composeSide: "reporter" | "resolver" =
+    hasResolverTag && !hasReporterTag ? "resolver" : "reporter";
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  if (!hasReporterTag && !hasResolverTag && !isDashboardAdmin) return null;
+  if (!canManage) return null;
 
   function resetDraft() {
     setBody("");
@@ -160,15 +167,17 @@ export function SnagComposeArea({
       setError("Add a comment before sending.");
       return;
     }
-    const as = isPureAdmin ? "resolver" : isDualReal ? actingAs : hasResolverTag ? "resolver" : "reporter";
+    // p_acting_as only sets the chat side; the RPC accepts ETC/status from any
+    // member regardless. A pure admin's author_side is forced to 'admin' by the
+    // RPC anyway.
     startTransition(async () => {
       const result = await postSnagUpdate(
         warehouseId,
         snagId,
         body,
-        as,
-        as === "resolver" ? etc || null : null,
-        as === "resolver" ? nextStatus || null : null
+        composeSide,
+        etc || null,
+        nextStatus || null
       );
       await afterAction(result);
     });
@@ -188,33 +197,41 @@ export function SnagComposeArea({
     });
   }
 
-  const showResolverControls =
-    isPureAdmin || (isDualReal && actingAs === "resolver") || (!isDualReal && !isPureAdmin && hasResolverTag);
-  const showReporterControls =
-    isPureAdmin || (isDualReal && actingAs === "reporter") || (!isDualReal && !isPureAdmin && hasReporterTag);
+  function reopen() {
+    startTransition(async () => {
+      const result = await reopenSnag(warehouseId, snagId, body || null);
+      await afterAction(result);
+    });
+  }
+
+  // A closed snag only offers one action: reopen it (with an optional note).
+  if (status === "closed") {
+    return (
+      <div className="rounded-md border border-border bg-background p-2.5">
+        <p className="mb-1.5 text-[11px] text-muted-foreground">
+          This snag is closed. Reopen it to add updates or change its status.
+        </p>
+        <textarea
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          rows={2}
+          placeholder="Why are you reopening this? (optional)"
+          className="w-full rounded-md border border-input bg-card px-2 py-1.5 text-[12.5px] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+        />
+        <div className="mt-1.5">
+          <Button size="sm" variant="outline" disabled={pending} onClick={reopen}>
+            {pending ? "Reopening…" : "Reopen snag"}
+          </Button>
+        </div>
+        {error && <p className="mt-1 text-[11px] text-destructive">{error}</p>}
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-md border border-border bg-background p-2.5">
       {isPureAdmin && (
         <p className="mb-1.5 text-[10px] uppercase tracking-[0.07em] text-faint">Commenting as Dashboard Admin</p>
-      )}
-      {isDualReal && (
-        <div className="mb-1.5 inline-flex rounded-md border border-border p-0.5 text-[11px]">
-          <button
-            type="button"
-            onClick={() => setActingAs("reporter")}
-            className={`rounded px-2 py-0.5 ${actingAs === "reporter" ? "bg-blush text-red-deep" : "text-muted-foreground"}`}
-          >
-            Commenting as Reporter
-          </button>
-          <button
-            type="button"
-            onClick={() => setActingAs("resolver")}
-            className={`rounded px-2 py-0.5 ${actingAs === "resolver" ? "bg-frost text-teal-deep" : "text-muted-foreground"}`}
-          >
-            Commenting as Resolver
-          </button>
-        </div>
       )}
 
       <textarea
@@ -234,30 +251,27 @@ export function SnagComposeArea({
         </div>
       </div>
 
-      {showResolverControls && (
-        <StatusControls etc={etc} setEtc={setEtc} nextStatus={nextStatus} setNextStatus={setNextStatus} />
-      )}
+      <StatusControls etc={etc} setEtc={setEtc} nextStatus={nextStatus} setNextStatus={setNextStatus} />
 
       <div className="mt-1.5 flex flex-wrap items-center gap-2">
         <Button size="sm" disabled={pending || !body.trim()} onClick={send}>
           {pending ? "Sending…" : "Send"}
         </Button>
 
-        {showReporterControls &&
-          (status === "ready_to_close" ? (
-            <>
-              <Button size="sm" variant="outline" disabled={pending} onClick={() => verify(false)}>
-                Reject — reopen
-              </Button>
-              <Button size="sm" disabled={pending} onClick={() => verify(true)}>
-                Confirm closed
-              </Button>
-            </>
-          ) : status !== "closed" ? (
-            <Button size="sm" variant="outline" disabled={pending} onClick={close}>
-              Close ticket
+        {status === "ready_to_close" ? (
+          <>
+            <Button size="sm" variant="outline" disabled={pending} onClick={() => verify(false)}>
+              Reject — reopen
             </Button>
-          ) : null)}
+            <Button size="sm" disabled={pending} onClick={() => verify(true)}>
+              Confirm closed
+            </Button>
+          </>
+        ) : (
+          <Button size="sm" variant="outline" disabled={pending} onClick={close}>
+            Close ticket
+          </Button>
+        )}
       </div>
       {error && <p className="mt-1 text-[11px] text-destructive">{error}</p>}
     </div>

@@ -62,6 +62,7 @@ function describeActivity(a: ActivityRow): string {
     case "verify_closure":
       return "closed this snag";
     case "reject_closure":
+    case "reopen":
       return "reopened this snag";
     case "duplicate_suppressed":
       return "raised this snag despite a possible duplicate match";
@@ -160,13 +161,13 @@ const SIDE_BOX_CLASS: Record<string, string> = {
 const SIDE_JUSTIFY_CLASS: Record<string, string> = {
   reporter: "justify-start",
   resolver: "justify-end",
-  admin: "justify-center",
+  admin: "justify-start",
 };
 
 const SIDE_ITEMS_CLASS: Record<string, string> = {
   reporter: "items-start",
   resolver: "items-end",
-  admin: "items-center",
+  admin: "items-start",
 };
 
 function ChatBubble({
@@ -303,6 +304,7 @@ export function SnagRow({
   hasReporterTag,
   hasResolverTag,
   isDashboardAdmin,
+  canManage,
   rolesByUserId,
   adminUserIds,
   currentUserId,
@@ -315,6 +317,7 @@ export function SnagRow({
   hasReporterTag: boolean;
   hasResolverTag: boolean;
   isDashboardAdmin: boolean;
+  canManage: boolean;
   rolesByUserId: Record<string, string[]>;
   adminUserIds: string[];
   currentUserId: string;
@@ -370,27 +373,27 @@ export function SnagRow({
 
   return (
     <>
-      <TableRow className="group cursor-pointer" onClick={toggleExpanded}>
-        <TableCell className={cn(STICKY_SNO_CLASS, "font-mono text-[11px] text-muted-foreground")}>
+      <TableRow className="group cursor-pointer text-foreground" onClick={toggleExpanded}>
+        <TableCell className={cn(STICKY_SNO_CLASS, "font-mono text-[11px] text-foreground")}>
           {String(s.serial_no).padStart(3, "0")}
         </TableCell>
-        <TableCell className={cn(STICKY_DATE_CLASS, "whitespace-nowrap font-mono text-[11px] text-muted-foreground")}>
+        <TableCell className={cn(STICKY_DATE_CLASS, "hidden md:table-cell whitespace-nowrap font-mono text-[11px] text-foreground")}>
           {fmtDate(s.date_raised)}
         </TableCell>
         <TableCell className={cn(STICKY_DESC_CLASS, "text-[12.5px] text-foreground")}>
           {s.description}
         </TableCell>
-        <TableCell className="max-w-[130px] truncate whitespace-nowrap text-[12px]">
+        <TableCell className="hidden max-w-[130px] truncate whitespace-nowrap text-[12px] text-foreground md:table-cell">
           {s.raised_by_profile?.full_name ?? s.raised_by_profile?.email ?? "—"}
         </TableCell>
-        <TableCell className="whitespace-nowrap text-[12px] text-muted-foreground">
+        <TableCell className="hidden whitespace-nowrap text-[12px] text-foreground md:table-cell">
           {CATEGORY_LABELS[s.category] ?? s.category}
         </TableCell>
-        <TableCell className="whitespace-nowrap text-[12px] text-muted-foreground">{subCategory}</TableCell>
-        <TableCell className="whitespace-nowrap text-[12px] text-muted-foreground">
+        <TableCell className="hidden whitespace-nowrap text-[12px] text-foreground md:table-cell">{subCategory}</TableCell>
+        <TableCell className="hidden whitespace-nowrap text-[12px] text-foreground md:table-cell">
           {LOCATION_LABELS[s.location] ?? s.location}
         </TableCell>
-        <TableCell className="whitespace-nowrap text-[12px] text-muted-foreground">
+        <TableCell className="hidden whitespace-nowrap text-[12px] text-foreground md:table-cell">
           {SCOPE_LABELS[s.scope] ?? s.scope}
         </TableCell>
         <TableCell className="text-center">
@@ -403,7 +406,7 @@ export function SnagRow({
             {STATUS_LABELS[s.status] ?? s.status}
           </span>
         </TableCell>
-        <TableCell className="w-[380px] min-w-[380px] max-w-[380px] whitespace-normal break-words text-[11px]">
+        <TableCell className="hidden w-[380px] min-w-[380px] max-w-[380px] whitespace-normal break-words text-[11px] md:table-cell">
           {latest ? (
             <>
               <div className="text-[11.5px] text-foreground">{latest.body}</div>
@@ -415,10 +418,10 @@ export function SnagRow({
             <span className="text-faint">No updates yet</span>
           )}
         </TableCell>
-        <TableCell className={`whitespace-nowrap font-mono text-[11px] ${overdue ? "text-red" : "text-muted-foreground"}`}>
+        <TableCell className={`hidden md:table-cell whitespace-nowrap font-mono text-[11px] ${overdue ? "text-red" : "text-foreground"}`}>
           {s.etc_date ? fmtDate(s.etc_date) : "not set"}
         </TableCell>
-        <TableCell className={`whitespace-nowrap font-mono text-[11px] ${ageingClass(days)}`}>{days}d</TableCell>
+        <TableCell className={`hidden md:table-cell whitespace-nowrap font-mono text-[11px] ${ageingClass(days)}`}>{days}d</TableCell>
       </TableRow>
       {expanded && (
         <TableRow>
@@ -459,17 +462,16 @@ export function SnagRow({
                   />
                 )
               )}
-              {s.status !== "closed" && (
-                <SnagComposeArea
-                  warehouseId={warehouseId}
-                  snagId={s.id}
-                  status={s.status}
-                  currentUserId={currentUserId}
-                  hasReporterTag={hasReporterTag}
-                  hasResolverTag={hasResolverTag}
-                  isDashboardAdmin={isDashboardAdmin}
-                />
-              )}
+              <SnagComposeArea
+                warehouseId={warehouseId}
+                snagId={s.id}
+                status={s.status}
+                currentUserId={currentUserId}
+                hasReporterTag={hasReporterTag}
+                hasResolverTag={hasResolverTag}
+                isDashboardAdmin={isDashboardAdmin}
+                canManage={canManage}
+              />
             </div>
           </TableCell>
         </TableRow>

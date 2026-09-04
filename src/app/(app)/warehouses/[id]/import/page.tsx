@@ -1,6 +1,5 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/data/server";
-import { REPORTER_ROLES } from "@/lib/roles";
 import { ImportForm } from "./import-form";
 
 export default async function ImportSnagsPage({
@@ -21,10 +20,9 @@ export default async function ImportSnagsPage({
 
   if (!warehouse) notFound();
 
-  // Dashboard Admin bypasses the reporter tag here too — matches raise_snag's RPC-level check.
-  const isReporter =
-    (membership ?? []).some((m) => REPORTER_ROLES.includes(m.role)) || (me?.is_dashboard_admin ?? false);
-  if (!isReporter) {
+  // Any tagged member (or Dashboard Admin) may raise/import now — roles no longer gate this.
+  const isMember = (membership ?? []).length > 0 || (me?.is_dashboard_admin ?? false);
+  if (!isMember) {
     redirect(`/warehouses/${id}`);
   }
 

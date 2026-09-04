@@ -7,6 +7,12 @@
 > This document is both the specification and the record. Sections marked **as built** were reconciled against the running code and database on 9 Aug 2026, most recently a full line-by-line audit on 18 Aug 2026. Where the build diverged from the original plan, the divergence is described rather than quietly overwritten.
 >
 > **⚠ Migrated off Supabase — 3 Sep 2026.** GoTrue (auth), PostgREST, and Supabase Storage were removed; the database is now a local Postgres. The *schema* (§3, §4, §15) is unchanged and still authoritative — it lives in `db/*.sql`. The *application-layer* description below and in §16 predates the migration: the request path, auth, and storage now work as described in `CLAUDE.md` → "Architecture", not as written here. §0 is updated; the rest of the prose is not yet reconciled.
+>
+> **⚠ Snag roles flattened + shared warehouse data + mobile shell — Sep 2026.** Three product changes landed after the migration and are **not yet threaded through every section below** — where §2, §5.7, and §15's snapshot still describe the old model, these three notes govern:
+> 1. **Roles flattened.** The Reporter/Resolver permission split is gone. `private.is_reporter()` and `private.is_resolver()` (`db/12_flatten_snag_roles.sql`) both now `select private.is_warehouse_member(warehouse_id)`, so **any tagged member (or Dashboard Admin) can do every task on a snag** — raise, comment, set ETC, change status, close, verify, reopen, set the go-live date. The 6 `member_role` values are labels only: they pick a person's default *side* in the chat feed and their badge colour (`REPORTER_ROLES`/`RESOLVER_ROLES`/`ROLE_COLOR_CLASS` in `lib/roles.ts`), nothing more. The acting-as toggle in the compose box was removed (§5.7.1).
+> 2. **Reopen a closed snag.** New RPC `public.reopen_snag(p_snag_id, p_body)` (`db/13_reopen_snag.sql`) — any member or admin; `closed → wip`, clears `closed_at`/`verified_by`/`verified_at`, logs a `reopen` `snag_activity` row, optional chat message. Surfaced at the bottom of the chat for closed snags (§5.7.1). `post_snag_update` was also reopened to accept ETC/status from anyone (`db/14_post_snag_update_open.sql`).
+> 3. **Handover documents & Machine and Controller Details.** Two new cards on the warehouse detail page, between the snag table and the Team block — a 15-item commissioning-document checklist with upload/download/history, and an unlimited list of chamber machine specs. New tables in `db/11_handover_and_chambers.sql`. Write access is **any tagged member or admin**. Full description in §5.7.2.
+> 4. **Mobile-responsive shell.** The app shell, snag table, admin tables, and filter bar now adapt to phone/tablet widths (off-canvas sidebar drawer below `md`, column hiding, larger tap targets, collapsible filters, an explicit `viewport` export). Described in `DESIGN.md` → "Responsive — as built".
 
 ---
 
@@ -99,6 +105,8 @@ The rest of this document specifies *how* things are built. This section exists 
 
 ### 2.1 Roles
 
+> **⚠ Superseded by the Sep 2026 role-flatten (see the banner at the top).** Everything in this section describing what a role *lets a person do* no longer holds: `is_reporter()`/`is_resolver()` both resolve to `is_warehouse_member()`, so any tagged member can do every snag task. The role table below now only describes each role's **default chat side** (Reporters → left, Resolvers → right) and **badge colour**. The per-warehouse mechanics and the sync-by-hand note are still accurate as *structure*; they just no longer gate anything.
+
 **Roles are per warehouse.** A person's capability is decided by their `warehouse_members.role` in *that* warehouse — so someone can be Program Manager (Infra) on one warehouse and PMO on another. `Dashboard Admin` is the one exception: it is global, held on `profiles`.
 
 | Category | Roles (per warehouse) | Rights in that warehouse |
@@ -131,6 +139,8 @@ Original rationale for stopping there: keep operational accountability with the 
 The three pages that gate their own UI on reporter/resolver status (`warehouses/[id]/page.tsx`, `snags/new/page.tsx`, `import/page.tsx`) all OR in the same admin check, so the buttons and the RPCs agree. Verified two ways: live end-to-end (raised, then deleted, a real snag as Dashboard Admin on a warehouse with zero membership) and by a database-wide query for every RLS policy and `SECURITY DEFINER` function still referencing `is_reporter`/`is_resolver` without `is_dashboard_admin` — zero remaining after the fixes above. `snag_activity` still records the admin's own `actor_id`, so the audit trail stays accurate even though the accountability boundary is gone.
 
 Read access remains the other place Dashboard Admin status does something automatically: an admin can read every snag in every warehouse without being tagged to any of them (§2.3). A non-admin user with no `warehouse_members` row anywhere sees nothing.
+
+**Sep 2026 role-flatten — most of this section is now moot for *tagged members*.** Since `is_reporter()`/`is_resolver()` both became `is_warehouse_member()`, every "bypasses the reporter/resolver tag" clause above still stands, but it now only matters for a Dashboard Admin who is *not* tagged to the warehouse at all — a tagged member already has full snag rights without needing admin status. The `is_dashboard_admin()` OR was kept in every RPC and RLS policy (including the two attachment insert policies) and extended to the two new paths: `reopen_snag` (`db/13`) and the reopened `post_snag_update` (`db/14`), plus the two `warehouse_asset_activity`/handover/chamber write policies (§5.7.2). `snag_activity` still records the admin's own `actor_id`; a `reopen` action is logged there like any other status change.
 
 Power 3 (`date_raised` correction) predates this change and is unaffected — a wrong raise date distorts ageing and burn-down for everyone and there is no one else positioned to fix it. Every such edit is written to `snag_activity` with the old and new value.
 
@@ -636,7 +646,12 @@ S.No, Date and Description are reordered to the front and pinned (§ sticky colu
 - `Add Snag` / `Add Update` shown only if you are tagged here
 - Expanding a row shows the update thread (§5.7.1)
 
-### 5.7.1 Update thread — **rebuilt as a two-sided chat (14 Aug 2026)**
+### 5.7.1 Update thread — **rebuilt as a two-sided chat (14 Aug 2026), then de-toggled for the Sep 2026 role-flatten**
+
+> **⚠ Sep 2026 changes to this section:**
+> - **The compose box has no acting-as toggle any more.** Every tagged member sees the *same* full box — comment, photo, video, ETC date, status dropdown, and the close / confirm / reject buttons. There is no "Commenting as Reporter / Resolver" switch. `snag-compose.tsx` still computes a `composeSide` (`resolver` if the person holds only a Resolver-list role, else `reporter`) so the message lands on the right side of the feed, but the person never picks it and never sees it named. `p_acting_as` is still passed to `post_snag_update` and still snapshotted into `author_side`; it is now derived, not chosen.
+> - **Admin comments render on the left.** `author_side = 'admin'` now sits on the **left** with the reporter side (was centered/neutral before). A Dashboard Admin with no tag on the warehouse gets the same single box, with a quiet "Commenting as Dashboard Admin" line instead of a toggle.
+> - **A closed snag *does* have a compose area** — a compact reopen-only form: a note that the snag is closed, an optional "why are you reopening this?" textarea, and a "Reopen snag" button calling `reopen_snag` (§2.2, `db/13`). The full compose box returns once the snag is back to WIP. (This reverses the 17 Aug 2026 "a closed snag has no compose box at all" decision below.)
 
 The expanded row was originally a single dot-and-line-connected timeline (resolver updates only, reporters had no way to comment) plus a separate collapsed "View history" toggle for the `snag_activity` audit log. Both are gone, replaced by one merged, chronological feed:
 
@@ -667,6 +682,29 @@ No real-time push: the other party sees a new message on their own next action o
 - **The panel now reads as a distinct screen, not more table.** It sits on `bg-background` (the page's warm `--ground` tone) inside a bordered block with its own padding and a small "SNAG #N — UPDATES" micro-label header, instead of sharing the table body's plain white `bg-card` — the two were visually indistinguishable before this pass.
 - **The badge's real-role-first rule got one more tier.** A message from someone with no current tag on this warehouse but real Dashboard Admin status now shows "Dashboard Admin" — not the generic bucket label. This mattered most for the raise bubble, which always sits on the reporter side for positioning regardless of who raised it; an admin bypassing to raise a snag was showing "Reporter" on their own message, which isn't true of them. Priority is now: real tagged role(s) on this warehouse > "Dashboard Admin" (untagged admin) > the generic side bucket, the last-resort case for someone with neither (e.g. removed from the org, message kept for the record). See `roleTextFor()` in `snag-row.tsx`.
 - **Photo and video pickers accept more than one file each (17 Aug 2026).** `MultiPhotoCaptureInput`/`MultiVideoCaptureInput` (`components/photo-capture.tsx`, `components/video-capture.tsx`) wrap the original single-item editors: each captured item is a "draft" the picker resets to its empty state after an explicit "+ Add this photo/video" tap, appending it to a list of thumbnail chips rather than replacing the one slot the original components managed. `attachDraftMedia` uploads the whole list sequentially (`snag-photo-1.jpg`, `snag-photo-2.jpg`, …) against the same `updateId`, since `attachments` was already a proper join table with no per-snag/per-update row limit — no schema change needed. The Add Snag form's photo field (§5.8) got the same treatment; its offline-queue path (`lib/offline-queue.ts`'s `QueuedSnag.photos`) and sync (`lib/sync-queue.ts`) were updated to carry an array instead of three single-blob fields. Testing this surfaced (and fixed, same day) a pre-existing gap: `postSnagUpdate`'s `revalidatePath` runs before `attachDraftMedia` even starts its client-side upload, so the text bubble appeared immediately but its attachments didn't — not even for the sender — until some later, unrelated refresh. `SnagComposeArea`'s `afterAction` now calls `router.refresh()` once the upload resolves.
+
+---
+
+### 5.7.2 Handover documents & Machine and Controller Details — **new cards (Sep 2026)**
+
+Two cards on the warehouse detail page, rendered **between the snag table and the Team block**. Both are open to **anyone tagged to the warehouse** (any role) and to Dashboard Admins — not a reporter-only or resolver-only surface. Backed by `db/11_handover_and_chambers.sql`; server actions in `src/app/(app)/warehouses/[id]/asset-actions.ts`; components `handover-documents.tsx` and `chamber-details.tsx`.
+
+**Handover documents** — a fixed 15-item commissioning-document checklist (HOTO set). The list of document names lives as reference rows in `handover_document_types` (fixed UUIDs `11111111-1111-4111-8111-0000000000NN`, `sort_order` 1–15; names are inline in the SQL). Per warehouse, each item is one `warehouse_handover_documents` row (`unique (warehouse_id, doc_type_id)`).
+
+- **Collapsed by default**, with an Expand / Collapse button on the card's header strip (same `bg-line` tone as the snag-table header). Header also shows an "X of Y uploaded" count.
+- Each row: a bold filled-square indicator (filled + checkmark when a file is attached, empty otherwise), the document name, an inline **Download** link when a file exists, and a per-row **History** button when that document has any activity.
+- **The tick is automatic.** `checked` is set `true` on upload and back to `false` on remove — there is no user-operated checkbox. A DB `CHECK` constraint (`checked_requires_file`) enforces `checked = false OR file_url IS NOT NULL`.
+- **Upload / Replace** and a small **×** remove control show only when `canEdit`. Files reuse the `attachments` bucket under a `{warehouse_id}/handover/` prefix and the existing `/api/attachments/[...path]` serve route; replacing or removing deletes the old blob.
+- **History** opens a modal (`HistoryModal`) titled "History" with the document name as a subtitle, listing every upload / replace / remove for that one document — timestamp, actor, action — read from `warehouse_asset_activity` (`area = 'handover_document'`, `ref_label` = the document name).
+
+**Machine and Controller Details** — an unlimited list of chambers, one `warehouse_chambers` row each. Fields: **Chamber name**, **No. of machines** (int), **Capacity (kW)** (`real`), **ODU model**, **IDU model**, **Controller model**.
+
+- Header strip carries a "**+ Add Chamber**" button (shown when `canEdit`). Adding reveals an inline draft row of inputs; Save / Cancel.
+- Existing rows show inline with an **Edit** button and a **×** delete (both `canEdit` only). Edit swaps the row for the same inline input set.
+- On narrow screens the row stacks and each cell gets its own `sm:hidden` label (`CellLabel`) since the column header row is hidden below `sm`.
+- Every add / edit / delete is logged to `warehouse_asset_activity` (`area = 'chamber'`).
+
+**`warehouse_asset_activity`** is a shared append-only audit table for both cards (`warehouse_id`, `actor_id → profiles(id)`, `area`, `ref_label`, `action`, `detail`, `created_at`). It is in the shim's `EMBED_FK` map as `warehouse_asset_activity.actor → actor_id`. RLS: select for members/admins; insert for members/admins. The server actions also re-check membership up front (`assertMember`), because an RLS-blocked `UPDATE`/`INSERT` is a silent 0-row no-op rather than an error.
 
 ---
 
@@ -1021,6 +1059,14 @@ This changes what "keeping this document accurate" means going forward: §16 is 
 ## 15. Full SQL reference — every table, function, view, trigger, and RLS policy, as deployed
 
 **Why this section exists.** §3 and §4 describe the schema and permission model in prose — enough to understand and extend it, but not enough to reproduce it byte-for-byte from a from-scratch environment with no live database to inspect. This section is the literal, verified `pg_get_functiondef`/`pg_get_constraintdef`/`pg_policies` output pulled directly from the running project on 18 Aug 2026, so a rebuild doesn't have to re-derive exact exception messages, exact check ordering, or exact predicate text from behavioral descriptions. Apply in this order: extensions (§0) → enum types → tables → views → functions → triggers → RLS policies. If this section and the prose above it ever disagree after a future change, **this section is stale, not wrong-by-design** — update it from the live project the same way it was built.
+
+> **⚠ This snapshot predates `db/11`–`db/14` (Sep 2026) and does not include them.** Since the snapshot was taken, the numbered SQL files added:
+> - `db/11_handover_and_chambers.sql` — tables `handover_document_types`, `warehouse_handover_documents` (with the `checked_requires_file` CHECK), `warehouse_chambers`, `warehouse_asset_activity`; their `*_set_updated_at` triggers; and their select/insert/write RLS policies (member-or-admin). See §5.7.2.
+> - `db/12_flatten_snag_roles.sql` — redefines `private.is_reporter()` / `private.is_resolver()` to `select private.is_warehouse_member($1)`. The function bodies in §15.4 below still show the old role-list logic.
+> - `db/13_reopen_snag.sql` — adds `public.reopen_snag(uuid, text)`.
+> - `db/14_post_snag_update_open.sql` — replaces `public.post_snag_update(...)` to drop the reporter-can't-set-ETC/status block. The §15.4 body is the pre-change version.
+>
+> Regenerate this whole section from the running DB (after `db/build.sh`) to pick these up.
 
 ### 15.1 Enum types
 

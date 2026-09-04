@@ -11,6 +11,7 @@ nothing.
 | `00_bootstrap.sql` | schemas (`public`, `private`, `extensions`, `auth`, `storage`); extensions `pgcrypto` / `pg_trgm` / `uuid-ossp` in the `extensions` schema; GUC-backed `auth.uid()` / `auth.jwt()` / `auth.role()` / `auth.email()`; `storage.foldername()` etc.; role grants |
 | `01_auth_storage_shim.sql` | minimal `auth.users` / `auth.identities` / `storage.buckets` / `storage.objects` tables (column lists match the pg_dump COPYs from the old project) |
 | `10_schema.sql` | the application schema — 11 tables, 2 views, 18 functions, ~21 RLS policies, 34 indexes, triggers, grants. Pulled from the live Supabase project with `pg_dump --schema=public --schema=private`, minus Supabase-only `ALTER DEFAULT PRIVILEGES … TO anon` lines |
+| `11_handover_and_chambers.sql` | Handover-documents + Machine/Controller-details feature: `handover_document_types` (15 reference rows, inline), `warehouse_handover_documents`, `warehouse_chambers`, `warehouse_asset_activity`, their RLS (members read, reporters/admin write) and triggers |
 | `20_post.sql` | the `on_auth_user_created` trigger and the two `storage.objects` bucket policies (they live in the gap between the two dump slices) |
 
 ## Build

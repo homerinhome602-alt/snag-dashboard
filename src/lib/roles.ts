@@ -37,11 +37,11 @@ export const ROLE_COLOR_CLASS: Record<string, string> = {
   warehouse_admin: "bg-line-soft text-foreground border-line",
 };
 
-// PLAN.md §2.1: reporters raise snags, resolvers drive them to close.
-// Typed as string[] (not MemberRole[]) since these are checked against
-// loosely-typed values coming back from the database client. Must match
-// private.is_reporter()/is_resolver() in Postgres exactly — those are the
-// functions actually enforcing this everywhere it matters (RLS, RPCs);
-// these arrays only drive which controls the UI shows.
+// Reporter / Resolver are organisational labels only — as of the role-flatten
+// migration (db/12_flatten_snag_roles.sql) any tagged warehouse member can do
+// every snag task, and private.is_reporter()/is_resolver() in Postgres both
+// just return private.is_warehouse_member(). These arrays now only pick a
+// person's default *side* in the sided chat feed and their compose-box badge
+// colour; they gate nothing.
 export const REPORTER_ROLES: string[] = ["operations", "hvac_engineer", "warehouse_admin"];
 export const RESOLVER_ROLES: string[] = ["program_manager_infra", "pmc", "pmo"];

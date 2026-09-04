@@ -31,7 +31,7 @@ echo "==> (re)create database $DB"
 $BIN/dropdb   -h localhost -p "$PGPORT" --if-exists --force "$DB"   # --force: kick any open sessions (e.g. a running dev server)
 $BIN/createdb -h localhost -p "$PGPORT" "$DB"
 
-for f in "$HERE"/00_bootstrap.sql "$HERE"/01_auth_storage_shim.sql "$HERE"/10_schema.sql; do
+for f in "$HERE"/00_bootstrap.sql "$HERE"/01_auth_storage_shim.sql "$HERE"/10_schema.sql "$HERE"/11_handover_and_chambers.sql "$HERE"/12_flatten_snag_roles.sql "$HERE"/13_reopen_snag.sql "$HERE"/14_post_snag_update_open.sql; do
   echo "==> $(basename "$f")"
   $PSQL -d "$DB" -f "$f"
 done
