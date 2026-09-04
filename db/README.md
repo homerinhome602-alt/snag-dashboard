@@ -11,8 +11,11 @@ nothing.
 | `00_bootstrap.sql` | schemas (`public`, `private`, `extensions`, `auth`, `storage`); extensions `pgcrypto` / `pg_trgm` / `uuid-ossp` in the `extensions` schema; GUC-backed `auth.uid()` / `auth.jwt()` / `auth.role()` / `auth.email()`; `storage.foldername()` etc.; role grants |
 | `01_auth_storage_shim.sql` | minimal `auth.users` / `auth.identities` / `storage.buckets` / `storage.objects` tables (column lists match the pg_dump COPYs from the old project) |
 | `10_schema.sql` | the application schema — 11 tables, 2 views, 18 functions, ~21 RLS policies, 34 indexes, triggers, grants. Pulled from the live Supabase project with `pg_dump --schema=public --schema=private`, minus Supabase-only `ALTER DEFAULT PRIVILEGES … TO anon` lines |
-| `11_handover_and_chambers.sql` | Handover-documents + Machine/Controller-details feature: `handover_document_types` (15 reference rows, inline), `warehouse_handover_documents`, `warehouse_chambers`, `warehouse_asset_activity`, their RLS (members read, reporters/admin write) and triggers |
-| `20_post.sql` | the `on_auth_user_created` trigger and the two `storage.objects` bucket policies (they live in the gap between the two dump slices) |
+| `11_handover_and_chambers.sql` | Handover-documents + Machine/Controller-details feature: `handover_document_types` (15 reference rows, inline — **not** in `seed/`), `warehouse_handover_documents`, `warehouse_chambers`, `warehouse_asset_activity`, their RLS (any tagged member or admin reads and writes) and `updated_at` triggers |
+| `12_flatten_snag_roles.sql` | redefines `private.is_reporter()` / `private.is_resolver()` to both `select private.is_warehouse_member($1)` — the Sep 2026 role-flatten, so any tagged member can do every snag task |
+| `13_reopen_snag.sql` | `public.reopen_snag(p_snag_id uuid, p_body text)` — moves a `closed` snag back to `wip`, clears the closure fields, logs a `reopen` `snag_activity` row, optional chat message |
+| `14_post_snag_update_open.sql` | replaces `public.post_snag_update(...)` — drops the "reporters may not set ETC or status" block so any member can; keeps the wip/ready_to_close status guard |
+| `20_post.sql` | the `on_auth_user_created` trigger and the two `storage.objects` bucket policies (they live in the gap between the two dump slices). **Applied after the seed load**, not in lexical order — see `build.sh` |
 
 ## Build
 
@@ -29,16 +32,19 @@ db/build.sh --with-data     # + load db/seed/*.sql and copy db/seed/attachments/
 
 `seed/01_auth-data.sql`, `seed/02_storage-data.sql`, `seed/10_public-data.sql` and
 `seed/attachments/` are a `pg_dump` of a small working dataset (3 users, 4
-warehouses, 10 snags, 15 image files ≈ 900 KB). `--with-data` loads it so a fresh
-clone comes up fully populated. `build.sh` then resets `snag_counter` to
-`max(serial_no)` per warehouse.
+warehouses, 10 snags, plus one uploaded handover document and its activity trail,
+~16 files ≈ 900 KB). `--with-data` loads it so a fresh clone comes up fully
+populated. `build.sh` then resets `snag_counter` to `max(serial_no)` per
+warehouse. `10_public-data.sql` **excludes `handover_document_types`** — those 15
+reference rows are created inline by `11_handover_and_chambers.sql`, so seeding
+them again would collide.
 
 **The seed contains real email addresses and bcrypt password hashes.** Keep this
 repo private, or replace `seed/` with scrubbed data before making it public. To
 refresh the seed from your local DB:
 
 ```bash
-pg_dump -h localhost -p 5433 -d snagdash --data-only --no-owner --schema=public --disable-triggers -f db/seed/10_public-data.sql
+pg_dump -h localhost -p 5433 -d snagdash --data-only --no-owner --schema=public --disable-triggers --exclude-table=public.handover_document_types -f db/seed/10_public-data.sql
 pg_dump -h localhost -p 5433 -d snagdash --data-only --no-owner --table=auth.users --table=auth.identities -f db/seed/01_auth-data.sql
 pg_dump -h localhost -p 5433 -d snagdash --data-only --no-owner --table=storage.buckets --table=storage.objects -f db/seed/02_storage-data.sql
 cp -R .storage/attachments/. db/seed/attachments/

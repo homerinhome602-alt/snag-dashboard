@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict 5nhYTvh55tozn5Wpvv1c7o3D282aefOAyNscvbooeB4rbWhLefQRPLcza8EMRlN
+\restrict AejDGNezpVfV8jIje9zV44Ji0F7hotehljAxL8wGaCKExBfvJwgHyTnArvJBBwm
 
 -- Dumped from database version 17.11 (Homebrew)
 -- Dumped by pg_dump version 17.11 (Homebrew)
@@ -99,6 +99,7 @@ b012f709-e1a1-4a61-9650-b22e02ea90d4	a118859f-10f4-41f8-8ea6-dae689ed9832	dd	dc3
 b6319b52-3ab6-4b49-849f-b6050bfb27b4	7fcbf962-615b-4c9a-bc1b-cdd965c20f4e	the import is success	dc371e39-3e0e-4e95-bf30-c6c3da564997	2026-08-18 12:20:23.023266+05:30	admin
 6305efe5-6053-4b4c-b9f0-26902250cc05	7fcbf962-615b-4c9a-bc1b-cdd965c20f4e	yes	dc371e39-3e0e-4e95-bf30-c6c3da564997	2026-08-18 12:20:53.568398+05:30	admin
 b238fd0d-6004-4a98-a547-a45f827fc9bd	7fcbf962-615b-4c9a-bc1b-cdd965c20f4e	pls close	dc371e39-3e0e-4e95-bf30-c6c3da564997	2026-08-18 12:21:08.096766+05:30	admin
+aa3e2481-6766-4eed-92ec-3f4cb88eed2a	7e45f6a5-d1a1-4f6d-8718-37117f24dc93	This issue is still pending and there is no resolve. We need to work on this fast, and the fan motor is not working, and oil is issue	dc371e39-3e0e-4e95-bf30-c6c3da564997	2026-09-04 17:16:23.882796+05:30	admin
 \.
 
 
@@ -298,6 +299,50 @@ b1ed2cbb-57a4-4b21-a22a-a81b5f35a0cf	1b43d12b-bd23-4f7f-beb5-9ac1c06fb485	dc371e
 ALTER TABLE public.warehouse_activity ENABLE TRIGGER ALL;
 
 --
+-- Data for Name: warehouse_asset_activity; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+ALTER TABLE public.warehouse_asset_activity DISABLE TRIGGER ALL;
+
+COPY public.warehouse_asset_activity (id, warehouse_id, actor_id, area, ref_label, action, detail, created_at) FROM stdin;
+747ac28f-2a67-46c0-b1fd-1842b85da8b5	8f25ba18-4b57-45ca-a243-b6b36ef43355	dc371e39-3e0e-4e95-bf30-c6c3da564997	chamber	frozen chamber	add	\N	2026-09-04 13:52:34.067388+05:30
+5841c4b7-11a7-49e8-abce-fc6be66a7327	8f25ba18-4b57-45ca-a243-b6b36ef43355	dc371e39-3e0e-4e95-bf30-c6c3da564997	chamber	frozen chamber	edit	\N	2026-09-04 13:52:38.727372+05:30
+f41f1339-34bc-4aec-b9b6-188837727841	8f25ba18-4b57-45ca-a243-b6b36ef43355	dc371e39-3e0e-4e95-bf30-c6c3da564997	handover_document	Design layout - highlighting dimensions of all rooms and doors	upload	sample.docx	2026-09-04 13:43:16.350006+05:30
+4a305de7-4be9-4494-bb58-0b4f394d177e	8f25ba18-4b57-45ca-a243-b6b36ef43355	dc371e39-3e0e-4e95-bf30-c6c3da564997	handover_document	Design layout - highlighting dimensions of all rooms and doors	remove	\N	2026-09-04 13:43:23.508664+05:30
+73b75275-a975-4fcc-a8b9-46859db84d90	8f25ba18-4b57-45ca-a243-b6b36ef43355	dc371e39-3e0e-4e95-bf30-c6c3da564997	handover_document	Design layout - highlighting dimensions of all rooms and doors	upload	sample.docx	2026-09-04 13:43:28.303854+05:30
+deb064a2-f403-4193-8f0c-b76a3ed32b1f	8f25ba18-4b57-45ca-a243-b6b36ef43355	dc371e39-3e0e-4e95-bf30-c6c3da564997	handover_document	Design layout - highlighting dimensions of all rooms and doors	check	\N	2026-09-04 13:44:33.032721+05:30
+e536e101-6283-4604-8f89-b80250b9f678	8f25ba18-4b57-45ca-a243-b6b36ef43355	dc371e39-3e0e-4e95-bf30-c6c3da564997	chamber	frozen chamber	delete	\N	2026-09-04 14:17:29.359178+05:30
+\.
+
+
+ALTER TABLE public.warehouse_asset_activity ENABLE TRIGGER ALL;
+
+--
+-- Data for Name: warehouse_chambers; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+ALTER TABLE public.warehouse_chambers DISABLE TRIGGER ALL;
+
+COPY public.warehouse_chambers (id, warehouse_id, chamber_name, machine_count, odu_model, idu_model, controller_model, created_by, updated_by, created_at, updated_at, machine_capacity_kw) FROM stdin;
+\.
+
+
+ALTER TABLE public.warehouse_chambers ENABLE TRIGGER ALL;
+
+--
+-- Data for Name: warehouse_handover_documents; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+ALTER TABLE public.warehouse_handover_documents DISABLE TRIGGER ALL;
+
+COPY public.warehouse_handover_documents (id, warehouse_id, doc_type_id, file_url, file_name, file_size, uploaded_by, uploaded_at, checked, checked_by, checked_at, created_at, updated_at) FROM stdin;
+6695679d-95d5-4b49-93d0-ed8339f9c6cd	8f25ba18-4b57-45ca-a243-b6b36ef43355	11111111-1111-4111-8111-000000000001	8f25ba18-4b57-45ca-a243-b6b36ef43355/handover/11111111-1111-4111-8111-000000000001-ab575260.docx	sample.docx	9978	dc371e39-3e0e-4e95-bf30-c6c3da564997	2026-09-04 13:43:28.298+05:30	t	dc371e39-3e0e-4e95-bf30-c6c3da564997	2026-09-04 13:44:33.021+05:30	2026-09-04 13:43:16.226899+05:30	2026-09-04 13:44:33.02261+05:30
+\.
+
+
+ALTER TABLE public.warehouse_handover_documents ENABLE TRIGGER ALL;
+
+--
 -- Data for Name: warehouse_members; Type: TABLE DATA; Schema: public; Owner: -
 --
 
@@ -320,5 +365,5 @@ ALTER TABLE public.warehouse_members ENABLE TRIGGER ALL;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict 5nhYTvh55tozn5Wpvv1c7o3D282aefOAyNscvbooeB4rbWhLefQRPLcza8EMRlN
+\unrestrict AejDGNezpVfV8jIje9zV44Ji0F7hotehljAxL8wGaCKExBfvJwgHyTnArvJBBwm
 
