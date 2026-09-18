@@ -2,7 +2,7 @@
 
 **Direction:** Thermal gradient (A), with the snag table adopting the denser mono treatment from Panel & seam (B).
 
-**Status:** Built and verified against the running code on 9 Aug 2026, most recently re-checked 18 Aug 2026 as part of a full plan/design/CLAUDE.md audit. The palette and all three typefaces shipped as specified — see §Implementation for how they are wired, and for the layout and motion behaviour added during live testing.
+**Status:** Built and verified against the running code on 9 Aug 2026, most recently re-checked 18 Sep 2026 (two corrections made — the auth-card gradient strip and the People-screen status count, both stale after the 18 Sep 2026 auth rewrite; see PLAN.md §5.1/§5.6) as part of a full plan/design/CLAUDE.md consistency pass. The palette and all three typefaces shipped as specified — see §Implementation for how they are wired, and for the layout and motion behaviour added during live testing.
 
 ---
 
@@ -98,13 +98,13 @@ The triangular marker's fill is a separate small map, keyed by the same RAG colo
 
 It is a **gauge, not a progress bar** — the scale is fixed and identical on every card, so warehouses can be compared against each other at a glance rather than each against itself. Marker position derives from the readiness formula in `PLAN.md` §5.2.1.
 
-**Reused at reduced scale as a top edge on the auth cards — corrected 19 Aug 2026, was previously mis-stated as "and on modal headers".** Verified by searching the whole codebase for this pattern: it appears on exactly three pages — `/login`, `/set-password`, `/forgot-password` — and **not** on `/auth/update-password` (that page's card has no top strip at all) and not on any modal (`duplicate-check-modal.tsx` has none). It's also not literally the same array as the main thermometer's 10 stops, scaled down — it's a separately hardcoded 8-stop gradient, defined identically (copy-pasted, not shared/imported) in each of the three page files as a local `THERMOMETER` constant:
+**Reused at reduced scale as a top edge on the auth card — corrected 19 Aug 2026, was previously mis-stated as "and on modal headers"; corrected again 18 Sep 2026 for the same reason it needed correcting the first time (verify, don't infer from a prior description).** `/set-password`, `/forgot-password`, and `/auth/update-password` are gone entirely (PLAN.md §5.1, 18 Sep 2026 auth rewrite) — `/login` is the only page left in the app, auth or otherwise, and it still carries this strip. Not literally the same array as the main thermometer's 10 stops, scaled down — it's a separately hardcoded 8-stop gradient, a local `THERMOMETER` constant in `src/app/login/page.tsx`:
 
 ```
 ["#DCEAEE", "#E4EBEA", "#EDEAE5", "#F5E7E0", "#FBE4DE", "#F2C7BB", "#E89484", "#C75B4E"]
 ```
 
-Rendered as 8 equal-width `h-1.5` flex segments across the top of the auth card.
+Rendered as 8 equal-width `h-1.5` flex segments across the top of the login card.
 
 When a warehouse has no go-live date, the thermometer collapses to a single inert grey band — absence of a scale, not a zero reading.
 
@@ -250,7 +250,7 @@ Most screens share one **page container** pattern, applied inline at each `page.
 
 **Warehouse Management** (`/warehouses/manage`) — page container, h1 "Warehouse management" (`mb-4`), then: a bordered card (`mb-5 rounded-card border bg-card p-4`) holding the "Add new warehouse code" label, a `max-w-xs` text input, and the Create button in one `flex flex-wrap gap-2` row; then a `flex items-center justify-between` row pairing the status filter with the "Click a row to see its status history." hint; then the warehouse table.
 
-**People Management** (`/admin/users`) — page container, header row (`flex items-baseline justify-between`, `mb-1`) with h1 "People" left and the "N active · N invited" count right; a subtitle paragraph (`max-w-[60ch]`, §5.9); the invite form (email input, Role select, Warehouse multi-select, Send invite button, all in one `flex flex-wrap items-center gap-2` row); the "Click a row to see its change history." hint; the table.
+**People Management** (`/admin/users`) — page container, header row (`flex items-baseline justify-between`, `mb-1`) with h1 "People" left and the **"N active · N deactivated"** count right (was "N active · N invited" — corrected 18 Sep 2026: status is binary now, there's no third "invited" count to show, PLAN.md §5.6); a subtitle paragraph (`max-w-[60ch]`, §5.9); the invite form (email input, Role select, Warehouse multi-select, Send invite button, all in one `flex flex-wrap items-center gap-2` row); the "Click a row to see its change history." hint; the table.
 
 **About the page** (`/about`) — page container capped narrower (`max-w-screen-md`); h1, then **two** intro paragraphs (the second states plainly that there's no raise/fix split — anyone tagged can do every task). **Rewritten Sep 2026** for the role-flatten: the old `grid-cols-1 sm:grid-cols-2` Reporters/Resolvers two-card grid is gone. Now three stacked full-width cards (`rounded-card border bg-card p-4`, `mt-3` between them): "On a snag, anyone tagged can" (7-item list), "Everyone tagged to a warehouse" (handover docs + chambers), and "The roles people hold" (all 6 `MEMBER_ROLES` chips via `ROLE_COLOR_CLASS`, `REPORTER_ROLES` first and the rest `order-last`, framed as chat-side + badge-colour labels only). Chips are `rounded-pill border px-2 py-1.5 text-[11px] sm:py-0.5` (the taller padding below `sm` is the same touch-target reasoning as Button `sm`). Still never mentions Dashboard Admin.
 

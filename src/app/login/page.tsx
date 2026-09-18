@@ -1,18 +1,22 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { signInWithPassword } from "./actions";
+import { signInWithEmail } from "./actions";
 
 const THERMOMETER = ["#DCEAEE", "#E4EBEA", "#EDEAE5", "#F5E7E0", "#FBE4DE", "#F2C7BB", "#E89484", "#C75B4E"];
 
+// Sign-in has no invitation gate and no deactivation gate — any email gets
+// in, active or deactivated; access to warehouses is governed separately
+// (private.is_active_user() + warehouse tagging, db/10_schema.sql). The only
+// ways this can fail:
 const ERROR_COPY: Record<string, { title: string; body: string }> = {
-  not_invited: {
-    title: "This email isn't set up yet",
-    body: "We don't have an invitation for that address. Ask your dashboard admin to add it, then sign in with that exact address.",
+  missing_email: {
+    title: "Enter your email",
+    body: "An email address is required to sign in.",
   },
-  invalid_credentials: {
+  unknown: {
     title: "Couldn't sign you in",
-    body: "That email and password combination doesn't match an account.",
+    body: "Something went wrong. Try again in a moment.",
   },
 };
 
@@ -22,7 +26,7 @@ export default async function LoginPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   const { error } = await searchParams;
-  const errorInfo = error ? ERROR_COPY[error] : undefined;
+  const errorInfo = error ? ERROR_COPY[error] ?? ERROR_COPY.unknown : undefined;
 
   return (
     <div className="flex flex-1 items-center justify-center bg-background px-6 py-12">
@@ -49,38 +53,17 @@ export default async function LoginPage({
             </div>
           )}
 
-          <form action={signInWithPassword} className="flex flex-col gap-3">
+          <form action={signInWithEmail} className="flex flex-col gap-3">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="email" className="text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
-                Work email
+                Email
               </Label>
               <Input id="email" name="email" type="email" placeholder="priya@company.com" required />
             </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="password" className="text-[10.5px] uppercase tracking-[0.07em] text-muted-foreground">
-                Password
-              </Label>
-              <Input id="password" name="password" type="password" required />
-            </div>
             <Button type="submit" className="mt-1 w-full">
-              Sign in
+              Sign In
             </Button>
           </form>
-
-          <div className="mt-4 flex flex-col gap-2">
-            <a
-              href="/forgot-password"
-              className="rounded-md bg-accent px-3 py-2 text-center text-[12.5px] font-semibold text-accent-foreground hover:bg-accent/80"
-            >
-              Forgot your password?
-            </a>
-            <a
-              href="/set-password"
-              className="rounded-md bg-muted px-3 py-2 text-center text-[12.5px] font-semibold text-foreground hover:bg-muted/70"
-            >
-              For new users, set your password
-            </a>
-          </div>
         </div>
       </div>
     </div>

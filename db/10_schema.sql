@@ -190,6 +190,28 @@ CREATE TYPE public.snag_update_side AS ENUM (
 
 
 --
+-- Name: is_active_user(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+-- A deactivated profile (profiles.is_active = false) can still sign in and
+-- land on the dashboard (Sep 2026 — deactivation is no longer a sign-in
+-- block, see src/lib/auth/service.ts) but must see nothing: every access
+-- primitive below gates on this, so a deactivated person's warehouse_members
+-- rows and is_dashboard_admin flag stay in the database but stop counting
+-- for anything while they're deactivated, and resume the moment they're
+-- reactivated — nothing else needs to change.
+CREATE FUNCTION private.is_active_user() RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select coalesce(
+    (select p.is_active from public.profiles p where p.id = (select auth.uid())),
+    false
+  );
+$$;
+
+
+--
 -- Name: has_warehouse_role(uuid, public.member_role[]); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -197,7 +219,7 @@ CREATE FUNCTION private.has_warehouse_role(p_warehouse_id uuid, p_roles public.m
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO ''
     AS $$
-  select exists (
+  select private.is_active_user() and exists (
     select 1 from public.warehouse_members wm
     where wm.warehouse_id = p_warehouse_id
       and wm.user_id = (select auth.uid())
@@ -214,7 +236,7 @@ CREATE FUNCTION private.is_dashboard_admin() RETURNS boolean
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO ''
     AS $$
-  select coalesce(
+  select private.is_active_user() and coalesce(
     (select p.is_dashboard_admin from public.profiles p where p.id = (select auth.uid())),
     false
   );
@@ -256,7 +278,7 @@ CREATE FUNCTION private.is_warehouse_member(p_warehouse_id uuid) RETURNS boolean
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO ''
     AS $$
-  select exists (
+  select private.is_active_user() and exists (
     select 1 from public.warehouse_members wm
     where wm.warehouse_id = p_warehouse_id
       and wm.user_id = (select auth.uid())
@@ -448,22 +470,22 @@ declare
   v_invite public.invitations;
   v_warehouse_id uuid;
 begin
+  -- Sign-in is open to any email (Sep 2026) — there is no invitation gate
+  -- any more. A matching invitations row (if any) is what grants a role,
+  -- warehouse tags, or Dashboard Admin; its absence just means a bare
+  -- profile with no access, not a blocked sign-in.
   select * into v_invite from public.invitations where email = new.email;
-
-  if v_invite.id is null then
-    raise exception 'no invitation found for %', new.email;
-  end if;
 
   insert into public.profiles (id, email, full_name, is_dashboard_admin, default_role)
   values (
     new.id,
     new.email,
-    coalesce(new.raw_user_meta_data->>'full_name', new.email),
-    v_invite.grant_dashboard_admin,
+    new.email,
+    coalesce(v_invite.grant_dashboard_admin, false),
     v_invite.default_role
   );
 
-  if v_invite.warehouse_ids is not null then
+  if v_invite.id is not null and v_invite.warehouse_ids is not null then
     foreach v_warehouse_id in array v_invite.warehouse_ids
     loop
       insert into public.warehouse_members (warehouse_id, user_id, role)
@@ -472,7 +494,9 @@ begin
     end loop;
   end if;
 
-  update public.invitations set accepted_at = now() where id = v_invite.id;
+  if v_invite.id is not null then
+    update public.invitations set accepted_at = now() where id = v_invite.id;
+  end if;
 
   return new;
 end;
@@ -1662,6 +1686,13 @@ GRANT USAGE ON SCHEMA public TO service_role;
 GRANT ALL ON TABLE public.snags TO anon;
 GRANT ALL ON TABLE public.snags TO authenticated;
 GRANT ALL ON TABLE public.snags TO service_role;
+
+
+--
+-- Name: FUNCTION is_active_user(); Type: ACL; Schema: private; Owner: -
+--
+
+GRANT ALL ON FUNCTION private.is_active_user() TO authenticated;
 
 
 --

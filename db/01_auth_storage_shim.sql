@@ -1,63 +1,21 @@
--- Minimal auth/storage tables — column lists match the pg_dump COPY
--- statements from the live project exactly so the data loads verbatim.
--- Supabase's partial unique indexes and GoTrue-internal triggers are
--- intentionally omitted (dev replica; the app never touches these directly).
+-- Minimal auth/storage tables.
+-- auth.users is now a bare identity anchor (id + email) — there is no
+-- password, token, or confirmation state anywhere in the app; sign-in is
+-- email-only (src/lib/auth/service.ts). It exists only so public.profiles.id
+-- has an FK target and so inserting a row here still fires
+-- on_auth_user_created / handle_new_user() to provision a first-time sign-in
+-- from public.invitations (see db/20_post.sql, db/10_schema.sql).
+-- auth.identities (GoTrue's per-provider link table) is gone — nothing reads
+-- it since there is no password/OAuth provider to distinguish.
 
 \set ON_ERROR_STOP on
 
--- auth.users (34 data columns + generated confirmed_at) --------------------
 create table auth.users (
-    instance_id uuid,
     id uuid not null,
-    aud character varying(255),
-    role character varying(255),
-    email character varying(255),
-    encrypted_password character varying(255),
-    email_confirmed_at timestamptz,
-    invited_at timestamptz,
-    confirmation_token character varying(255),
-    confirmation_sent_at timestamptz,
-    recovery_token character varying(255),
-    recovery_sent_at timestamptz,
-    email_change_token_new character varying(255),
-    email_change character varying(255),
-    email_change_sent_at timestamptz,
-    last_sign_in_at timestamptz,
-    raw_app_meta_data jsonb,
-    raw_user_meta_data jsonb,
-    is_super_admin boolean,
-    created_at timestamptz,
-    updated_at timestamptz,
-    phone text default null,
-    phone_confirmed_at timestamptz,
-    phone_change text default '',
-    phone_change_token character varying(255) default '',
-    phone_change_sent_at timestamptz,
-    confirmed_at timestamptz generated always as (least(email_confirmed_at, phone_confirmed_at)) stored,
-    email_change_token_current character varying(255) default '',
-    email_change_confirm_status smallint default 0,
-    banned_until timestamptz,
-    reauthentication_token character varying(255) default '',
-    reauthentication_sent_at timestamptz,
-    is_sso_user boolean not null default false,
-    deleted_at timestamptz,
-    is_anonymous boolean not null default false,
+    email text,
+    created_at timestamptz default now(),
+    updated_at timestamptz default now(),
     constraint users_pkey primary key (id)
-);
-
--- auth.identities --------------------------------------------------------------
-create table auth.identities (
-    provider_id text not null,
-    user_id uuid not null references auth.users(id) on delete cascade,
-    identity_data jsonb not null,
-    provider text not null,
-    last_sign_in_at timestamptz,
-    created_at timestamptz,
-    updated_at timestamptz,
-    email text generated always as (lower(identity_data ->> 'email')) stored,
-    id uuid not null default extensions.gen_random_uuid(),
-    constraint identities_pkey primary key (id),
-    constraint identities_provider_id_provider_unique unique (provider_id, provider)
 );
 
 -- storage.buckets ------------------------------------------------------------

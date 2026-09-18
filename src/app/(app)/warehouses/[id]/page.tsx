@@ -7,7 +7,7 @@ import type { UpdateRow, AttachmentRow, ActivityRow } from "@/components/snag-ro
 import { TeamBlock } from "@/components/team-block";
 import { BurnUpChart } from "@/components/burn-up-chart";
 import { ExportButton } from "@/components/export-button";
-import { REPORTER_ROLES, RESOLVER_ROLES, roleLabel } from "@/lib/roles";
+import { REPORTER_ROLES, RESOLVER_ROLES, roleLabel, isEffectiveAdmin } from "@/lib/roles";
 import { daysUntil } from "@/lib/readiness";
 import { GoLiveEditor } from "./go-live-editor";
 import { GoLiveHistoryInfo, type GoLiveChange } from "./go-live-history-info";
@@ -81,7 +81,7 @@ export default async function WarehouseDetailPage({
       .select("snapshot_date, total_raised, total_closed")
       .eq("warehouse_id", id)
       .order("snapshot_date"),
-    supabase.from("profiles").select("is_dashboard_admin").eq("id", uid ?? "").maybeSingle(),
+    supabase.from("profiles").select("is_dashboard_admin, is_active").eq("id", uid ?? "").maybeSingle(),
     supabase.from("profiles").select("id, is_dashboard_admin, full_name, email"),
     supabase
       .from("warehouse_activity")
@@ -114,7 +114,11 @@ export default async function WarehouseDetailPage({
   // Dashboard Admin bypasses the reporter/resolver tag on snag actions the
   // same way it already bypasses read scoping — matches the RPC-level
   // check in raise_snag/post_snag_update/verify_snag_closure/close_snag_directly.
-  const isDashboardAdmin = me?.is_dashboard_admin ?? false;
+  // In practice a deactivated viewer never reaches this line at all — `w`
+  // above comes back null and 404s first, since warehouses_select_scoped is
+  // properly is_active-gated — but isEffectiveAdmin keeps this consistent
+  // with every other such check rather than being the one silent exception.
+  const isDashboardAdmin = isEffectiveAdmin(me);
   // Real membership, not bypass-merged — the chat compose box needs to tell
   // "genuinely tagged both reporter and resolver" apart from "admin with no
   // tag at all," which an isReporter/isResolver OR'd with admin can't do.

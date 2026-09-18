@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/data/server";
+import { isEffectiveAdmin } from "@/lib/roles";
 import { ImportForm } from "./import-form";
 
 export default async function ImportSnagsPage({
@@ -15,13 +16,15 @@ export default async function ImportSnagsPage({
   const [{ data: warehouse }, { data: membership }, { data: me }] = await Promise.all([
     supabase.from("warehouses").select("id, name").eq("id", id).single(),
     supabase.from("warehouse_members").select("role").eq("warehouse_id", id).eq("user_id", uid ?? ""),
-    supabase.from("profiles").select("is_dashboard_admin").eq("id", uid ?? "").maybeSingle(),
+    supabase.from("profiles").select("is_dashboard_admin, is_active").eq("id", uid ?? "").maybeSingle(),
   ]);
 
   if (!warehouse) notFound();
 
-  // Any tagged member (or Dashboard Admin) may raise/import now — roles no longer gate this.
-  const isMember = (membership ?? []).length > 0 || (me?.is_dashboard_admin ?? false);
+  // Any tagged member (or Dashboard Admin) may raise/import now — roles no
+  // longer gate this. membership's own RLS already excludes a deactivated
+  // member's rows, so only the admin half needs isEffectiveAdmin(me).
+  const isMember = (membership ?? []).length > 0 || isEffectiveAdmin(me);
   if (!isMember) {
     redirect(`/warehouses/${id}`);
   }

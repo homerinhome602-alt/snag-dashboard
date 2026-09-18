@@ -6,10 +6,11 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { PendingSyncBanner } from "@/components/pending-sync-banner";
+import { isEffectiveAdmin } from "@/lib/roles";
 import { signOut } from "./actions";
 
 type Warehouse = { id: string; name: string };
-type Profile = { full_name: string | null; email: string; is_dashboard_admin: boolean } | null;
+type Profile = { full_name: string | null; email: string; is_dashboard_admin: boolean; is_active: boolean } | null;
 
 function HamburgerIcon() {
   return (
@@ -147,7 +148,7 @@ export function AppShell({
   const [open, setOpen] = useState(false); // desktop hover-expand
   const [mobileOpen, setMobileOpen] = useState(false); // mobile drawer
   const pathname = usePathname();
-  const isAdmin = !!profile?.is_dashboard_admin;
+  const isAdmin = isEffectiveAdmin(profile);
 
   // The drawer closes on link tap (onNavigate), the backdrop, the × button,
   // and Esc — that covers every path except a raw browser back/forward while

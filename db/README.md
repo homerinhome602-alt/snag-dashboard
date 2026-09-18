@@ -9,7 +9,7 @@ nothing.
 | File | What it creates |
 |---|---|
 | `00_bootstrap.sql` | schemas (`public`, `private`, `extensions`, `auth`, `storage`); extensions `pgcrypto` / `pg_trgm` / `uuid-ossp` in the `extensions` schema; GUC-backed `auth.uid()` / `auth.jwt()` / `auth.role()` / `auth.email()`; `storage.foldername()` etc.; role grants |
-| `01_auth_storage_shim.sql` | minimal `auth.users` / `auth.identities` / `storage.buckets` / `storage.objects` tables (column lists match the pg_dump COPYs from the old project) |
+| `01_auth_storage_shim.sql` | a bare `auth.users(id, email, created_at, updated_at)` identity anchor (no password — see below) plus `storage.buckets` / `storage.objects` (columns match the old pg_dump COPYs) |
 | `10_schema.sql` | the application schema — 11 tables, 2 views, 18 functions, ~21 RLS policies, 34 indexes, triggers, grants. Pulled from the live Supabase project with `pg_dump --schema=public --schema=private`, minus Supabase-only `ALTER DEFAULT PRIVILEGES … TO anon` lines |
 | `11_handover_and_chambers.sql` | Handover-documents + Machine/Controller-details feature: `handover_document_types` (15 reference rows, inline — **not** in `seed/`), `warehouse_handover_documents`, `warehouse_chambers`, `warehouse_asset_activity`, their RLS (any tagged member or admin reads and writes) and `updated_at` triggers |
 | `12_flatten_snag_roles.sql` | redefines `private.is_reporter()` / `private.is_resolver()` to both `select private.is_warehouse_member($1)` — the Sep 2026 role-flatten, so any tagged member can do every snag task |
@@ -39,13 +39,13 @@ warehouse. `10_public-data.sql` **excludes `handover_document_types`** — those
 reference rows are created inline by `11_handover_and_chambers.sql`, so seeding
 them again would collide.
 
-**The seed contains real email addresses and bcrypt password hashes.** Keep this
-repo private, or replace `seed/` with scrubbed data before making it public. To
-refresh the seed from your local DB:
+**The seed contains real email addresses** (no passwords — there aren't any).
+Keep this repo private, or replace `seed/` with scrubbed data before making it
+public. To refresh the seed from your local DB:
 
 ```bash
 pg_dump -h localhost -p 5433 -d snagdash --data-only --no-owner --schema=public --disable-triggers --exclude-table=public.handover_document_types -f db/seed/10_public-data.sql
-pg_dump -h localhost -p 5433 -d snagdash --data-only --no-owner --table=auth.users --table=auth.identities -f db/seed/01_auth-data.sql
+pg_dump -h localhost -p 5433 -d snagdash --data-only --no-owner --table=auth.users -f db/seed/01_auth-data.sql
 pg_dump -h localhost -p 5433 -d snagdash --data-only --no-owner --table=storage.buckets --table=storage.objects -f db/seed/02_storage-data.sql
 cp -R .storage/attachments/. db/seed/attachments/
 ```
@@ -62,4 +62,6 @@ policies apply exactly as they did under PostgREST. See the repo `CLAUDE.md`
 `supabase_admin`, `pg_stat_statements`, `supabase_vault`, GoTrue's partial
 unique indexes on `auth.users`, and storage-internal triggers. GoTrue itself is
 replaced by `src/lib/auth`; Supabase Storage by `src/lib/storage` +
-`src/app/api/attachments`.
+`src/app/api/attachments`. GoTrue's password/token columns (`encrypted_password`,
+`confirmation_token`, `recovery_token`, etc.) and the `auth.identities` table
+are gone entirely — sign-in is email-only, see the CLAUDE.md gotcha.

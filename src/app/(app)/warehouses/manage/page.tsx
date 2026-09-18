@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/data/server";
+import { isEffectiveAdmin } from "@/lib/roles";
 import { WarehouseCodeManager } from "./warehouse-code-manager";
 import type { WarehouseActivityRow } from "./warehouse-row";
 
@@ -10,11 +11,11 @@ export default async function WarehouseManagementPage() {
 
   const { data: me } = await supabase
     .from("profiles")
-    .select("is_dashboard_admin")
+    .select("is_dashboard_admin, is_active")
     .eq("id", uid)
     .single();
 
-  if (!me?.is_dashboard_admin || !uid) {
+  if (!isEffectiveAdmin(me) || !uid) {
     redirect("/");
   }
 

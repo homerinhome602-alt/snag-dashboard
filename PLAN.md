@@ -42,8 +42,8 @@ Everything required to stand this app up from nothing, so a rebuild doesn't have
 - `DATABASE_URL` — `postgresql://authenticator@localhost:5433/snagdash`
 - `AUTH_SECRET` — signs the session cookie **and** attachment signed-URLs
 - `STORAGE_DIR` — filesystem location of the `attachments` bucket
-- `AUTH_AUTOCONFIRM` (`true` locally), `MAIL_PROVIDER` (`console` locally)
-- `SUPABASE_*`, if present, are migration-tooling only and unread by the app.
+- ~~`AUTH_AUTOCONFIRM`, `MAIL_PROVIDER`~~ — **removed 18 Sep 2026** along with password auth (§5.1); there's no email-confirmation or mail-sending code left to configure.
+- ~~`SUPABASE_*`~~ — **removed 18 Sep 2026.** The old cloud project's credentials (a real DB password, a real service-role JWT) sat unused in `.env.local`/`.env.example` for weeks after the migration; deleted outright rather than left as dead secrets. There is no Supabase project behind this app any more, in any capacity.
 
 **`.mcp.json`** is empty (`{"mcpServers":{}}`) — the Supabase MCP is gone.
 
@@ -154,11 +154,12 @@ The plan originally scoped reads to membership. Partway through the build this w
 **As built**, the scoping is `private.is_dashboard_admin() OR private.is_warehouse_member(warehouse_id)`, applied to `warehouses`, `warehouse_members`, `snags`, `snag_updates`, `attachments`, `snag_activity`, and `snag_daily_snapshot`. Consequences:
 
 - The sidebar and landing page list only warehouses the current user is tagged to — **except** for Dashboard Admins, who see all of them (read access is their one form of implicit reach; see §2.2)
-- `Add Snag` appears only on warehouses where you are tagged as HVAC/Operations
-- `Add Update` appears only on warehouses where you are tagged as a resolver
+- `Add Snag` appeared only on warehouses where you were tagged as HVAC/Operations, `Add Update` only where tagged as a resolver — **both superseded by the Sep 2026 role-flatten: both now appear for any tagged member (or Dashboard Admin), any role** — `isMember` in `snags/new/page.tsx` and `import/page.tsx` checks membership only, not which role. §2.2/§3.9 have the full story.
 - `warehouse_readiness` — the view behind the landing cards and sidebar, joining `warehouses` to a `snags` aggregate — is a view, and views in Postgres run with the *owner's* row-security context by default, not the querying user's. It's owned by `postgres`, which has `BYPASSRLS`, so it was silently ignoring every policy above regardless of who queried it. Fixed with `ALTER VIEW ... SET (security_invoker = true)`. Any future view over an RLS-protected table needs the same treatment, checked explicitly — it will not fail loudly, it will just quietly leak.
 
 **Verified against a real non-admin account** (12 Aug 2026), by simulating that user's session directly against Postgres (`set local role authenticated` + `request.jwt.claim.sub`, inside a rolled-back transaction — no data touched) rather than a manual browser walkthrough: every scoped table returned exactly the rows belonging to their one tagged warehouse, matching row for row against an admin-context count filtered to that warehouse_id — not a subset, not a leak. `invitations` and `warehouse_activity` (admin-only) returned zero rows. The same simulation for the Dashboard Admin account confirmed the bypass still returns everything. This closes the gap previously noted below.
+
+**A third dimension added 18 Sep 2026: `is_active`.** Both `private.is_dashboard_admin()` and `private.is_warehouse_member()` now AND in a new `private.is_active_user()` check. So a deactivated person — admin or tagged member, doesn't matter which — loses the bypass and the membership match alike, and sees exactly what an untagged stranger sees: nothing. `warehouse_members`/`invitations` rows and the `is_dashboard_admin` flag are never touched by deactivation, only *ignored* by it, so reactivating restores everything with no re-tagging. Verified live the same way the original scoping was: deactivated a real warehouse-tagged account without touching its `warehouse_members` row, confirmed the warehouse disappeared from their view, reactivated, confirmed it came straight back. See §5.1 and CLAUDE.md's "Deactivate" gotcha.
 
 ---
 
@@ -182,7 +183,7 @@ Extends the `auth.users` table (a local shim since the Supabase migration — `d
 The admin still enters one email + one role on the User Management screen — that value lands in `default_role`. The **authoritative** role is per warehouse, in `warehouse_members`.
 
 ### 3.2 `invitations`
-Backs the admin User Management screen and gates sign-in (password only — see §5.1, the plan's original "Sign in with Google" option was never built).
+Backs the admin User Management screen. **No longer gates sign-in (18 Sep 2026) — see §5.1.** An invitation now only pre-configures what a first-time email gets (role, warehouse tags, Dashboard Admin); an unmatched email still gets a bare profile and a session, not a refusal.
 
 | Column | Type |
 |---|---|
@@ -194,13 +195,13 @@ Backs the admin User Management screen and gates sign-in (password only — see 
 | `invited_by` | uuid FK → profiles |
 | `created_at` / `accepted_at` | timestamptz |
 
-**`grant_dashboard_admin` is a build-time addition.** The original plan had no way to create a second admin: `is_dashboard_admin` lived only on `profiles`, and nothing wrote to it after the bootstrap seed. Ticking this box on the invitation makes the person an admin the moment they first sign in. `set_dashboard_admin()` covers the after-the-fact case (currently unused in the UI — no screen edits an existing member's access, see §14.3).
+**`grant_dashboard_admin` is a build-time addition.** The original plan had no way to create a second admin: `is_dashboard_admin` lived only on `profiles`, and nothing wrote to it after the bootstrap seed. Ticking this box on the invitation makes the person an admin **immediately** (18 Sep 2026 — `createInvitation` provisions the profile right away, not on their first sign-in; see §5.1, §5.6). `set_dashboard_admin()` covers the after-the-fact case (currently unused in the UI — no screen edits an existing member's access, see §14.3).
 
 **As built (12 Aug 2026), the invite form's Role picker and the admin flag were merged into one control.** `default_role` is now nullable — "Dashboard Admin" sits in the same dropdown as the 6 operational roles (`lib/roles.ts`'s `INVITE_ROLE_OPTIONS`), mutually exclusive with them: picking it sets `grant_dashboard_admin = true` and `default_role = null`, skips the warehouse picker entirely (admin's powers are global, not warehouse-scoped — §2.2), and vice versa. The People table's old separate "Admin" column is gone; an admin's status now shows inline in the Role column instead ("Dashboard Admin, PMO" for someone who is both — `is_dashboard_admin` and real per-warehouse roles are independent facts and both are shown, even though the invite form itself no longer lets you create that combination going forward).
 
 **`warehouse_id` is a build-time addition, added for the same reason.** Onboarding originally required two trips — invite the person here with a role, then separately go to Manage warehouse (§5.5) to tag them onto one. Picking a warehouse alongside the role at invite time does both in one step: `handle_new_user()` inserts the matching `warehouse_members` row (using this warehouse and the invitation's `default_role`) right after it creates the profile. Leaving the warehouse unset is still valid — an admin-only invitation, or someone who'll be tagged onto a warehouse later via Manage warehouse, needs no warehouse here.
 
-Admin enters **email + role** (+ optionally warehouse), one-to-one. On first sign-in — by **either** method — a trigger matches `auth.users.email` against this table and creates the `profiles` row. **No matching invitation → access denied.**
+Admin enters **email + role** (+ optionally warehouse), one-to-one. `createInvitation` provisions the profile immediately, the same way: it inserts an `auth.users` row, which fires `handle_new_user()`, which matches `auth.users.email` against this table and creates the `profiles` row (+ `warehouse_members`) right then — **not** deferred to the person's first sign-in any more (18 Sep 2026). The identical trigger also fires for a walk-up sign-in with no invitation at all; the only difference is there's no `invitations` row for it to match, so the profile it creates is bare (§5.1).
 
 ### 3.3 `warehouses`
 
@@ -330,7 +331,7 @@ open ──▶ wip ──▶ ready_to_close ──▶ closed
  └──────── reopen ◀─────┘
 ```
 
-Resolvers drive it up to `ready_to_close`. Confirmation to `closed` — or rejection back to `wip` — is made by **any reporter tagged to that warehouse**, not only the original raiser.
+Resolvers drive it up to `ready_to_close`. Confirmation to `closed` — or rejection back to `wip` — is made by **any reporter tagged to that warehouse**, not only the original raiser. *(This paragraph is the original, pre-role-flatten design intent — see the Sep 2026 note below for what's actually enforced today.)*
 
 > **As built — there are now two routes to `closed`, not one.**
 >
@@ -338,9 +339,11 @@ Resolvers drive it up to `ready_to_close`. Confirmation to `closed` — or rejec
 >
 > A second route was added during the build: **`close_snag_directly()`** lets any tagged reporter close a snag from **any** status — `open`, `wip` or `ready_to_close` — without waiting for a resolver to stage it. It stamps `verified_by` and `verified_at` the same way and logs the same `verify_closure` activity row, so the audit trail is indistinguishable.
 >
-> The consequence worth understanding: **`ready_to_close` is now optional rather than mandatory.** A snag can go straight from `open` to `closed` in one action. The gate that survives is *who* — closure is still reporter-only, and a resolver still cannot close their own work. That was the point of the verification step, and it is intact. What was given up is the guarantee that every closure was explicitly staged for review first.
+> The consequence worth understanding, **as it stood before Sep 2026**: `ready_to_close` was optional rather than mandatory — a snag could go straight from `open` to `closed` in one action — but the gate that survived was *who*: closure was reporter-only, and a resolver could not close their own work.
 
-This deliberately widens verification beyond the person who raised it. Verification requires someone who can physically walk to the defect and check it, and any HVAC or Operations person tagged to that warehouse can do so. It also means no snag is ever stranded when its raiser leaves the project — no admin override is needed, and none exists.
+> **⚠ Sep 2026 role-flatten superseded the "who" gate above too — read this, not the paragraph just before it, for current behavior.** `private.is_reporter()` and `private.is_resolver()` were both redefined to `private.is_warehouse_member()` (`db/12_flatten_snag_roles.sql`) — **every RPC in this section (`verify_snag_closure`, `close_snag_directly`, `post_snag_update`, `raise_snag`) now accepts any tagged warehouse member, reporter-labeled or resolver-labeled, not just reporters.** A person with a Resolver-list role tag *can* now close and verify their own work — the "resolver can't close their own work" separation-of-duties rule described above no longer holds; it was a deliberate, explicit tradeoff (see CLAUDE.md's role-flatten gotcha), not a regression. The 6 role labels still matter for exactly two things: default chat side, badge colour — nothing else. Also widened the same way: `reopen_snag` (`db/13`, new in Sep 2026 — any tagged member can reopen a closed snag back to `wip`) and `post_snag_update`'s ETC/status fields (`db/14` — no longer rejected for a reporter-tagged caller; the `p_acting_as`-based rejection described at §3.4b/RPC list below is itself now stale, see the note there).
+
+This deliberately widens verification beyond the person who raised it — first to any reporter-tagged member (the original design), then, as of Sep 2026, to any tagged member at all. Verification requires someone who can physically walk to the defect and check it; before the flatten that meant any HVAC or Operations person tagged to the warehouse, now it means any tagged person at all. It also means no snag is ever stranded when its raiser (or, now, any one role category) leaves the project — no admin override is needed, and none exists.
 
 The verifier is recorded in `verified_by`, so the audit trail still shows exactly who signed it off even when that differs from `raised_by`.
 
@@ -362,7 +365,7 @@ Your requirement that updates accumulate over weeks with timestamps means "Updat
 
 In the table view the Update cell shows the **latest** entry plus a count ("3 updates"); expanding the row reveals the full chronological log. Updates are **append-only** — an edit would destroy the audit trail.
 
-**`author_side` is a build-time addition (14 Aug 2026)**, added when the update log became a two-sided chat thread (§5.7.1). It records which side of the conversation the message was posted on — **snapshotted at post time**, not derived from the author's current `warehouse_members` role, so a message's side stays correct even if that person's role tag later changes or is removed. Originally only resolvers could write to this table at all (`post_snag_update` was resolver-only); it's now open to reporters too, distinguished by this column. `admin` covers a Dashboard Admin bypassing without holding the real tag for whichever side they posted as — see `dashboard_admin_snag_bypass` and `post_snag_update_open_to_reporters` in the migration history for the exact rule.
+**`author_side` is a build-time addition (14 Aug 2026)**, added when the update log became a two-sided chat thread (§5.7.1). It records which side of the conversation the message was posted on — **snapshotted at post time**, not derived from the author's current `warehouse_members` role, so a message's side stays correct even if that person's role tag later changes or is removed. Originally only resolvers could write to this table at all (`post_snag_update` was resolver-only); it was then opened to reporters too, distinguished by this column; **then the Sep 2026 role-flatten superseded even that — any tagged member can post regardless of reporter/resolver tag, §2.2/§3.9.** `admin` covers a Dashboard Admin bypassing without holding the real tag for whichever side they posted as — see `dashboard_admin_snag_bypass` and `post_snag_update_open_to_reporters` in the migration history for the exact rule (both since widened further by the flatten).
 
 ### 3.12 `attachments`
 Serves both the original snag photos and media attached to individual updates.
@@ -419,8 +422,8 @@ Excel import matches enum cells **against these labels, case-insensitively** (§
 
 Reporters and resolvers write different columns of the same row, and Postgres RLS is row-level only. All writes therefore go through `SECURITY DEFINER` RPC functions in `public` (all with `SET search_path TO ''`, so every reference inside them is schema-qualified), each accepting only its role's fields and checking `auth.uid()` membership internally. Exact signatures, as built:
 
-- `raise_snag(p_warehouse_id uuid, p_description text, p_category snag_category, p_sub_category snag_sub_category, p_location snag_location, p_scope snag_scope, p_severity snag_severity, p_sub_category_other text, p_id uuid, p_suppressed_duplicate_ids uuid[]) returns snags` — any reporter tagged to the warehouse, or Dashboard Admin; allocates serial number, stamps `date_raised` and `raised_by`, records suppressed duplicate ids. `p_id` lets the caller supply the row's own uuid — the offline-raise path (§5.8) generates it client-side so a locally-queued snag has a stable identity before it's ever synced
-- `post_snag_update(p_snag_id uuid, p_body text, p_etc_date date, p_status snag_status, p_acting_as text) returns snag_updates` — **as built (14 Aug 2026)**: open to both reporters and resolvers, not resolver-only as originally planned — `p_acting_as` (`'reporter'` or `'resolver'`) states which hat the caller is posting under, verified server-side against their real membership (or Dashboard Admin bypass), never trusted from the client. `p_etc_date`/`p_status` are rejected outright unless `p_acting_as = 'resolver'`; `p_status` may only move to `wip` or `ready_to_close` (§5.7.1)
+- `raise_snag(p_warehouse_id uuid, p_description text, p_category snag_category, p_sub_category snag_sub_category, p_location snag_location, p_scope snag_scope, p_severity snag_severity, p_sub_category_other text, p_id uuid, p_suppressed_duplicate_ids uuid[]) returns snags` — originally any reporter tagged to the warehouse, or Dashboard Admin; **as of the Sep 2026 role-flatten, any tagged member at all** (§3.9's callout) — allocates serial number, stamps `date_raised` and `raised_by`, records suppressed duplicate ids. `p_id` lets the caller supply the row's own uuid — the offline-raise path (§5.8) generates it client-side so a locally-queued snag has a stable identity before it's ever synced
+- `post_snag_update(p_snag_id uuid, p_body text, p_etc_date date, p_status snag_status, p_acting_as text) returns snag_updates` — **as built (14 Aug 2026)**: open to both reporters and resolvers, not resolver-only as originally planned — `p_acting_as` (`'reporter'` or `'resolver'`) states which hat the caller is posting under, verified server-side against their real membership (or Dashboard Admin bypass), never trusted from the client. `p_etc_date`/`p_status` were rejected outright unless `p_acting_as = 'resolver'`, and `p_status` could only move to `wip` or `ready_to_close` (§5.7.1) — **the first restriction was dropped by `db/14_post_snag_update_open.sql` (Sep 2026 role-flatten): a reporter-tagged caller may now set ETC/status too, `p_acting_as` no longer gates it, only still-current for deriving `author_side`.** The `wip`/`ready_to_close`-only status guard is unchanged and still enforced.
 - `verify_snag_closure(p_snag_id uuid, p_approved boolean, p_body text) returns snag_action_result` — any tagged reporter, or Dashboard Admin; requires `ready_to_close`. `p_body` is optional (**as built**, 14 Aug 2026) — if supplied and non-empty, posts as a real chat message on the reporter's side alongside the status change instead of just a system line
 - `close_snag_directly(p_snag_id uuid, p_body text) returns snag_action_result` — **as built**; any tagged reporter, or Dashboard Admin, from any status (§3.9). Same optional `p_body` treatment as `verify_snag_closure`
 - `set_go_live_date(p_warehouse_id uuid, p_date date) returns warehouses` — any resolver tagged to the warehouse, or Dashboard Admin
@@ -454,41 +457,35 @@ Keep these in a non-exposed schema with explicit `auth.uid()` checks in the body
 
 ## 5. Screens
 
-### 5.1 Login — **as built, password-only**
+### 5.1 Login — **as built, email-only, no password anywhere (rewritten 18 Sep 2026 — everything below this line superseded the password-based flow the paragraphs above described; that flow, and the four pages that implemented it, no longer exist)**
 
-The original plan specified Google sign-in as primary with password as a fallback for contractors without a Google account. **Google sign-in was built, then tried live and reverted** — password is the only auth method in the app today. Two distinct pages cover the two cases, both gated by `invitations`:
+Google sign-in was built, then reverted, and password auth (the section this replaced) shipped and ran for weeks — but on 18 Sep 2026 it was removed outright, by explicit instruction, not because of a bug: **there is no password anywhere in the database or the app.** `/set-password`, `/forgot-password`, `/auth/update-password`, and `/auth/confirm` are all deleted, along with `hashPassword`/`verifyPassword` and every `signUp`/`resetPasswordForEmail`/`verifyOtp`/`updateUser`-shaped helper. One page remains:
 
-- **`/set-password`** (first-time signup) — full name + email + password + confirm password → `supabase.auth.signUp()` (now `src/lib/auth/service.ts`, which inserts an `auth.users` row). This fires `handle_new_user()` (§3.2, §4), the trigger that checks `invitations` for a matching email and creates the `profiles` row — **no matching invitation → the insert fails on the trigger's exception**, surfaced by `setPassword()` (`app/set-password/actions.ts`) as an inferred `not_invited` error (weak-password and already-exists are ruled out first, then not-invited by elimination). With `AUTH_AUTOCONFIRM=true` (local) the signup also issues a session immediately.
-- **`/login`** (returning users) — email + password → `signInWithPassword()`. Failure redirects to `/login?error=invalid_credentials`.
-- **`/forgot-password`** → `/auth/update-password`, via `/auth/confirm` (a `route.ts` handler that calls `verifyOtp()` on the emailed token, then redirects). Always shows the same "check your email" message regardless of whether the address exists — Supabase never reveals that. **Known gap:** the Supabase-side "Reset Password" email template still uses the default `{{ .ConfirmationURL }}` rather than being repointed at `/auth/confirm`, so the emailed link doesn't actually work yet — a one-time dashboard edit outside this codebase's reach (see the CLAUDE.md gotcha for the exact template string needed).
-- Session state: a signed JWT in an httpOnly cookie (`src/lib/auth/session.ts`, jose HS256, `AUTH_SECRET`), verified on every request by `src/proxy.ts` (Next.js 16 renamed middleware to "proxy" — `AGENTS.md`) calling `updateSession()` (`lib/data/proxy.ts` → `lib/auth/jwt.ts`), which gates every route except `/login`, `/auth/*`, `/forgot-password`, `/set-password`, `/api/*` by requiring a valid session — redirecting to `/login` otherwise. Server code reads it via `getClaims()` (unchanged call surface).
+- **`/login`** — a single Email field and a **"Sign In"** button. Nothing else on the page: no password, no sign-up link, no forgot-password link. Submits to `signInWithEmail()` (`src/lib/auth/service.ts`).
 
-Because the gate is the email address, a user invited as `x@company.com` must sign in with exactly that address — a personal Gmail will not match. The User Management screen should say so.
+**Then, a second, separate removal (also 18 Sep 2026): the invitation gate on sign-in is gone too.** Originally `signInWithEmail` (and before it, `signUp`) only let an email in if it matched a `public.invitations` row — an uninvited email was refused. That gate is gone by the same explicit instruction: **any email gets a session.** What an invitation still does is *pre-configure* what a first-time email gets — a role, warehouse tags, and/or Dashboard Admin — not gate whether they get in at all. Two ways to end up with a profile now:
 
-**As built — exact error copy** (each page has its own `ERROR_COPY` map, `Record<string, {title, body}>`, rendered in an accent-tinted box above the form; `/auth/update-password`'s is a flat `Record<string, string>`, one line, no title). All four pages share one hardcoded, page-local (not imported/shared) 8-stop gradient strip across the card's top edge — except `/auth/update-password`, which has none (§ DESIGN.md's "Signature: the readiness thermometer", corrected 19 Aug 2026 — this was previously mis-documented as also appearing on modal headers, which it never has).
+- **Admin invites first** (People screen, §5.6) — `createInvitation` creates the `invitations` row, then immediately calls `provisionInvitedUser()`, which provisions the real `profiles` row (+ `warehouse_members`) right away — before the person has ever signed in. Status shows "Active" from the moment they're invited, not from their first login.
+- **Nobody invites them — they just type an email and hit Sign In.** `signInWithEmail` finds no `profiles` row, provisions one anyway (same underlying mechanism, `handle_new_user()` in Postgres — §3.2, §4 — no longer raises for an unmatched email, it just creates a bare profile), and signs them in. They land on the dashboard and see **zero warehouse cards** — no role, no `warehouse_members` rows, no admin — until an admin tags them to something (`addWarehouseMembership`, People screen → "+ Add warehouse").
 
-`/login`:
+So identity and access are two separate questions now. Signing in proves only "I typed this email." What that email can *see* — which warehouses, whether the admin nav shows up at all — is decided entirely downstream, by `private.is_warehouse_member()` / `private.is_dashboard_admin()` in Postgres (§15.4), which every RLS policy and every write RPC routes through. An uninvited, untagged person is not blocked at the door; they're let in and shown an empty room.
+
+**Deactivation works the same way — downstream, not at the door.** `profiles.is_active` used to be a no-op (§14.3's gap, below) and briefly, mid-September, blocked sign-in outright when the gap was first closed — but as of 18 Sep 2026 that was reverted too, by the same kind of explicit instruction: **a deactivated email still signs in and lands on the dashboard.** It just sees nothing there, because `private.is_active_user()` (new function, gates `is_dashboard_admin()`/`is_warehouse_member()`/`has_warehouse_role()` — the three primitives everything else already routed through) returns false for them, so every warehouse tag and the admin flag stop counting while `is_active = false` — without being deleted, and without needing to be re-added on reactivation. It's a live check against the current row, not baked into the session, so deactivating someone cuts off an *already open* session on their very next request, not just future logins.
+
+**One consequence worth being explicit about, since it's a real behavior change from "gate at the door": anyone who knows or can guess an email address — invited or not, active or not — gets a session as that identity.** There is nothing else standing between an address and "Sign In" succeeding. This was raised plainly when the change was made and reaffirmed by explicit instruction each time (password removal, then invitation-gate removal, then reverting the deactivation-blocks-sign-in fix) — it is the intended design for this deployment, not an oversight.
+
+Session state is unchanged underneath all of this: a signed JWT in an httpOnly cookie (`src/lib/auth/session.ts`, jose HS256, `AUTH_SECRET`), verified on every request by `src/proxy.ts` (Next.js 16 renamed middleware to "proxy" — `AGENTS.md`) calling `updateSession()` (`lib/data/proxy.ts` → `lib/auth/jwt.ts`), which gates every route except `/login`, `/api/me`, `/api/rpc`, `/api/attachments` by requiring a valid session — redirecting to `/login` otherwise. Server code reads it via `getClaims()`.
+
+**As built — exact error copy.** `/login`'s `ERROR_COPY` map (`Record<string, {title, body}>`, rendered in an accent-tinted box above the form) is down to the errors that can actually still happen:
+
 | Error key | Title | Body |
 |---|---|---|
-| `not_invited` | "This email isn't set up yet" | "We don't have an invitation for that address. Ask your dashboard admin to add it, then sign in with that exact address." |
-| `invalid_credentials` | "Couldn't sign you in" | "That email and password combination doesn't match an account." |
+| `missing_email` | "Enter your email" | "An email address is required to sign in." |
+| `unknown` | "Couldn't sign you in" | "Something went wrong. Try again in a moment." |
 
-`/set-password`:
-| Error key | Title | Body |
-|---|---|---|
-| `missing_fields` | "Missing information" | "Fill in every field before submitting." |
-| `not_invited` | "This email isn't set up yet" | "We don't have an invitation for that address. Ask your dashboard admin to add it, then come back with that exact address." |
-| `already_exists` | "This email already has an account" | "Sign in instead, or use Forgot password if that account needs a password set." |
-| `password_mismatch` | "Passwords don't match" | "Type the same password in both fields." |
-| `weak_password` | "Choose a stronger password" | "That password is too easy to guess. Try something longer or less common." |
+`not_invited`, `invalid_credentials`, and `deactivated` are all gone from this map — none of them can be returned by the server any more. The page still carries the same hardcoded 8-stop gradient strip across the card's top edge (§ DESIGN.md's "Signature: the readiness thermometer") — that part of the visual design outlived every auth rewrite underneath it.
 
-Success (no error, `?success=1`): title "Almost there", body "Check your email to confirm your address, then sign in."
-
-**Stale copy found 19 Aug 2026, not fixed — flagging, not silently correcting.** `/set-password`'s subtitle still reads *"For people invited by email who don't sign in with Google."* — a leftover from before Google sign-in was reverted (this section's own opening paragraph). Read literally today it implies Google sign-in still exists as an alternative elsewhere in the app, which is false. Exact current text is captured here for reproduction fidelity; whether to fix the actual copy is a product call outside a documentation pass.
-
-`/forgot-password`: no keyed error map, just one conditional block — shown when `error=invalid_or_expired`: title "That link didn't work", body "It may have expired or already been used. Request a new one below." Success (`?sent=1`): title "Check your email", body "If an account exists for that address, a reset link is on its way." (deliberately identical whether or not the address exists, per the paragraph above).
-
-`/auth/update-password`: `password_mismatch` → "Those passwords don't match.", `weak_password` → "That password is too easy to guess. Try something longer or less common.", `unknown` → "Something went wrong. Try requesting a new reset link." This page also redirects to `/forgot-password?error=invalid_or_expired` itself, before rendering anything, if `getClaims()` finds no session — the one case where a *different* page's error copy is what the user actually sees.
+**Sign-out.** Top-right of the app shell, every screen, every signed-in person regardless of role — `<form action={signOut}>` → `clearSession()`, redirects to `/login`. Unchanged by any of the above; it was never part of what got rewritten.
 
 ### 5.2 Landing — warehouse cards
 Top bar: **Frozen Warehouse Launch Readiness**. Shows the warehouses the current user can read (§2.3) — all of them for a Dashboard Admin, only tagged ones otherwise.
@@ -590,14 +587,15 @@ This sits awkwardly against the deliberate "deactivate, never delete" rule for u
 Since a rebuild working only from a component inventory might otherwise wire this back in and assume it's load-bearing: this is the searchable multi-select "pick people for a role" control the original onboarding form (above) would have used. It renders, has no compile errors, and isn't broken — it's simply not imported anywhere in the current app. Leave it alone unless the onboarding-at-creation flow is deliberately being rebuilt.
 
 ### 5.6 User Management (Admin only)
-Table of invitations: email, default role, **warehouse** (§3.2), status (invited / active / deactivated), and Dashboard Admin status. Add a row = email + role + optional warehouse, one-to-one.
+Table listing everyone who's been invited **or has a profile at all** (§3.2/§5.1 — a walk-up sign-in with no invitation still needs to show up here to be manageable): email, role, **warehouse** (§3.2), status, and Dashboard Admin status. Add a row = email + role + optional warehouse, one-to-one.
 
-**As built:**
-- **Warehouse column** shows the pending assignment (`"{name} (pending)"`) for invited-not-yet-signed-up rows, and the real, possibly-multiple current `warehouse_members` list for active ones — not the stale invitation value, since Manage warehouse can change membership after signup
-- **Make/Revoke admin** is a button beside the person's email, not a separate action column — toggles `is_dashboard_admin` directly for anyone with a profile (i.e. anyone past `status = invited`)
-- Deactivate rather than delete, to preserve snag history
+**As built, and corrected 18 Sep 2026 against two things that were never actually built the way this section originally described:**
+- **Status is binary — Active / Deactivated only, never a third "invited" state.** `createInvitation` provisions the profile immediately (§3.2, §5.1), so there is no gap between "invited" and "active" for this screen to show; the row reads "Active" from the moment the invite is sent.
+- **Warehouse column** shows the real, possibly-multiple current `warehouse_members` list — no "(pending)" suffix exists anywhere in the actual component; that was this section's own aspiration, never implemented, and is moot now that there's no pending state to show it for.
+- **There is no "Make/Revoke admin" button anywhere in the UI.** `set_dashboard_admin()` exists in Postgres and is fully wired to be callable, but nothing in `admin/users/*` calls it — this section previously described it as built; it was not (confirmed by grepping the actual components). Admin status can currently only be set at invite time (`grant_dashboard_admin` on the invitation); there is still no screen that edits it for an already-provisioned person. See §14.3.
+- Deactivate rather than delete, to preserve snag history — this part was and is accurate
 
-**As built (17 Aug 2026) — a "+ Add warehouse" control per row** (`add-warehouse-control.tsx`) fills part of the gap noted in `CLAUDE.md`: `handle_new_user()` only provisions `warehouse_members` on first sign-in, so re-inviting someone already active has no effect (§3.2's `createInvitation` refuses this outright). The control lets an admin pick one or more warehouses — "All" selects every currently active one, mirroring the invite form's own picker — and writes `warehouse_members` rows directly, the same admin-tables-use-plain-RLS convention as everything else in this section. Shown only for accepted, non-admin profiles (Dashboard Admin already reads/writes everywhere without a tag, and a pending invitation has no `user_id` yet to attach rows to).
+**As built (17 Aug 2026) — a "+ Add warehouse" control per row** (`add-warehouse-control.tsx`) fills part of the gap noted in `CLAUDE.md`: `handle_new_user()` only runs once per email (whichever event first inserts their `auth.users` row — invite-time provisioning or a walk-up sign-in, §5.1), so re-inviting someone who already has a profile has no effect (§3.2's `createInvitation` refuses this outright). The control lets an admin pick one or more warehouses — "All" selects every currently active one, mirroring the invite form's own picker — and writes `warehouse_members` rows directly, the same admin-tables-use-plain-RLS convention as everything else in this section. Shown only for non-admin profiles (Dashboard Admin already reads/writes everywhere without a tag) — and now every profile has a row here the moment it exists, so there's no "pending invitation with no `user_id` yet" case left to exclude.
 
 **Revised (17 Aug 2026) — no role picker; one role per person, not per warehouse.** The first version let the admin choose a role per call, which meant re-running it on someone already tagged elsewhere with a different role left them holding two roles at once — discovered on a real test account with different roles stacked across four warehouses. `addWarehouseMembership` now takes no role argument: it reads `profiles.default_role` (set once at invite time) as the person's single role, and on every call rewrites *all* of their `warehouse_members` rows — existing warehouses plus newly-picked ones — under it, self-healing any prior drift rather than only preventing new drift. See §2.1's narrowing note. There's still no way to remove a warehouse tag outright (with no replacement) or change `is_dashboard_admin` for someone already signed in from this screen.
 
@@ -658,11 +656,11 @@ The expanded row was originally a single dot-and-line-connected timeline (resolv
 - The raise (description + any raise-time photos) is the thread's opening message, always on the reporter's side.
 - Every `snag_updates` message renders as a bubble on the **left** (reporter), **right** (resolver), or **centered/neutral** (Dashboard Admin bypassing without a real tag) — governed by that row's `author_side` (§3.11), snapshotted at post time.
 - Every `snag_activity` row except `raise` (already represented by the opening message) interleaves by timestamp as a small centered muted system line, no bubble — including the duplicate-match note and admin date-corrections, which don't have a natural conversational partner but still belong in the sequence.
-- Below the feed, one role-aware compose box (`components/snag-compose.tsx`):
-  - **Reporter-only**: comment + photo + video, plus "Close ticket" (any status except `closed`/`ready_to_close`) or "Confirm closed" / "Reject — reopen" (when `ready_to_close`) — each with the same optional comment+media, matching the RPC's optional `body` (§3.9.1).
-  - **Resolver-only**: comment + photo + video + ETC date + status dropdown, unchanged in spirit from the original resolver-only update form.
-  - **Both roles genuinely tagged on this warehouse**: one box with a "Commenting as Reporter / Resolver" toggle that swaps which extra controls show and which side the message lands on — the caller states which hat they're using, but the RPC verifies it against real membership before honoring it.
-  - **Dashboard Admin with no tag on this warehouse**: every control shown at once (no toggle needed, since bypass already grants both capacities) — comment, photo, video, ETC, status, and the close/verify buttons all together.
+- Below the feed, one compose box (`components/snag-compose.tsx`). **The four-variant breakdown below is pre-role-flatten and superseded by the ⚠ callout above — every tagged member now sees the same single box (comment, photo, video, ETC date, status dropdown, close/confirm/reject/verify controls, all together, no toggle), the same as the "Dashboard Admin with no tag" row already described.** Kept here, marked as such, for the historical record of how the toggle used to branch:
+  - ~~**Reporter-only**: comment + photo + video, plus "Close ticket" (any status except `closed`/`ready_to_close`) or "Confirm closed" / "Reject — reopen" (when `ready_to_close`) — each with the same optional comment+media, matching the RPC's optional `body` (§3.9.1).~~
+  - ~~**Resolver-only**: comment + photo + video + ETC date + status dropdown, unchanged in spirit from the original resolver-only update form.~~
+  - ~~**Both roles genuinely tagged on this warehouse**: one box with a "Commenting as Reporter / Resolver" toggle that swaps which extra controls show and which side the message lands on — the caller states which hat they're using, but the RPC verifies it against real membership before honoring it.~~
+  - **Dashboard Admin with no tag on this warehouse**: every control shown at once (no toggle needed, since bypass already grants both capacities) — comment, photo, video, ETC, status, and the close/verify buttons all together. *(This is now what everyone sees, tagged or not — not a special case any more.)*
 - Photo capture (with the circle-the-defect annotation tool) and video capture are both available on every compose box now — video was previously resolver-only, photo was previously raise-time-only.
 
 No real-time push: the other party sees a new message on their own next action or page load, matching the rest of the app (§14.2).
@@ -791,14 +789,13 @@ Every client-side validation message, empty-state string, input placeholder, and
 | Landing (`/`) | none — goes straight from the header bar into the summary cards |
 | Warehouse detail | none — go-live date sits where a subtitle would, in the header's top-right instead (§5.7) |
 | Warehouse Management | none |
-| People Management | "Add someone's work email and the role they'll hold by default. They sign in with that exact address — a personal account won't match." |
+| People Management | **updated 18 Sep 2026** — "Anyone can sign in with any email — there's no invite gate. Inviting someone here is what tags them to a warehouse (or grants Dashboard Admin) the moment they sign in with that exact address; without it, they land on an empty dashboard." (was "Add someone's work email and the role they'll hold by default. They sign in with that exact address — a personal account won't match." — described a gate that no longer exists; §5.1) |
 | About the page | "Frozen Warehouse Launch Readiness tracks defects — snags — found while a cold-storage warehouse is being built and commissioned, so nothing blocks opening day by surprise. Everyone can see what's still open across a warehouse; the two roles below are the people who raise issues and the people who close them." |
 | Import snags | the warehouse's name (dynamic, not static copy) |
 | Raise a snag | the warehouse's name (dynamic, not static copy) |
 | `/login` | "Sign in to continue" |
-| `/set-password` | "For people invited by email who don't sign in with Google." — the stale Google reference flagged above |
-| `/forgot-password` | "We'll email you a link to choose a new one." |
-| `/auth/update-password` | "Choose a new password for your account." |
+
+**`/set-password`, `/forgot-password`, `/auth/update-password` — deleted 18 Sep 2026, along with the rest of password auth (§5.1).** Their subtitle copy (previously listed here) is gone with the pages; not reproduced as it no longer exists anywhere to be accurate or stale about.
 
 ---
 
@@ -901,11 +898,11 @@ The snapshot job moves to Phase 0 deliberately — see §12.1. Everything else c
 | Question | Decision |
 |---|---|
 | Role model | **Per warehouse.** `default_role` on the invitation is a hint; `warehouse_members.role` is authoritative. Dashboard Admin is the only global role |
-| Login | **Password only** (§5.1) — gated by the invitation list. Google sign-in was built, tried live, then reverted |
+| Login | **Email only, no password, no invitation gate** (§5.1, 18 Sep 2026) — any email gets a session; access is decided downstream by warehouse tagging, not at sign-in. Google sign-in was built, tried live, then reverted; password auth then shipped, ran for weeks, and was itself removed |
 | Sub-category | **No filtering** — all eleven always available under both categories |
 | Media storage | **local filesystem** (`STORAGE_DIR`), private, HMAC signed URLs, client-side compression — was Supabase Storage pre-migration |
 | Serial number | Auto, per warehouse, atomic counter |
-| Status | Resolvers drive to `ready_to_close`; **any tagged reporter** verifies closure — or closes directly from any status (§3.9) |
+| Status | Originally: resolvers drive to `ready_to_close`, any tagged reporter verifies closure or closes directly from any status. **Sep 2026 role-flatten: any tagged member does any of it**, reporter/resolver label no longer restricts who (§3.9) |
 | Visibility | Scoped to warehouse membership; Dashboard Admin reads everything (§2.3) |
 | Dashboard Admin scope | User management + create/deactivate warehouse (no rename or delete in the UI, §5.4–5.5) + correct `date_raised` + read everywhere + bypass reporter/resolver on every snag-adjacent write (§2.2). Must self-tag for any write the bypass doesn't cover |
 | Date raised | Auto on raise; **Dashboard Admin only** may correct it, audited |
@@ -1011,7 +1008,10 @@ Each is documented in place above; collected here so nothing is missed on a skim
 | `snag_activity` gained a viewer ("View history"), later folded into the chat feed and the toggle removed | §3.13, §5.7.1 |
 | Dashboard Admin gained a fourth power: bypass reporter/resolver on all snag RPCs | §2.2 |
 | Update thread rebuilt from a resolver-only dot timeline into a two-sided reporter/resolver chat | §5.7.1 |
-| Google sign-in was built, then reverted — password is the only auth method | §5.1 |
+| Google sign-in was built, then reverted; password auth then shipped, ran for weeks, and was itself removed outright (18 Sep 2026) — sign-in is now email-only, no password anywhere | §5.1 |
+| Invitation gate on sign-in removed (18 Sep 2026) — any email gets a session; an invitation only pre-configures role/warehouse/admin, it no longer decides whether someone gets in | §3.2, §5.1 |
+| `is_active` wired into `is_dashboard_admin()`/`is_warehouse_member()`/`has_warehouse_role()` (18 Sep 2026) — deactivation now actually revokes access (closing §14.3's original gap), but deliberately does *not* block sign-in the way it briefly did when first fixed; a deactivated person still gets in, they just see nothing | §2.3, §14.3, §5.1 |
+| `storage.objects`'s open, unscoped `SELECT` policy tightened to match its sibling `INSERT` policy's warehouse scoping (18 Sep 2026) — a pre-existing gap, unreachable from the app (nothing queried that table for reads), tightened anyway | §15.6 |
 | Warehouse onboarding rebuilt from a rich multi-role form into a code-only create; rename/delete/member-management dropped from the UI (though `create_warehouse`, the delete RLS policy, and `role-people-picker.tsx` all still exist unreachably) | §5.4 – 5.5, §5.4a |
 | `warehouse_admin` moved from the resolver group to the reporter group | §2.1 |
 | `warehouse_activity` — an audit-log table for warehouse create/activate/deactivate, structurally parallel to `snag_activity` but never in the original plan | §3.4a |
@@ -1019,7 +1019,7 @@ Each is documented in place above; collected here so nothing is missed on a skim
 | `people_activity` — a new audit-log table for two previously-untracked People-screen actions (invite, warehouse tag added), never in the original plan | §3.4b |
 | `warehouse_activity` gained a third action (`go_live_date_change`) and its `SELECT` policy was widened from admin-only to admin-or-warehouse-member | §3.4a |
 
-**Dead code, deployed but unreachable from the UI** — not a divergence in behaviour, but worth knowing before assuming any of these are load-bearing: the `create_warehouse` RPC (§5.4 – 5.5), `components/role-people-picker.tsx` (§5.4a), and the `warehouses_delete_admin` RLS policy (§5.4 – 5.5 ⚠️).
+**Dead code, deployed but unreachable from the UI** — not a divergence in behaviour, but worth knowing before assuming any of these are load-bearing: the `create_warehouse` RPC (§5.4 – 5.5), `components/role-people-picker.tsx` (§5.4a), the `warehouses_delete_admin` RLS policy (§5.4 – 5.5 ⚠️), and `set_dashboard_admin()` (§3.2, §5.6) — fully implemented and callable, properly gated on `private.is_dashboard_admin()` (so it already inherited the 18 Sep `is_active` fix automatically), but nothing in `admin/users/*` calls it; confirmed by grep, not just by reading the plan, on 18 Sep 2026.
 
 ### 14.2 UI behaviour added after the plan was written
 
@@ -1043,10 +1043,10 @@ None of this changes the data model (except where noted in §14.1); it came out 
 - **No soft delete for warehouses** (§5.5).
 - **Category and scope are deferred on mobile**, so they are nullable for mobile-raised snags. The "finish this snag" prompt back at a desk was never built.
 - **Notifications** were never started — overdue ETC is visible in the UI but nothing reaches the person who can act on it. The chat thread (§5.7.1) has the same gap: no live push, so a new message from the other side is only seen on your own next action or reload, not in real time.
-- **Password-reset email now depends on a real `MAIL_PROVIDER`.** `resetPasswordForEmail()` (`src/lib/auth/service.ts`) builds a `/auth/confirm?token_hash=…&type=recovery&next=/auth/update-password` link and hands it to `sendMail()` (`src/lib/auth/email.ts`). Locally `MAIL_PROVIDER=console` just logs the link; shipping this needs the `sendMail()` body wired to a real provider (Resend / SES / nodemailer). The old one-time Supabase dashboard template edit no longer applies.
-- **"Deactivate" in User Management does not currently revoke access — found 18 Aug 2026, not yet applied.** `set_user_active()` writes `profiles.is_active`, but nothing reads it: not `private.is_dashboard_admin()`, not `private.is_warehouse_member()`, not `private.has_warehouse_role()` (which `is_reporter`/`is_resolver` both call), no RLS policy anywhere, no auth/proxy gate. Confirmed by searching every function body and every policy in the schema for `is_active` — `set_user_active` is the only hit. A deactivated person can still sign in and use every capability they had before; only the status badge changes. A fix was drafted — gate those three primitive functions on `is_active` (they're what every RLS policy and RPC route through, so this cascades everywhere at once) and add a self-deactivation guard to `set_user_active` (there's exactly one active Dashboard Admin today; without the guard they could lock themselves out with no one left to undo it) — but applying it was declined for this pass. The SQL is in this session's transcript if picked back up later.
-- **Not everything about a person is tracked, even after `people_activity` (§3.4b) closed two of the gaps — found 18 Aug 2026.** Still nothing logs deactivating/reactivating a person (`set_user_active`, same function as the gap above), and there's no action at all yet — so nothing to log — for removing a warehouse tag or for changing an already-signed-in person's Dashboard Admin status.
-- **`/set-password`'s subtitle still references Google sign-in — found 19 Aug 2026, not fixed.** See §5.1's exact-copy table. Leftover from before Google auth was reverted; reads as if Google is still an option elsewhere, which it isn't anywhere in the app.
+- **Password-reset email gap — closed by deletion, not by fixing (18 Sep 2026).** `resetPasswordForEmail()`, `sendMail()`, `/forgot-password`, `/auth/update-password`, `/auth/confirm` — all gone. There is no password to reset any more; see §5.1.
+- **"Deactivate" in User Management did not revoke access — found 18 Aug 2026, fixed 18 Sep 2026, one part of the drafted fix still declined.** The original gap (below, for the record): `set_user_active()` wrote `profiles.is_active`, but nothing read it — not `is_dashboard_admin()`, not `is_warehouse_member()`, not `has_warehouse_role()`, no RLS policy, no auth gate. **Fixed**: a new `private.is_active_user()` now gates all three of those primitive functions, so a deactivated person's warehouse tags and admin flag stop counting for every RLS policy and RPC while `is_active = false`, and resume automatically on reactivation — see §5.1's rewrite for the current, non-blocking-sign-in shape of this. **The self-deactivation / last-admin-lockout guard drafted alongside the original fix was proposed again when this shipped, and declined again, explicitly** — there is still exactly one active Dashboard Admin, `set_user_active` still has no check against deactivating yourself or the last remaining admin, and recovering from that would still need direct database access, not anything in the app. This is a known, accepted risk, not an oversight — don't add the guard without being asked a third time.
+- **Not everything about a person is tracked, even after `people_activity` (§3.4b) closed two of the gaps — found 18 Aug 2026, still true.** Still nothing logs deactivating/reactivating a person (`set_user_active`), and there's no action at all yet — so nothing to log — for removing a warehouse tag or for changing an already-signed-in person's Dashboard Admin status.
+- **`/set-password`'s stale Google-sign-in subtitle — moot, not fixed, the page is gone.** `/set-password` no longer exists (§5.1, 18 Sep 2026) — deleted along with the rest of password auth, subtitle and all.
 
 **Where this document's precision used to stop, until it didn't.** Through 25 Aug 2026, this section said the last gap was left standing on purpose: purely structural UI text with no behavioral weight (column headers, self-describing button labels) wasn't transcribed anywhere, because doing so "would mean copying most of the source into markdown rather than describing it." **On 1 Sept 2026, asked to close that gap anyway, it was closed literally.** §16 is the entire application source tree — every `.ts`/`.tsx` file, every root config file, `globals.css` — embedded verbatim. There is no longer any UI text, however structural or decorative, that isn't captured somewhere in this document: either described with intent in the sections above, or simply *present*, byte-for-byte, in §16. A rebuild no longer has to trust any prose description at all where §16 covers the same ground — it can read the actual component.
 
@@ -1067,6 +1067,14 @@ This changes what "keeping this document accurate" means going forward: §16 is 
 > - `db/14_post_snag_update_open.sql` — replaces `public.post_snag_update(...)` to drop the reporter-can't-set-ETC/status block. The §15.4 body is the pre-change version.
 >
 > Regenerate this whole section from the running DB (after `db/build.sh`) to pick these up.
+
+> **⚠ A second, larger staleness: the auth rewrite (18 Sep 2026) changed `db/01_auth_storage_shim.sql`, `db/10_schema.sql`, and `db/20_post.sql` directly — none of that is reflected below either.** In order:
+> - `auth.users` shrank to a bare `(id, email, created_at, updated_at)` — every password/token/confirmation column (`encrypted_password`, `confirmation_token`, `recovery_token`, etc.) and the entire `auth.identities` table are gone. §15.2's `auth.users` definition below still shows the old 34-column GoTrue shape.
+> - `public.handle_new_user()` no longer raises for an email with no matching invitation — it creates a bare profile either way, and only branches on whether `v_invite.id` is set for the role/warehouse/admin/`accepted_at` parts. §15.4's body below is the old invitation-gated version.
+> - `private.is_dashboard_admin()`, `private.is_warehouse_member()`, and `private.has_warehouse_role()` all gained a new `private.is_active_user() and …` prefix, and a brand new `private.is_active_user()` function was added ahead of them. §15.4's bodies below predate this — they show the un-gated versions, so a deactivated person would appear to still have access if rebuilt from this section as-is.
+> - `storage.objects`'s open `attachments_bucket_select_all` policy (`for select to authenticated using (bucket_id = 'attachments')`, no warehouse scoping) was replaced with `attachments_bucket_select_scoped`, gated the same way the sibling insert policy already was. §15.6 below still lists the old, unscoped one.
+>
+> Verified live against the running database (not just the checked-in `.sql` files) when this warning was written — `pg_get_functiondef` on all five functions above matched `db/10_schema.sql` byte-for-byte, confirming no drift between what's committed and what's actually deployed. It's §15 itself, as a stale point-in-time snapshot, that's now behind both. Regenerate from the running DB to fix, same as the block above.
 
 ### 15.1 Enum types
 

@@ -19,7 +19,7 @@ type Row = {
   name: string;
   role: string;
   warehouseNames: string[];
-  status: "active" | "invited" | "deactivated";
+  status: "active" | "deactivated";
   userId: string | null;
   isDashboardAdmin: boolean;
 };
@@ -74,12 +74,10 @@ export function PersonRow({
             className={
               row.status === "active"
                 ? "border-mint bg-mint text-mint-deep"
-                : row.status === "invited"
-                  ? "border-blush bg-blush text-red-deep"
-                  : "border-line-soft bg-line-soft text-muted-foreground"
+                : "border-line-soft bg-line-soft text-muted-foreground"
             }
           >
-            {row.status === "active" ? "Active" : row.status === "invited" ? "Invited" : "Deactivated"}
+            {row.status === "active" ? "Active" : "Deactivated"}
           </Badge>
         </TableCell>
         <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>

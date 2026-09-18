@@ -45,3 +45,21 @@ export const ROLE_COLOR_CLASS: Record<string, string> = {
 // colour; they gate nothing.
 export const REPORTER_ROLES: string[] = ["operations", "hvac_engineer", "warehouse_admin"];
 export const RESOLVER_ROLES: string[] = ["program_manager_infra", "pmc", "pmo"];
+
+// Whether a signed-in person's Dashboard Admin flag actually counts right
+// now. A deactivated profile keeps is_dashboard_admin=true in the row —
+// deactivating never clears it — but private.is_dashboard_admin() in
+// Postgres (what every real RLS policy and write RPC checks) ANDs it with
+// is_active and returns false once they're deactivated. profiles has no
+// is_active-gated RLS of its own (profiles_select_all is open to any
+// authenticated user, by design, so names/emails are look-up-able) — so a
+// raw `.select("is_dashboard_admin")` alone would say "yes" for a
+// deactivated admin even though the database says no. Every app-level "am
+// I admin?" check must go through this, not recompute the AND inline —
+// that's what let a deactivated admin see admin nav/pages while every
+// actual write silently failed (fixed Sep 2026; see CLAUDE.md).
+export function isEffectiveAdmin(
+  me: { is_dashboard_admin?: boolean | null; is_active?: boolean | null } | null | undefined
+): boolean {
+  return !!me?.is_dashboard_admin && !!me?.is_active;
+}

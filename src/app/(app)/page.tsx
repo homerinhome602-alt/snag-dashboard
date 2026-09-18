@@ -2,15 +2,21 @@ import { createClient } from "@/lib/data/server";
 import { WarehouseCard } from "@/components/warehouse-card";
 import { daysUntil, nextToLaunch, sortByLaunchProximity, type WarehouseReadiness } from "@/lib/readiness";
 import { cn, CARD_HOVER } from "@/lib/utils";
+import { isEffectiveAdmin } from "@/lib/roles";
 
 export default async function Home() {
   const supabase = await createClient();
-  const [{ data }, { data: activeWarehouses }] = await Promise.all([
+  const { data: auth } = await supabase.auth.getClaims();
+  const uid = auth?.claims?.sub;
+
+  const [{ data }, { data: activeWarehouses }, { data: me }] = await Promise.all([
     supabase
       .from("warehouse_readiness")
       .select("id, name, go_live_date, total_raised, open_count, open_high_count"),
     supabase.from("warehouses").select("id").eq("is_active", true),
+    supabase.from("profiles").select("is_dashboard_admin, is_active").eq("id", uid ?? "").maybeSingle(),
   ]);
+  const isAdmin = isEffectiveAdmin(me);
 
   const activeIds = new Set((activeWarehouses ?? []).map((w) => w.id));
   const warehouses = ((data ?? []) as WarehouseReadiness[]).filter((w) => activeIds.has(w.id));
@@ -30,7 +36,11 @@ export default async function Home() {
   if (warehouses.length === 0) {
     return (
       <div className="flex h-full items-center justify-center px-6 text-center text-[13px] text-muted-foreground">
-        No warehouses yet. Use &ldquo;Warehouse management&rdquo; in the sidebar to create the first one.
+        {isAdmin ? (
+          <>No warehouses yet. Use &ldquo;Warehouse management&rdquo; in the sidebar to create the first one.</>
+        ) : (
+          <>You&apos;re not tagged to any warehouse yet. Ask your dashboard admin to add you to one.</>
+        )}
       </div>
     );
   }

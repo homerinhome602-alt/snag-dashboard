@@ -23,10 +23,9 @@ export async function createInvitation(formData: FormData) {
 
   const supabase = await createClient();
 
-  // handle_new_user() only ever runs on someone's first sign-in — once
-  // they have a profile, editing this invitation has no effect on their
-  // real access. Say so instead of silently upserting a value that will
-  // never take effect.
+  // Once a profile exists, editing this invitation has no effect on real
+  // access — say so instead of silently upserting a value that will never
+  // take effect.
   const { data: existingProfile } = await supabase
     .from("profiles")
     .select("id")
@@ -36,7 +35,7 @@ export async function createInvitation(formData: FormData) {
   if (existingProfile) {
     return {
       error:
-        "This person has already signed in, so their role, warehouse, and admin status can't be changed here — there's currently no way to edit an existing member's access.",
+        "This person has already been added, so their role, warehouse, and admin status can't be changed here — there's currently no way to edit an existing member's access.",
     };
   }
 
@@ -56,6 +55,18 @@ export async function createInvitation(formData: FormData) {
 
   if (error) {
     return { error: error.message };
+  }
+
+  // No password step any more, so there is nothing to wait on — provision
+  // the profile (+ warehouse_members) right now via the same mechanism a
+  // first sign-in would use. This is what keeps status binary (active /
+  // deactivated only, never a pending "invited" state — see admin/users
+  // page.tsx). If it fails, undo the invitation row rather than leave a
+  // stray unprovisioned invite behind.
+  const { error: provisionError } = await supabase.auth.provisionInvitedUser(email);
+  if (provisionError) {
+    await supabase.from("invitations").delete().eq("email", email);
+    return { error: provisionError.message };
   }
 
   let detail = isAdminPick ? "Invited as Dashboard Admin" : `Invited as ${roleLabel(defaultRole)}`;

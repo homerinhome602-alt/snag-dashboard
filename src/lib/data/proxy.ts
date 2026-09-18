@@ -10,9 +10,6 @@ export async function updateSession(request: NextRequest) {
 
   const isPublicPath =
     request.nextUrl.pathname.startsWith("/login") ||
-    request.nextUrl.pathname.startsWith("/auth") ||
-    request.nextUrl.pathname.startsWith("/forgot-password") ||
-    request.nextUrl.pathname.startsWith("/set-password") ||
     request.nextUrl.pathname.startsWith("/api/me") ||
     request.nextUrl.pathname.startsWith("/api/rpc") ||
     request.nextUrl.pathname.startsWith("/api/attachments");

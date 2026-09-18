@@ -22,12 +22,9 @@ export async function createClient() {
     auth: {
       getClaims: auth.getClaims,
       getUser: auth.getUser,
-      signInWithPassword: auth.signInWithPassword,
-      signUp: auth.signUp,
+      signInWithEmail: auth.signInWithEmail,
       signOut: auth.signOut,
-      resetPasswordForEmail: auth.resetPasswordForEmail,
-      verifyOtp: auth.verifyOtp,
-      updateUser: auth.updateUser,
+      provisionInvitedUser: auth.provisionInvitedUser,
     },
     storage: {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars

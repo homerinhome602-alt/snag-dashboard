@@ -5,6 +5,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/data/server";
+import { isEffectiveAdmin } from "@/lib/roles";
 import { BUCKET, MAX_BYTES, ALLOWED_DOC_MIME } from "@/lib/storage/local";
 
 const STORAGE_ROOT = process.env.STORAGE_DIR ?? path.join(process.cwd(), ".storage");
@@ -37,10 +38,13 @@ async function assertMember(warehouseId: string, uid: string | null): Promise<st
   if (!uid) return "Not signed in.";
   const supabase = await createClient();
   const [{ data: me }, { data: membership }] = await Promise.all([
-    supabase.from("profiles").select("is_dashboard_admin").eq("id", uid).maybeSingle(),
+    supabase.from("profiles").select("is_dashboard_admin, is_active").eq("id", uid).maybeSingle(),
+    // warehouse_members' own RLS already excludes a deactivated member's
+    // rows (private.is_warehouse_member() gates on is_active), so this half
+    // needs no extra check — only isEffectiveAdmin(me) does.
     supabase.from("warehouse_members").select("role").eq("warehouse_id", warehouseId).eq("user_id", uid),
   ]);
-  const ok = !!me?.is_dashboard_admin || ((membership ?? []) as unknown[]).length > 0;
+  const ok = isEffectiveAdmin(me) || ((membership ?? []) as unknown[]).length > 0;
   return ok ? null : "You don't have access to this warehouse.";
 }
 

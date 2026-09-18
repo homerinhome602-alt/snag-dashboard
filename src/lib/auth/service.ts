@@ -1,110 +1,80 @@
-import { randomUUID, randomBytes } from "crypto";
+import { randomUUID } from "crypto";
 import { withServiceRole } from "@/lib/db/scope";
-import { hashPassword, verifyPassword } from "./password";
 import { createSession, clearSession, readSession, type SessionClaims } from "./session";
-import { sendMail, passwordResetMail } from "./email";
 
 type AuthError = { message: string; code?: string } | null;
 
-const AUTOCONFIRM = process.env.AUTH_AUTOCONFIRM !== "false"; // default on for local
-
-function token(): string {
-  return randomBytes(24).toString("hex");
+// Creates a real profile (+ warehouse_members, if invited) for an email with
+// no profile yet. Sign-in is open to any email — there is no invitation
+// gate (db/10_schema.sql's handle_new_user() no longer raises for an
+// uninvited email, it just creates a bare profile with no role/warehouses).
+// A matching invitations row, if any, is what supplies a role, warehouse
+// tags, or Dashboard Admin. Used both right at invite time (so an invited
+// person is "active" immediately — see provisionInvitedUser below) and as
+// the normal path for someone signing in cold, with no invitation at all.
+// Inserting into auth.users fires on_auth_user_created / handle_new_user().
+async function provisionProfile(
+  email: string
+): Promise<{ id: string; error?: undefined } | { id?: undefined; error: { message: string; code: string } }> {
+  const id = randomUUID();
+  try {
+    await withServiceRole((c) => c.query("insert into auth.users (id, email) values ($1, $2)", [id, email]));
+  } catch (e) {
+    const err = e as { message?: string };
+    return { error: { message: err.message ?? String(e), code: "unknown" } };
+  }
+  return { id };
 }
 
-// ---- sign in -----------------------------------------------------------
+// ---- sign in (email only, no password) ---------------------------------
 
-export async function signInWithPassword(creds: {
-  email: string;
-  password: string;
-}): Promise<{ data: { user: { id: string; email: string } | null }; error: AuthError }> {
-  const email = creds.email.trim().toLowerCase();
-  const row = await withServiceRole((c) =>
+export async function signInWithEmail(
+  emailInput: string
+): Promise<{ data: { user: { id: string; email: string } | null }; error: AuthError }> {
+  const email = emailInput.trim().toLowerCase();
+  if (!email) {
+    return { data: { user: null }, error: { message: "Email is required", code: "missing_email" } };
+  }
+
+  // Deactivation is not a sign-in block (Sep 2026) — a deactivated person
+  // still gets a session and lands on the dashboard, they just see nothing
+  // there. private.is_active_user() (db/10_schema.sql) is what actually
+  // enforces this, gating every RLS policy and SECURITY DEFINER RPC — so
+  // there is nothing to check here beyond "does a profile exist".
+  const existing = await withServiceRole((c) =>
     c
-      .query<{ id: string; email: string; encrypted_password: string; email_confirmed_at: Date | null }>(
-        "select id, email, encrypted_password, email_confirmed_at from auth.users where lower(email) = $1 and deleted_at is null",
-        [email]
-      )
+      .query<{ id: string; email: string }>("select id, email from public.profiles where lower(email) = $1", [email])
       .then((r) => r.rows[0] ?? null)
   );
 
-  if (!row || !(await verifyPassword(creds.password, row.encrypted_password))) {
-    return { data: { user: null }, error: { message: "Invalid login credentials", code: "invalid_credentials" } };
+  if (existing) {
+    await createSession({ id: existing.id, email: existing.email });
+    return { data: { user: { id: existing.id, email: existing.email } }, error: null };
   }
-  if (!row.email_confirmed_at && !AUTOCONFIRM) {
-    return { data: { user: null }, error: { message: "Email not confirmed", code: "email_not_confirmed" } };
+
+  // No profile yet, and no invitation gate any more — provision a bare
+  // profile (no role, no warehouse_members, no admin) and sign them in. If
+  // they were actually invited, provisionProfile picks that up too.
+  const result = await provisionProfile(email);
+  if (result.error) {
+    return { data: { user: null }, error: result.error };
   }
-  await createSession({ id: row.id, email: row.email });
-  return { data: { user: { id: row.id, email: row.email } }, error: null };
+
+  await createSession({ id: result.id, email });
+  return { data: { user: { id: result.id, email } }, error: null };
 }
 
-// ---- sign up ---------------------------------------------------------
+// ---- provision at invite time (so status is active immediately) --------
 
-export async function signUp(params: {
-  email: string;
-  password: string;
-  options?: { data?: { full_name?: string } };
-}): Promise<{
-  data: { user: { id: string; email: string } | null; session: { access_token: string } | null };
-  error: AuthError;
-}> {
-  const email = params.email.trim().toLowerCase();
-
-  // Explicit invitation gate — only an email on the invitations list may set a
-  // password. handle_new_user() enforces this too (defense in depth), but
-  // checking here fails fast with a definite reason instead of parsing a
-  // trigger exception. Runs as service_role since invitations is admin-RLS.
-  const invited = await withServiceRole((c) =>
-    c
-      .query("select 1 from public.invitations where lower(email) = $1 limit 1", [email])
-      .then((r) => (r.rowCount ?? 0) > 0)
-  );
-  if (!invited) {
-    return { data: { user: null, session: null }, error: { message: "Not invited", code: "not_invited" } };
+export async function provisionInvitedUser(
+  emailInput: string
+): Promise<{ data: { user: { id: string; email: string } | null }; error: AuthError }> {
+  const email = emailInput.trim().toLowerCase();
+  const result = await provisionProfile(email);
+  if (result.error) {
+    return { data: { user: null }, error: result.error };
   }
-
-  const id = randomUUID();
-  const pwHash = await hashPassword(params.password);
-  const meta = { ...(params.options?.data ?? {}), email_verified: AUTOCONFIRM };
-  const confirmedAt = AUTOCONFIRM ? new Date() : null;
-
-  try {
-    await withServiceRole(async (c) => {
-      // the on_auth_user_created trigger creates the profile and enforces the
-      // invitation gate (raises if the email has no invitations row).
-      await c.query(
-        `insert into auth.users
-           (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
-            raw_app_meta_data, raw_user_meta_data, created_at, updated_at, confirmation_token,
-            is_sso_user, is_anonymous)
-         values ('00000000-0000-0000-0000-000000000000', $1, 'authenticated', 'authenticated',
-            $2, $3, $4, '{"provider":"email","providers":["email"]}'::jsonb, $5::jsonb,
-            now(), now(), '', false, false)`,
-        [id, email, pwHash, confirmedAt, JSON.stringify(meta)]
-      );
-      await c.query(
-        `insert into auth.identities (provider_id, user_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
-         values ($1, $1, $2::jsonb, 'email', now(), now(), now())`,
-        [id, JSON.stringify({ sub: id, email, email_verified: AUTOCONFIRM })]
-      );
-    });
-  } catch (e) {
-    const err = e as { message?: string; code?: string };
-    const msg = err.message ?? String(e);
-    if (msg.includes("duplicate key") && msg.includes("users_")) {
-      return { data: { user: null, session: null }, error: { message: "User already registered", code: "user_already_exists" } };
-    }
-    if (msg.includes("no invitation found")) {
-      return { data: { user: null, session: null }, error: { message: "Not invited", code: "not_invited" } };
-    }
-    return { data: { user: null, session: null }, error: { message: msg, code: err.code } };
-  }
-
-  if (AUTOCONFIRM) {
-    await createSession({ id, email });
-    return { data: { user: { id, email }, session: { access_token: "cookie" } }, error: null };
-  }
-  return { data: { user: { id, email }, session: null }, error: null };
+  return { data: { user: { id: result.id, email } }, error: null };
 }
 
 // ---- sign out ------------------------------------------------------
@@ -124,94 +94,4 @@ export async function getClaims(): Promise<{ data: { claims: SessionClaims } | n
 export async function getUser(): Promise<{ data: { user: { id: string; email: string } | null }; error: AuthError }> {
   const claims = await readSession();
   return { data: { user: claims ? { id: claims.sub, email: claims.email } : null }, error: null };
-}
-
-// ---- password reset ------------------------------------------------
-
-export async function resetPasswordForEmail(
-  email: string,
-  opts?: { redirectTo?: string }
-): Promise<{ data: { devLink?: string }; error: AuthError }> {
-  const normalized = email.trim().toLowerCase();
-  const tok = token();
-  const updated = await withServiceRole((c) =>
-    c
-      .query(
-        "update auth.users set recovery_token = $2, recovery_sent_at = now() where lower(email) = $1 and deleted_at is null returning id",
-        [normalized, tok]
-      )
-      .then((r) => r.rows[0] ?? null)
-  );
-
-  // Never reveal whether the address exists.
-  if (!updated) return { data: {}, error: null };
-
-  const redirect = opts?.redirectTo ?? "http://localhost:3000/auth/update-password";
-  const origin = new URL(redirect).origin;
-  const next = new URL(redirect).pathname || "/auth/update-password";
-  const link = `${origin}/auth/confirm?token_hash=${tok}&type=recovery&next=${encodeURIComponent(next)}`;
-  await sendMail(passwordResetMail(normalized, link));
-
-  // With MAIL_PROVIDER=console there is no real mailbox — hand the link back so
-  // the /forgot-password screen can show it for local testing.
-  const devLink = (process.env.MAIL_PROVIDER ?? "console") === "console" ? link : undefined;
-  return { data: { devLink }, error: null };
-}
-
-// ---- verifyOtp (used by /auth/confirm) --------------------------------
-
-export async function verifyOtp(params: {
-  type: string;
-  token_hash: string;
-}): Promise<{ data: Record<string, never>; error: AuthError }> {
-  const { type, token_hash } = params;
-  const col = type === "recovery" ? "recovery_token" : "confirmation_token";
-  const row = await withServiceRole((c) =>
-    c
-      .query<{ id: string; email: string }>(
-        `select id, email from auth.users where ${col} = $1 and $1 <> '' and deleted_at is null`,
-        [token_hash]
-      )
-      .then((r) => r.rows[0] ?? null)
-  );
-  if (!row) return { data: {}, error: { message: "Token has expired or is invalid", code: "otp_expired" } };
-
-  // Both recovery and confirmation links log the user in (matches GoTrue).
-  // The update-password screen then works off the normal session.
-  await withServiceRole((c) =>
-    c.query(
-      `update auth.users
-         set recovery_token = '', confirmation_token = '',
-             email_confirmed_at = coalesce(email_confirmed_at, now())
-       where id = $1`,
-      [row.id]
-    )
-  );
-  await createSession({ id: row.id, email: row.email });
-  return { data: {}, error: null };
-}
-
-// ---- updateUser (password change) -----------------------------------
-
-export async function updateUser(attrs: {
-  password?: string;
-}): Promise<{ data: { user: { id: string } | null }; error: AuthError }> {
-  const session = await readSession();
-  if (!session) {
-    return { data: { user: null }, error: { message: "Not authenticated", code: "not_authenticated" } };
-  }
-
-  if (attrs.password !== undefined) {
-    if (attrs.password.length < 8) {
-      return { data: { user: null }, error: { message: "Password is too short", code: "weak_password" } };
-    }
-    const hash = await hashPassword(attrs.password);
-    await withServiceRole((c) =>
-      c.query(
-        "update auth.users set encrypted_password = $2, updated_at = now(), recovery_token = '' where id = $1",
-        [session.sub, hash]
-      )
-    );
-  }
-  return { data: { user: { id: session.sub } }, error: null };
 }
